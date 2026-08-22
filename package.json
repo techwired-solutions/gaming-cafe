@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "description": "ChillPill Gaming Cafe — public website + owner console (static, Supabase-backed)",
   "scripts": {
-    "build": "node scripts/generate-config.js",
+    "build": "node scripts/generate-config.js && node scripts/sync-console-pages.js",
+    "sync-console-pages": "node scripts/sync-console-pages.js",
     "start": "npx serve ."
   }
 }

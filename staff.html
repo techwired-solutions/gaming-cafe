@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChillPill Gaming Cafe — Owner Console</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎮</text></svg>">
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #10141e; --panel: #181e2b; --panel-soft: #202838;
+      --line: #334056; --acid: #d8ff45; --muted: #95a0b8; --danger: #ff6875;
+      --sidebar-w: 248px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; width: 100%; min-height: 100vh; font-family: "DM Sans", sans-serif; color: #f7f8fb; }
+    .bg-app {
+      background-color: var(--ink);
+      background-image: radial-gradient(circle at 90% 5%, rgba(216,255,69,.12), transparent 24rem),
+        linear-gradient(rgba(255,255,255,.028) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.028) 1px, transparent 1px);
+      background-size: auto, 28px 28px, 28px 28px;
+    }
+    .mono { font-family: "Space Mono", monospace; }
+    .panel { background: rgba(24,30,43,.94); border: 1px solid var(--line); box-shadow: 0 18px 35px rgba(0,0,0,.2); }
+    .form-control {
+      width: 100%; min-height: 44px; border: 1px solid #405069; border-radius: 10px;
+      background: #111722; color: #f7f8fb; padding: .7rem .85rem; outline: none;
+      font-size: 16px; /* prevents iOS Safari auto-zoom on focus, which fights the keyboard */
+      transition: border-color .18s ease, box-shadow .18s ease;
+    }
+    .form-control:focus { border-color: var(--acid); box-shadow: 0 0 0 3px rgba(216,255,69,.16); }
+    select.form-control option { background: #111722; }
+    input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .9; cursor: pointer; }
+    .session-card { border-left: 4px solid var(--acid); }
+    .session-card.overdue { border-left-color: var(--danger); }
+    .session-card.ending-soon { border-left-color: #ffb545; }
+    .status-active { color: #d8ff45; background: rgba(216,255,69,.12); }
+    .status-booked { color: #78b8ff; background: rgba(120,184,255,.12); }
+    .status-completed { color: #78d8ff; background: rgba(120,216,255,.12); }
+    .status-cancelled { color: #ff6875; background: rgba(255,104,117,.12); }
+    .badge-cash { color: #ffd166; background: rgba(255,209,102,.12); }
+    .badge-online { color: #78b8ff; background: rgba(120,184,255,.12); }
+    .toast-show { opacity: 1 !important; transform: translateY(0) !important; }
+    .pulse-dot { animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: .35; transform: scale(.75); } }
+    @keyframes flashRed { 0%,100% { box-shadow: 0 0 0 0 rgba(255,104,117,0); } 50% { box-shadow: 0 0 0 6px rgba(255,104,117,.25); } }
+    .flash-alert { animation: flashRed 1.2s ease-in-out 3; }
+    #lock-screen {
+      position: fixed; inset: 0; z-index: 100; background: var(--ink);
+      display: flex; align-items: center; justify-content: center;
+      overflow-y: auto; padding: 1.5rem 1rem;
+      /* dvh accounts for the on-screen keyboard shrinking the visible area on mobile;
+         min-height (not height) + overflow-y:auto lets the page scroll the focused
+         field into view instead of the keyboard just covering it */
+      min-height: 100vh; min-height: 100dvh;
+    }
+    #lock-form { margin: auto; }
+
+    /* ---- app layout: sidebar + content ---- */
+    .app-shell { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: var(--sidebar-w); flex-shrink: 0; background: rgb(17,22,32);
+      border-right: 1px solid var(--line); display: flex; flex-direction: column;
+      position: fixed; top: 0; bottom: 0; left: 0; z-index: 40;
+      transform: translateX(0); transition: transform .2s ease;
+    }
+    .sidebar.closed { transform: translateX(-100%); }
+    .main-area { flex: 1; margin-left: var(--sidebar-w); min-width: 0; transition: margin-left .2s ease; }
+    .sidebar-link {
+      display: flex; align-items: center; gap: .6rem; padding: .65rem .9rem; border-radius: 10px;
+      color: #c7d0e0; font-size: .875rem; font-weight: 600; transition: background .15s ease, color .15s ease;
+    }
+    .sidebar-link:hover { background: rgba(255,255,255,.05); color: #fff; }
+    .sidebar-link.active { background: var(--acid); color: #10141e; }
+    .sidebar-group-label { font-size: .68rem; letter-spacing: .14em; font-weight: 700; color: #64708a; padding: 0 .9rem; margin-top: 1.1rem; margin-bottom: .35rem; }
+    .page-view { display: none; }
+    .page-view.active { display: block; }
+    .sidebar-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 39; display: none; }
+    .sidebar-backdrop.show { display: block; }
+    @media (max-width: 900px) {
+      .sidebar { transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .main-area { margin-left: 0; }
+    }
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.6);
+      display: none; align-items: center; justify-content: center;
+      overflow-y: auto; padding: 1rem;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-overlay > * { margin: auto; }
+    .dashboard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+    @media (min-width: 900px) { .dashboard-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+    .revenue-bar-track { background: #111722; border-radius: 6px; overflow: hidden; height: 10px; }
+    .revenue-bar-fill { height: 100%; background: var(--acid); }
+  </style>
+</head>
+<body class="bg-app">
+  <!-- ===================== LOGIN SCREEN ===================== -->
+  <div id="lock-screen">
+    <form id="lock-form" class="panel rounded-2xl p-8 w-full max-w-sm mx-4">
+      <div class="w-12 h-12 rounded-xl bg-[#d8ff45] text-[#10141e] grid place-items-center mb-4">
+        <i data-lucide="gamepad-2" width="22" height="22"></i>
+      </div>
+      <h1 id="lock-heading" class="text-xl font-bold">Staff login</h1>
+      <p id="lock-subheading" class="text-sm text-slate-400 mt-1 mb-5">Sign in with your ChillPill staff account.</p>
+      <div id="lock-username-field">
+        <label class="block text-sm font-medium mb-2" for="lock-username">Username</label>
+        <input id="lock-username" type="text" class="form-control mb-3" autocomplete="username">
+      </div>
+      <label class="block text-sm font-medium mb-2" for="lock-password">Password</label>
+      <input id="lock-password" type="password" class="form-control" autocomplete="current-password" required>
+      <p id="lock-error" class="text-sm text-[#ff6875] mt-2 min-h-5"></p>
+      <button type="submit" class="w-full mt-3 rounded-xl px-5 py-3 font-bold" style="background:#d8ff45;color:#10141e;">Sign in</button>
+      <p id="lock-config-warning" class="hidden text-xs text-amber-300 mt-4">⚠️ Supabase isn't configured yet — edit assets/js/config.js (or config.local.js) first.</p>
+      <p id="lock-hint" class="text-xs text-slate-500 mt-4"></p>
+    </form>
+  </div>
+
+  <div class="app-shell hidden" id="app-root">
+    <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+    <!-- ===================== SIDEBAR ===================== -->
+    <aside class="sidebar" id="sidebar">
+      <div class="flex items-center gap-2.5 px-4 py-5 border-b border-slate-700/70">
+        <div class="w-9 h-9 rounded-lg bg-[#d8ff45] text-[#10141e] grid place-items-center shrink-0"><i data-lucide="gamepad-2" width="19" height="19"></i></div>
+        <div class="min-w-0">
+          <p id="sidebar-cafe-name" class="font-bold text-sm truncate">ChillPill Gaming Cafe</p>
+          <p class="text-[11px] text-slate-500">Owner console</p>
+        </div>
+      </div>
+      <nav class="flex-1 overflow-y-auto px-3 py-3">
+        <p class="sidebar-group-label">Operations</p>
+        <a href="#" data-page="page-overview" class="sidebar-link active"><i data-lucide="layout-dashboard" width="16" height="16"></i>Overview</a>
+        <a href="#" data-page="page-bookings" class="sidebar-link"><i data-lucide="calendar-clock" width="16" height="16"></i>Bookings</a>
+        <a href="#" data-page="page-new-session" class="sidebar-link"><i data-lucide="plus-circle" width="16" height="16"></i>New session</a>
+        <a href="#" data-page="page-billing" class="sidebar-link"><i data-lucide="credit-card" width="16" height="16"></i>Billing</a>
+        <a href="#" data-page="page-records" class="sidebar-link"><i data-lucide="archive" width="16" height="16"></i>Records</a>
+        <p class="sidebar-group-label admin-only">Admin</p>
+        <a href="#" data-page="page-revenue" class="sidebar-link admin-only"><i data-lucide="indian-rupee" width="16" height="16"></i>Revenue</a>
+        <a href="#" data-page="page-menu" class="sidebar-link admin-only"><i data-lucide="utensils" width="16" height="16"></i>Menu &amp; pricing</a>
+        <a href="#" data-page="page-content" class="sidebar-link admin-only"><i data-lucide="pencil-line" width="16" height="16"></i>Cafe content</a>
+        <a href="#" data-page="page-staff" class="sidebar-link admin-only"><i data-lucide="users" width="16" height="16"></i>Staff</a>
+      </nav>
+      <div class="px-4 py-4 border-t border-slate-700/70">
+        <p class="text-xs text-slate-500">Signed in as</p>
+        <p id="current-staff-name" class="font-semibold text-sm truncate">—</p>
+        <p id="current-staff-role" class="text-[11px] text-slate-500 mb-3"></p>
+        <button id="logout-button" type="button" class="w-full rounded-lg border border-slate-600 py-2 text-xs font-semibold text-slate-300 hover:border-[#ff6875] hover:text-[#ff6875] flex items-center justify-center gap-1.5">
+          <i data-lucide="log-out" width="14" height="14"></i> Sign out
+        </button>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <!-- ===================== TOP BAR ===================== -->
+      <header class="border-b border-slate-700/80 sticky top-0 z-30" style="background: rgba(21,27,39,.96);backdrop-filter:blur(6px);">
+        <div class="px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <button id="sidebar-toggle" type="button" class="rounded-lg border border-slate-600 p-2 text-slate-200 md:hidden"><i data-lucide="menu" width="18" height="18"></i></button>
+            <h1 id="page-title" class="font-bold text-lg sm:text-xl">Overview</h1>
+          </div>
+          <div class="flex items-center gap-2 sm:gap-3 text-sm">
+            <div class="hidden sm:flex items-center gap-2 rounded-full border border-slate-600 bg-slate-900/70 px-3 py-2">
+              <span id="connection-dot" class="pulse-dot h-2 w-2 rounded-full bg-[#d8ff45]"></span>
+              <span id="connection-label" class="text-slate-200 text-xs">Connecting…</span>
+            </div>
+            <button id="enable-alerts" type="button" class="rounded-xl border border-slate-600 px-2.5 py-2.5 text-slate-200 hover:border-[#d8ff45] flex items-center gap-1.5 text-xs font-semibold">
+              <i data-lucide="bell-ring" width="16" height="16"></i><span class="hidden sm:inline">Enable alerts</span>
+            </button>
+            <button id="notification-button" type="button" class="relative rounded-xl border border-slate-600 p-2.5 text-slate-200 hover:border-[#d8ff45]" aria-label="Booking notifications" aria-expanded="false">
+              <i data-lucide="bell" width="18" height="18"></i>
+              <span id="notification-count" class="hidden absolute -right-1 -top-1 min-w-4 rounded-full bg-[#ff6875] px-1 text-[10px] font-bold text-[#10141e]">0</span>
+            </button>
+            <time id="live-clock" class="mono text-xs text-[#d8ff45] hidden sm:block" aria-live="polite"></time>
+          </div>
+          <div id="notification-panel" class="hidden absolute right-4 top-16 z-20 w-80 rounded-2xl border border-slate-600 bg-[#202838] p-4 shadow-2xl">
+            <p class="font-semibold">Alerts</p>
+            <p id="notification-copy" class="mt-2 text-sm text-slate-300"></p>
+          </div>
+        </div>
+      </header>
+
+      <main class="px-4 sm:px-6 py-6 max-w-6xl">
+        <!-- ===================== OVERVIEW ===================== -->
+        <section id="page-overview" class="page-view active">
+          <div class="dashboard-grid mb-6">
+            <article class="panel rounded-2xl p-4"><i data-lucide="play-circle" class="text-[#d8ff45]" width="19" height="19"></i>
+              <p id="active-count" class="mono text-2xl font-bold mt-5">0</p><p class="text-sm text-slate-400 mt-1">Active sessions</p>
+            </article>
+            <article class="panel rounded-2xl p-4"><i data-lucide="alarm-clock" class="text-amber-300" width="19" height="19"></i>
+              <p id="ending-soon-count" class="mono text-2xl font-bold mt-5">0</p><p class="text-sm text-slate-400 mt-1">Ending in &lt; 5 min</p>
+            </article>
+            <article class="panel rounded-2xl p-4"><i data-lucide="check-circle" class="text-sky-300" width="19" height="19"></i>
+              <p id="completed-count" class="mono text-2xl font-bold mt-5">0</p><p class="text-sm text-slate-400 mt-1">Completed today</p>
+            </article>
+            <article class="panel rounded-2xl p-4"><i data-lucide="sandwich" class="text-orange-300" width="19" height="19"></i>
+              <p id="food-count" class="mono text-2xl font-bold mt-5">0</p><p class="text-sm text-slate-400 mt-1">Food orders</p>
+            </article>
+            <article class="panel rounded-2xl p-4"><i data-lucide="indian-rupee" class="text-[#d8ff45]" width="19" height="19"></i>
+              <p id="today-revenue" class="mono text-2xl font-bold mt-5">₹0</p><p class="text-sm text-slate-400 mt-1">Revenue today</p>
+            </article>
+          </div>
+          <div class="panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="font-bold text-lg">Active sessions</h2>
+              <span class="text-xs text-slate-500">Live countdowns</span>
+            </div>
+            <div id="overview-active-list" class="grid sm:grid-cols-2 gap-3"></div>
+            <p id="overview-empty" class="text-sm text-slate-400 mt-2">No active sessions right now.</p>
+          </div>
+        </section>
+
+        <!-- ===================== BOOKINGS ===================== -->
+        <section id="page-bookings" class="page-view">
+          <div class="panel rounded-2xl p-5">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">ARRIVALS</p>
+                <h2 class="font-bold mt-1 text-xl">Booked customers</h2>
+                <p class="text-sm text-slate-400 mt-1">Customers who booked via WhatsApp/call. Search when they arrive, then mark active.</p>
+              </div>
+              <div class="w-full sm:w-72"><label class="block text-sm font-medium mb-2" for="booking-search">Search bookings</label><input id="booking-search" class="form-control" type="search" placeholder="Name, phone or station"></div>
+            </div>
+            <div id="booking-list" class="mt-5 grid md:grid-cols-2 gap-3" aria-live="polite"></div>
+            <p id="empty-bookings" class="hidden text-sm text-slate-400 mt-4">No waiting bookings right now.</p>
+          </div>
+        </section>
+
+        <!-- ===================== NEW SESSION ===================== -->
+        <section id="page-new-session" class="page-view">
+          <div class="panel rounded-2xl p-5">
+            <div class="flex items-start justify-between gap-4 mb-6">
+              <div>
+                <p class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">NEW ENTRY</p>
+                <h2 class="font-bold mt-1 text-xl">Add lounge activity</h2>
+              </div>
+              <div class="rounded-xl bg-[#d8ff45]/10 text-[#d8ff45] p-2.5"><i data-lucide="plus" width="20" height="20"></i></div>
+            </div>
+            <form id="session-form" novalidate>
+              <div class="grid sm:grid-cols-2 gap-4">
+                <div><label class="block text-sm font-medium mb-2" for="station-name">Station / table</label><input id="station-name" class="form-control" type="text" placeholder="PS5 - Station 1" required></div>
+                <div><label class="block text-sm font-medium mb-2" for="customer-name">Customer or group</label><input id="customer-name" class="form-control" type="text" required></div>
+                <div><label class="block text-sm font-medium mb-2" for="customer-phone">Customer phone</label><input id="customer-phone" class="form-control" type="tel" required></div>
+                <div><label class="block text-sm font-medium mb-2" for="session-status">Current status</label>
+                  <select id="session-status" class="form-control">
+                    <option value="Active">Active (playing now)</option>
+                    <option value="Booked">Booked (arriving later)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="border-t border-slate-700/80 mt-6 pt-5">
+                <h3 class="font-semibold mb-4 text-lg">Time tracking</h3>
+                <div class="grid sm:grid-cols-2 gap-4">
+                  <div><label class="block text-sm font-medium mb-2" for="start-time">Start time</label><input id="start-time" class="form-control" type="datetime-local"></div>
+                  <div><label class="block text-sm font-medium mb-2" for="end-time">End time</label><input id="end-time" class="form-control" type="datetime-local"></div>
+                  <div><label class="block text-sm font-medium mb-2" for="duration-minutes">Duration (minutes)</label><input id="duration-minutes" class="form-control" type="number" min="0" value="60"></div>
+                  <div><label class="block text-sm font-medium mb-2" for="rate">Hourly rate (₹)</label><input id="rate" class="form-control" type="number" min="0" value="100"></div>
+                </div>
+              </div>
+              <div class="border-t border-slate-700/80 mt-6 pt-5">
+                <div class="flex items-center justify-between gap-4 mb-4">
+                  <h3 class="font-semibold text-lg">Food &amp; drinks ordered</h3>
+                  <button id="add-food-row" type="button" class="rounded-lg border border-[#d8ff45] px-3 py-2 text-sm font-bold text-[#d8ff45] hover:bg-[#d8ff45] hover:text-[#10141e]"><i data-lucide="plus" width="16" height="16" class="inline mr-1"></i>Add item</button>
+                </div>
+                <div class="grid grid-cols-[1fr_auto_auto_auto] gap-3 text-xs text-slate-500 mb-2"><span>Menu item</span><span>Qty</span><span>Price</span><span></span></div>
+                <div id="food-order-list" class="space-y-3"></div>
+                <p id="menu-empty-note" class="hidden text-sm text-slate-400 mt-3">Add menu items in Menu &amp; Pricing to make them available here.</p>
+                <div class="mt-4"><label class="block text-sm font-medium mb-2" for="notes">Staff notes</label><textarea id="notes" class="form-control min-h-[82px]" rows="3"></textarea></div>
+              </div>
+              <div class="mt-6 rounded-xl bg-[#0f1520] border border-slate-700 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div><p class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Estimated bill</p><p id="estimate-total" class="mono text-2xl text-[#d8ff45] font-bold mt-1">₹100</p></div>
+                <button id="save-button" class="rounded-xl px-5 py-3 font-bold hover:brightness-110" type="submit" style="background:#d8ff45;color:#10141e;"><i data-lucide="save" width="18" height="18" class="inline mr-2"></i>Save session</button>
+              </div>
+              <p id="form-message" class="mt-3 text-sm min-h-5" aria-live="polite"></p>
+            </form>
+          </div>
+        </section>
+
+        <!-- ===================== BILLING ===================== -->
+        <section id="page-billing" class="page-view">
+          <div class="panel rounded-2xl p-5">
+            <p class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">CHECKOUT QUEUE</p>
+            <h2 class="font-bold mt-1 text-xl mb-1">Billing</h2>
+            <p class="text-sm text-slate-400 mb-5">Once a session's time and food are all logged, check it out here and record how the customer paid.</p>
+            <div id="billing-list" class="grid sm:grid-cols-2 gap-3"></div>
+            <p id="empty-billing" class="text-sm text-slate-400 mt-2">No sessions waiting for checkout.</p>
+          </div>
+        </section>
+
+        <!-- ===================== RECORDS ===================== -->
+        <section id="page-records" class="page-view">
+          <div class="panel rounded-2xl overflow-hidden">
+            <div class="p-5 border-b border-slate-700/80 flex items-center justify-between">
+              <div><p class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">LOUNGE LOG</p><h2 class="font-bold mt-1 text-xl">All records</h2></div>
+              <span id="record-count" class="mono text-xs rounded-full bg-slate-700 px-2.5 py-1">0</span>
+            </div>
+            <div id="records-list" class="p-3 space-y-3" aria-live="polite"></div>
+            <div id="empty-records" class="p-8 text-center">
+              <div class="w-11 h-11 rounded-full bg-slate-800 grid place-items-center mx-auto mb-3 text-slate-400"><i data-lucide="joystick" width="21" height="21"></i></div>
+              <p class="font-semibold">No records yet</p>
+              <p class="text-sm text-slate-400 mt-1">Add a customer session or food order to get started.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== REVENUE (admin) ===================== -->
+        <section id="page-revenue" class="page-view">
+          <div class="dashboard-grid mb-6">
+            <article class="panel rounded-2xl p-4 col-span-2"><i data-lucide="indian-rupee" class="text-[#d8ff45]" width="19" height="19"></i><p id="revenue-total" class="mono text-2xl font-bold mt-5">₹0</p><p class="text-sm text-slate-400 mt-1">Total revenue (all time, paid)</p></article>
+            <article class="panel rounded-2xl p-4"><i data-lucide="wallet" class="text-amber-300" width="19" height="19"></i><p id="revenue-cash" class="mono text-2xl font-bold mt-5">₹0</p><p class="text-sm text-slate-400 mt-1">Cash</p></article>
+            <article class="panel rounded-2xl p-4"><i data-lucide="credit-card" class="text-sky-300" width="19" height="19"></i><p id="revenue-online" class="mono text-2xl font-bold mt-5">₹0</p><p class="text-sm text-slate-400 mt-1">Online</p></article>
+            <article class="panel rounded-2xl p-4"><i data-lucide="calendar-check" class="text-[#d8ff45]" width="19" height="19"></i><p id="revenue-today" class="mono text-2xl font-bold mt-5">₹0</p><p class="text-sm text-slate-400 mt-1">Today</p></article>
+          </div>
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="panel rounded-2xl p-5">
+              <h3 class="font-bold mb-4">Cash vs Online</h3>
+              <div id="revenue-split" class="space-y-3"></div>
+            </div>
+            <div class="panel rounded-2xl p-5">
+              <h3 class="font-bold mb-4">Revenue by staff</h3>
+              <div id="revenue-by-staff" class="space-y-3"></div>
+              <p id="revenue-by-staff-empty" class="text-sm text-slate-400 hidden">No paid sessions yet.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== MENU & PRICING (admin) ===================== -->
+        <section id="page-menu" class="page-view">
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="panel rounded-2xl p-5">
+              <h3 class="font-semibold mb-3 text-lg">Default hourly gaming price</h3>
+              <form id="rate-form" class="flex gap-2">
+                <input id="admin-rate" type="number" min="0" value="100" class="form-control">
+                <button type="submit" class="rounded-xl px-4 font-bold whitespace-nowrap" style="background:#d8ff45;color:#10141e;">Save</button>
+              </form>
+              <p class="text-xs text-slate-500 mt-2">This is the default rate that pre-fills New Session — it can still be overridden per session.</p>
+            </div>
+            <div class="panel rounded-2xl p-5">
+              <h3 class="font-semibold mb-3 text-lg">Add a menu item</h3>
+              <form id="menu-form" class="grid grid-cols-5 gap-2">
+                <div class="col-span-3"><label class="block text-xs text-slate-400 mb-1" for="menu-name">Item name</label><input id="menu-name" type="text" class="form-control"></div>
+                <div class="col-span-2"><label class="block text-xs text-slate-400 mb-1" for="menu-price">Price (₹)</label><input id="menu-price" type="number" min="0" class="form-control"></div>
+                <button type="submit" class="col-span-5 mt-1 rounded-xl py-3 font-bold" style="background:#d8ff45;color:#10141e;"><i data-lucide="plus" width="16" height="16" class="inline mr-1"></i>Add to menu</button>
+              </form>
+            </div>
+          </div>
+          <div class="panel rounded-2xl p-5 mt-5">
+            <h3 class="font-semibold mb-3 text-lg">Current menu</h3>
+            <div id="menu-list" class="space-y-2"></div>
+          </div>
+        </section>
+
+        <!-- ===================== CAFE CONTENT / CMS (admin) ===================== -->
+        <section id="page-content" class="page-view">
+          <div class="panel rounded-2xl p-5">
+            <p class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">CONTENT MANAGEMENT</p>
+            <h2 class="font-bold mt-1 text-xl mb-1">Cafe content</h2>
+            <p class="text-sm text-slate-400 mb-5">Edits here update the public website live — no code changes or redeploys needed.</p>
+            <form id="content-form" class="grid sm:grid-cols-2 gap-4">
+              <div><label class="block text-sm font-medium mb-2" for="cms-name">Cafe name</label><input id="cms-name" class="form-control" type="text"></div>
+              <div><label class="block text-sm font-medium mb-2" for="cms-tagline">Tagline</label><input id="cms-tagline" class="form-control" type="text"></div>
+              <div><label class="block text-sm font-medium mb-2" for="cms-location">Location (short)</label><input id="cms-location" class="form-control" type="text"></div>
+              <div><label class="block text-sm font-medium mb-2" for="cms-address">Full address</label><input id="cms-address" class="form-control" type="text"></div>
+              <div><label class="block text-sm font-medium mb-2" for="cms-hours">Opening hours</label><input id="cms-hours" class="form-control" type="text"></div>
+              <div><label class="block text-sm font-medium mb-2" for="cms-whatsapp">WhatsApp number</label><input id="cms-whatsapp" class="form-control" type="text" placeholder="9779800000000"></div>
+              <div class="sm:col-span-2"><label class="block text-sm font-medium mb-2" for="cms-whatsapp-message">Default WhatsApp message</label><textarea id="cms-whatsapp-message" class="form-control min-h-[70px]" rows="2"></textarea></div>
+              <button type="submit" class="sm:col-span-2 rounded-xl py-3 font-bold" style="background:#d8ff45;color:#10141e;"><i data-lucide="save" width="16" height="16" class="inline mr-2"></i>Save content</button>
+            </form>
+            <p id="content-message" class="mt-3 text-sm min-h-5"></p>
+          </div>
+        </section>
+
+        <!-- ===================== STAFF (admin) ===================== -->
+        <section id="page-staff" class="page-view">
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="panel rounded-2xl p-5">
+              <h3 class="font-semibold mb-3 text-lg">Add staff account</h3>
+              <form id="staff-form" class="space-y-3">
+                <div><label class="block text-xs text-slate-400 mb-1" for="staff-name">Full name</label><input id="staff-name" type="text" class="form-control" required></div>
+                <div><label class="block text-xs text-slate-400 mb-1" for="staff-username">Username</label><input id="staff-username" type="text" class="form-control" required autocomplete="off"></div>
+                <div><label class="block text-xs text-slate-400 mb-1" for="staff-password">Temporary password</label><input id="staff-password" type="text" class="form-control" required></div>
+                <div><label class="block text-xs text-slate-400 mb-1" for="staff-role">Role</label>
+                  <select id="staff-role" class="form-control"><option value="staff">Staff</option><option value="admin">Admin</option></select>
+                </div>
+                <button type="submit" class="w-full rounded-xl py-3 font-bold" style="background:#d8ff45;color:#10141e;"><i data-lucide="user-plus" width="16" height="16" class="inline mr-1"></i>Create account</button>
+                <p id="staff-form-message" class="text-sm min-h-5"></p>
+              </form>
+            </div>
+            <div class="panel rounded-2xl p-5">
+              <h3 class="font-semibold mb-3 text-lg">Staff accounts</h3>
+              <div id="staff-list" class="space-y-2"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div id="toast" class="fixed bottom-5 right-5 max-w-sm rounded-xl border border-slate-600 bg-[#202939] px-4 py-3 shadow-2xl opacity-0 translate-y-3 transition-all duration-200 text-sm z-50" role="status" aria-live="polite"></div>
+
+  <!-- ===================== CHECKOUT MODAL ===================== -->
+  <div id="checkout-modal" class="modal-overlay">
+    <div class="panel rounded-2xl p-6 w-full max-w-sm">
+      <p class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">CHECKOUT</p>
+      <h3 id="checkout-customer" class="font-bold text-xl mt-1">—</h3>
+      <p id="checkout-station" class="text-sm text-slate-400 mt-0.5"></p>
+      <div class="rounded-xl bg-[#0f1520] border border-slate-700 p-4 mt-4">
+        <p id="checkout-breakdown" class="text-xs text-slate-400 space-y-1"></p>
+        <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold mt-3">Total due</p>
+        <p id="checkout-amount" class="mono text-3xl text-[#d8ff45] font-bold mt-1">₹0</p>
+      </div>
+      <p class="text-sm font-medium mt-4 mb-2">How did they pay?</p>
+      <div class="grid grid-cols-2 gap-3">
+        <button type="button" class="checkout-pay-btn rounded-xl py-3 font-bold flex flex-col items-center gap-1" data-method="Cash" style="background:#1c2333;border:1px solid #405069;">
+          <i data-lucide="wallet" width="20" height="20"></i>Cash
+        </button>
+        <button type="button" class="checkout-pay-btn rounded-xl py-3 font-bold flex flex-col items-center gap-1" data-method="Online" style="background:#1c2333;border:1px solid #405069;">
+          <i data-lucide="credit-card" width="20" height="20"></i>Online
+        </button>
+      </div>
+      <button id="checkout-cancel" type="button" class="w-full mt-4 rounded-xl border border-slate-600 py-2.5 text-sm text-slate-300">Cancel</button>
+    </div>
+  </div>
+
+  <template id="record-template">
+    <article class="session-card rounded-xl border border-slate-700 bg-[#202838] p-4">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="record-customer font-semibold truncate"></p>
+          <p class="record-station mono text-xs text-slate-400 mt-1"></p>
+        </div>
+        <span class="record-status rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap"></span>
+      </div>
+      <div class="grid grid-cols-2 gap-3 mt-4 text-xs">
+        <div><p class="text-slate-500">TIME</p><p class="record-duration mono mt-1 text-slate-200"></p></div>
+        <div><p class="text-slate-500">BILL</p><p class="record-amount mono mt-1 text-[#d8ff45]"></p></div>
+      </div>
+      <p class="record-countdown mono mt-2 text-xs hidden"></p>
+      <p class="record-food mt-3 text-xs text-slate-400 hidden"></p>
+      <div class="record-meta mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+        <span class="record-staff hidden"></span>
+        <span class="record-payment hidden rounded-full px-2 py-0.5 font-bold"></span>
+      </div>
+      <div class="record-active-actions hidden mt-3 flex gap-2">
+        <button type="button" class="extend-15 flex-1 rounded-lg border border-[#d8ff45] px-2 py-1.5 text-xs font-bold text-[#d8ff45]">+15 min</button>
+        <button type="button" class="open-checkout flex-1 rounded-lg bg-[#d8ff45] px-2 py-1.5 text-xs font-bold text-[#10141e]">Checkout</button>
+      </div>
+      <div class="mt-4 pt-3 border-t border-slate-700 flex items-center justify-between gap-2">
+        <span class="record-created text-xs text-slate-500"></span>
+        <div class="delete-wrap hidden">
+          <button type="button" class="delete-trigger rounded-lg border border-slate-600 px-2.5 py-1.5 text-xs text-slate-300">Delete</button>
+          <div class="delete-confirm hidden items-center gap-1">
+            <button type="button" class="delete-yes rounded-lg bg-[#ff6875] px-2.5 py-1.5 text-xs font-bold text-[#10141e]">Confirm</button>
+            <button type="button" class="delete-no rounded-lg border border-slate-600 px-2.5 py-1.5 text-xs text-slate-300">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/config.local.js" onerror="console.info('[ChillPill] No config.local.js override found — using assets/js/config.js placeholders.')"></script>
+  <script src="assets/js/supabaseClient.js"></script>
+  <script src="assets/js/passwordHash.js"></script>
+  <script src="assets/js/dashboard.js"></script>
+</body>
+</html>

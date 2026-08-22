@@ -3,9 +3,9 @@
 A two-page project for a hourly-PlayStation gaming cafe:
 
 - **`index.html`** — the public website (info, ambience, games, pricing, food menu, contact/map, WhatsApp booking button). No online booking form — customers message you on WhatsApp and you confirm manually. Cafe name, hours, pricing text, WhatsApp number, and the food menu are all editable live from the dashboard, no code changes needed.
-- **`dashboard.html`** — the owner console, with individual staff logins and a sidebar organizing everything: Overview, Bookings, New Session, Billing, Records, and (admin-only) Revenue, Menu & Pricing, Cafe Content, and Staff. Backed by Supabase so it works from any device/browser and multiple staff see the same live data in real time.
+- **`dashboard.html`** — the owner console: a sidebar organizing Overview, Bookings, New Session, Billing, Records, and (admin-only) Revenue, Menu & Pricing, Cafe Content, and Staff. Backed by Supabase so it works from any device/browser and multiple staff see the same live data in real time. Served at two URLs — `/admin` (password only) and `/staff` (username + password) — see "Staff logins & roles" below.
 
-Plain HTML/CSS/JS — no framework. There's one tiny build step (`scripts/generate-config.js`) whose only job is to keep your real Supabase keys and WhatsApp number **out of git entirely**; see step 2 below.
+Plain HTML/CSS/JS — no framework. There's a small build step (`npm run build`) with two jobs: keep your real Supabase keys and WhatsApp number **out of git entirely** (`scripts/generate-config.js`, see step 2), and generate the `/admin` and `/staff` pages as copies of `dashboard.html` (`scripts/sync-console-pages.js`, see "Staff logins & roles").
 
 ---
 
@@ -64,12 +64,12 @@ npx serve .
 
 Then open the printed `http://localhost:...` URL. (Make sure you've created `assets/js/config.local.js` per step 2 first, otherwise you'll see placeholder values and a "Supabase not configured" notice.)
 
-The `/admin` and `/staff` clean URLs (see below) only work once deployed on Vercel — they come from `vercel.json`'s rewrites, which a plain local static server doesn't apply. To test both login modes locally, use `?as=admin` / `?as=staff` on the plain file instead, e.g. `http://localhost:.../dashboard.html?as=staff`.
+Run `npm run build` at least once first (see step 5) — it generates `admin.html` and `staff.html` as copies of `dashboard.html`, which is how `/admin` and `/staff` work both locally and on Vercel. `npx serve` auto-cleans `.html` URLs the same way Vercel does, so `http://localhost:.../admin.html` behaves the same as the real `/admin` URL.
 
 ## 5. Deploy to Vercel
 
 1. Push this folder to a GitHub repo (or drag-and-drop deploy from the Vercel dashboard).
-2. In Vercel: **Add New Project** → import the repo → framework preset **"Other"** → **Deploy**. Vercel will auto-detect `vercel.json`'s `buildCommand` (`npm run build`), which runs `scripts/generate-config.js`.
+2. In Vercel: **Add New Project** → import the repo → framework preset **"Other"** → **Deploy**. Vercel will auto-detect `vercel.json`'s `buildCommand` (`npm run build`), which runs `scripts/generate-config.js` and `scripts/sync-console-pages.js`.
 3. **Before or right after** the first deploy, add the Environment Variables from step 2 (Project → Settings → Environment Variables), then redeploy so they take effect.
 4. Your site will be live at `your-project.vercel.app`. The owner console has two URLs (see "Staff logins & roles" below for the difference): **`/admin`** and **`/staff`** — both kept out of search engines via `vercel.json`. (`/dashboard` and `/dashboard.html` still work too, defaulting to the staff-style login, for anyone with the old link.)
 5. Point your own domain at it later from the Vercel project's **Domains** tab, if you have one.
@@ -85,7 +85,7 @@ There's no single shared dashboard password anymore — each staff member signs 
 - **`/admin`** — password only, no username. It checks the password against every active admin account and signs you in as whichever one matches. This is the quick, original-style login for the owner.
 - **`/staff`** — username + password, for everyone else. Regular staff accounts only work here (an admin *can* also sign in this way with their username if they want, but doesn't need to).
 
-Both pages are really the same `dashboard.html`/`dashboard.js` — which login form you get is decided purely by the URL you opened.
+Both pages run the identical `dashboard.js` — which login form you get is decided at runtime by reading the URL. Under the hood, `/admin` and `/staff` are served from real files, `admin.html` and `staff.html`, which are byte-for-byte copies of `dashboard.html` — `npm run build` regenerates them automatically (via `scripts/sync-console-pages.js`) as part of every deploy, and Vercel's `cleanUrls` setting serves `admin.html` at `/admin` the same way it already serves `dashboard.html` at `/dashboard`. (We initially tried this with a `vercel.json` rewrite instead of real files, which turned out not to be reliably applied by Vercel for this project — real files sidestep that entirely.) **If you ever hand-edit `dashboard.html` directly**, run `npm run sync-console-pages` afterward (or just `npm run build`) and commit the updated `admin.html`/`staff.html` too, or the three pages will drift out of sync.
 
 - **First login:** `schema.sql` seeds one starter account — username `admin`, password `ChangeMe123!`. Sign in at `/admin` with just that password, then **change it immediately**: Staff tab → find "Admin" → **Reset pw**. That generates a new random password and shows it once — write it down, that's your real password now. (If you'd rather pick your own memorable one, create a second admin account with the password you want, sign in as that one via `/admin`, then deactivate the original `admin` account.) Either way, don't leave `ChangeMe123!` active.
 - **Two roles:**
@@ -139,11 +139,14 @@ This project uses only Supabase's public **anon key** — there's no Supabase Au
 ```
 Gaming-Cafe/
 ├─ index.html                     # public website (reads live content + menu from Supabase)
-├─ dashboard.html                 # owner console, served at both /admin and /staff
-├─ vercel.json                    # build command + clean URLs + noindex header for /dashboard
-├─ package.json                   # "build" script → scripts/generate-config.js
+├─ dashboard.html                 # owner console — source of truth; edit this one
+├─ admin.html                     # generated copy of dashboard.html — serves /admin (password-only login)
+├─ staff.html                     # generated copy of dashboard.html — serves /staff (username+password login)
+├─ vercel.json                    # build command + clean URLs + noindex headers
+├─ package.json                   # "build" script → generate-config.js + sync-console-pages.js
 ├─ scripts/
-│  └─ generate-config.js          # turns Vercel env vars into config.local.js at build time
+│  ├─ generate-config.js          # turns Vercel env vars into config.local.js at build time
+│  └─ sync-console-pages.js       # copies dashboard.html → admin.html / staff.html
 ├─ assets/
 │  ├─ js/
 │  │  ├─ config.js                # tracked, public-safe fallback defaults (committed)

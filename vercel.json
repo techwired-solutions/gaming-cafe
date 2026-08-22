@@ -3,14 +3,21 @@
   "outputDirectory": ".",
   "cleanUrls": true,
   "trailingSlash": false,
-  "rewrites": [
-    { "source": "/admin", "destination": "/dashboard.html" },
-    { "source": "/staff", "destination": "/dashboard.html" },
-    { "source": "/dashboard", "destination": "/dashboard.html" }
-  ],
   "headers": [
     {
       "source": "/dashboard.html",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ]
+    },
+    {
+      "source": "/dashboard",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ]
+    },
+    {
+      "source": "/admin.html",
       "headers": [
         { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
       ]
@@ -22,13 +29,13 @@
       ]
     },
     {
-      "source": "/staff",
+      "source": "/staff.html",
       "headers": [
         { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
       ]
     },
     {
-      "source": "/dashboard",
+      "source": "/staff",
       "headers": [
         { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
       ]
