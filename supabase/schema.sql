@@ -158,21 +158,28 @@ create policy "staff_all_anon" on public.staff for all using (true) with check (
 -- ---------------------------------------------------------------------
 -- Realtime: lets the dashboard update instantly across multiple devices,
 -- and lets the public site's menu/content stay in sync without a page
--- refresh. Wrapped in existence checks so re-running this script never
--- errors with "already a member of publication".
+-- refresh. Each ADD TABLE is wrapped in its own exception handler that
+-- swallows exactly "already a member of publication" (SQLSTATE 42710,
+-- duplicate_object) — this is more reliable than pre-checking
+-- pg_publication_tables, which can disagree with Supabase's managed
+-- publication in some projects.
 -- ---------------------------------------------------------------------
 do $$
 begin
-  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'sessions') then
+  begin
     alter publication supabase_realtime add table public.sessions;
-  end if;
-  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'menu_items') then
+  exception when duplicate_object then null;
+  end;
+  begin
     alter publication supabase_realtime add table public.menu_items;
-  end if;
-  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'settings') then
+  exception when duplicate_object then null;
+  end;
+  begin
     alter publication supabase_realtime add table public.settings;
-  end if;
-  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'staff') then
+  exception when duplicate_object then null;
+  end;
+  begin
     alter publication supabase_realtime add table public.staff;
-  end if;
+  exception when duplicate_object then null;
+  end;
 end $$;
