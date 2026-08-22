@@ -2,3 +2,7 @@ node_modules/
 .vercel/
 .DS_Store
 Thumbs.db
+
+# Real secrets live here for local dev only — generated on Vercel by
+# scripts/generate-config.js from Environment Variables. Never commit this.
+assets/js/config.local.js

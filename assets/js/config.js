@@ -1,15 +1,19 @@
 /**
- * PlayBox Gaming Cafe — shared configuration
- * ------------------------------------------
- * Edit the PLACEHOLDER_* values below. This file is loaded by both
- * index.html (public site) and dashboard.html (owner console).
+ * PlayBox Gaming Cafe — shared configuration (tracked defaults)
+ * ---------------------------------------------------------------
+ * This file only holds PUBLIC, non-sensitive defaults and is safe to commit.
+ * Real values (Supabase keys, WhatsApp number, dashboard password) are layered
+ * on top by one of:
+ *   - assets/js/config.local.js  (gitignored — for local development; copy
+ *     assets/js/config.local.example.js to get started)
+ *   - Vercel Environment Variables, turned into config.local.js automatically
+ *     at build time by scripts/generate-config.js (see README.md)
  *
- * Where to get the Supabase values: Supabase dashboard → your project →
- * Project Settings → API → "Project URL" and "anon public" key.
- * See /supabase/schema.sql and README.md for full setup steps.
+ * Loaded by both index.html (public site) and dashboard.html (owner console),
+ * before config.local.js.
  */
 window.APP_CONFIG = {
-  // --- Supabase ---
+  // --- Supabase (placeholders — overridden by config.local.js / env vars) ---
   SUPABASE_URL: "PLACEHOLDER_SUPABASE_URL",        // e.g. https://abcdefgh.supabase.co
   SUPABASE_ANON_KEY: "PLACEHOLDER_SUPABASE_ANON_KEY", // the long "anon public" key
 
@@ -20,12 +24,12 @@ window.APP_CONFIG = {
   CAFE_ADDRESS_LINE: "Budhanilkantha, Kathmandu, Nepal",
   OPENING_HOURS: "10:00 AM – 11:00 PM · Every day",
 
-  // --- WhatsApp booking ---
+  // --- WhatsApp booking (placeholder — overridden by config.local.js / env vars) ---
   // Country code + number, digits only, no + or spaces (e.g. 9779812345678).
   WHATSAPP_NUMBER: "PLACEHOLDER_WHATSAPP_NUMBER",
   WHATSAPP_DEFAULT_MESSAGE: "Hi! I'd like to book a PlayStation slot at PlayBox Gaming Cafe.",
 
-  // --- Dashboard access ---
+  // --- Dashboard access (placeholder — overridden by config.local.js / env vars) ---
   // Simple shared password shown on the dashboard's lock screen before it
   // loads. This is a UI-level deterrent only, not real security — see the
   // "Security note" section in README.md before relying on it.

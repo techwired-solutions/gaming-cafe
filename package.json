@@ -1,0 +1,10 @@
+{
+  "name": "playbox-gaming-cafe",
+  "private": true,
+  "version": "1.0.0",
+  "description": "PlayBox Gaming Cafe — public website + owner console (static, Supabase-backed)",
+  "scripts": {
+    "build": "node scripts/generate-config.js",
+    "start": "npx serve ."
+  }
+}
