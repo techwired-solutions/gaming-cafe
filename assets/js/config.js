@@ -37,5 +37,11 @@ window.APP_CONFIG = {
   DEFAULT_HOURLY_RATE: 100,
 
   // How many minutes before a session ends the owner gets alerted.
-  ALERT_MINUTES_BEFORE_END: 5
+  ALERT_MINUTES_BEFORE_END: 5,
+
+  // Grace period after a session's end time before an overtime charge
+  // starts accruing at checkout. Arriving back within this window is free;
+  // past it, the customer is charged for every minute since the original
+  // end time (not just the minutes past the grace period).
+  OVERTIME_GRACE_MINUTES: 5
 };

@@ -49,6 +49,7 @@ create table if not exists public.sessions (
   food_items jsonb not null default '[]'::jsonb,
   food_total numeric not null default 0,
   amount numeric not null default 0,
+  overtime_amount numeric not null default 0,
   status text not null default 'Active' check (status in ('Booked', 'Active', 'Completed', 'Cancelled')),
   notes text,
   notified_5min boolean not null default false,
@@ -73,6 +74,7 @@ end $$;
 alter table public.sessions add column if not exists paid boolean not null default false;
 alter table public.sessions add column if not exists paid_at timestamptz;
 alter table public.sessions add column if not exists game text;
+alter table public.sessions add column if not exists overtime_amount numeric not null default 0;
 
 create index if not exists sessions_status_idx on public.sessions (status);
 create index if not exists sessions_end_time_idx on public.sessions (end_time);
@@ -111,6 +113,43 @@ alter table public.settings add column if not exists whatsapp_number text not nu
 alter table public.settings add column if not exists whatsapp_message text not null default 'Hi! I''d like to book a PlayStation slot at ChillPill Gaming Cafe.';
 
 -- ---------------------------------------------------------------------
+-- stations: the actual physical PlayStation stations/compartments in the
+-- cafe, managed from the dashboard's Stations tab (admin-only setup).
+-- Session's station_name is still free text (so a temporary/ad-hoc entry
+-- like "Counter" for a food-only order still works), but New Session and
+-- Edit both offer these as autocomplete suggestions, which is what lets
+-- the availability board reliably match a running session to a station.
+-- ---------------------------------------------------------------------
+create table if not exists public.stations (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  type text not null default 'PS5',
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------
+-- waiting_list: first-come-first-served queue for customers waiting on a
+-- free station. They can order food while they wait; when their turn
+-- comes, "Start session" on the dashboard carries their name/phone/food
+-- order straight into New Session so staff only need to pick a station.
+-- ---------------------------------------------------------------------
+create table if not exists public.waiting_list (
+  id uuid primary key default gen_random_uuid(),
+  customer_name text not null,
+  customer_phone text not null,
+  food_items jsonb not null default '[]'::jsonb,
+  food_total numeric not null default 0,
+  status text not null default 'Waiting' check (status in ('Waiting', 'Seated', 'Cancelled')),
+  notes text,
+  staff_id uuid references public.staff(id) on delete set null,
+  staff_name text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists waiting_list_status_idx on public.waiting_list (status);
+
+-- ---------------------------------------------------------------------
 -- Seed the first admin login, only if no staff exist yet (safe to re-run).
 -- Username: admin   Password: ChangeMe123!
 -- CHANGE THIS PASSWORD IMMEDIATELY after your first login (Staff tab →
@@ -144,6 +183,8 @@ alter table public.sessions enable row level security;
 alter table public.menu_items enable row level security;
 alter table public.settings enable row level security;
 alter table public.staff enable row level security;
+alter table public.stations enable row level security;
+alter table public.waiting_list enable row level security;
 
 drop policy if exists "menu_items_all_anon" on public.menu_items;
 create policy "menu_items_all_anon" on public.menu_items for all using (true) with check (true);
@@ -156,6 +197,12 @@ create policy "settings_all_anon" on public.settings for all using (true) with c
 
 drop policy if exists "staff_all_anon" on public.staff;
 create policy "staff_all_anon" on public.staff for all using (true) with check (true);
+
+drop policy if exists "stations_all_anon" on public.stations;
+create policy "stations_all_anon" on public.stations for all using (true) with check (true);
+
+drop policy if exists "waiting_list_all_anon" on public.waiting_list;
+create policy "waiting_list_all_anon" on public.waiting_list for all using (true) with check (true);
 
 -- ---------------------------------------------------------------------
 -- Realtime: lets the dashboard update instantly across multiple devices,
@@ -182,6 +229,14 @@ begin
   end;
   begin
     alter publication supabase_realtime add table public.staff;
+  exception when duplicate_object then null;
+  end;
+  begin
+    alter publication supabase_realtime add table public.stations;
+  exception when duplicate_object then null;
+  end;
+  begin
+    alter publication supabase_realtime add table public.waiting_list;
   exception when duplicate_object then null;
   end;
 end $$;

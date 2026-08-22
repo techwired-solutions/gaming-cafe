@@ -3,7 +3,7 @@
 A two-page project for a hourly-PlayStation gaming cafe:
 
 - **`index.html`** — the public website (info, ambience, games, pricing, food menu, contact/map, WhatsApp booking button). No online booking form — customers message you on WhatsApp and you confirm manually. Cafe name, hours, pricing text, WhatsApp number, and the food menu are all editable live from the dashboard, no code changes needed.
-- **`dashboard.html`** — the owner console: a sidebar organizing Overview, Bookings, New Session, Billing, Records, and (admin-only) Revenue, Menu & Pricing, Cafe Content, and Staff. Backed by Supabase so it works from any device/browser and multiple staff see the same live data in real time. Served at two URLs — `/admin` (password only) and `/staff` (username + password) — see "Staff logins & roles" below.
+- **`dashboard.html`** — the owner console: a sidebar organizing Overview, Bookings, Waiting list, New Session, Billing, Stations, Records, and (admin-only) Revenue, Menu & Pricing, Cafe Content, and Staff. Backed by Supabase so it works from any device/browser and multiple staff see the same live data in real time. Served at two URLs — `/admin` (password only) and `/staff` (username + password) — see "Staff logins & roles" below.
 
 Plain HTML/CSS/JS — no framework. There's a small build step (`npm run build`) with two jobs: keep your real Supabase keys and WhatsApp number **out of git entirely** (`scripts/generate-config.js`, see step 2), and generate the `/admin` and `/staff` pages as copies of `dashboard.html` (`scripts/sync-console-pages.js`, see "Staff logins & roles").
 
@@ -15,7 +15,7 @@ Plain HTML/CSS/JS — no framework. There's a small build step (`npm run build`)
 2. Pick a name (e.g. `chillpill-gaming-cafe`), a database password (save it somewhere), and a region close to Nepal (e.g. Singapore).
 3. Wait ~2 minutes for it to finish provisioning.
 4. Open **SQL Editor** (left sidebar) → **New query** → paste the entire contents of [`supabase/schema.sql`](supabase/schema.sql) → **Run**.
-   - This creates the `sessions`, `menu_items`, `settings`, and `staff` tables, turns on Row Level Security, enables realtime sync, and seeds one starter login (see the "Staff logins" section below).
+   - This creates the `sessions`, `menu_items`, `settings`, `staff`, `stations`, and `waiting_list` tables, turns on Row Level Security, enables realtime sync, and seeds one starter login (see the "Staff logins" section below).
    - If you re-run it later, it's safe — it uses `if not exists` / `on conflict` guards and won't touch data that's already there.
 5. Go to **Project Settings → API**. Copy:
    - **Project URL** (looks like `https://xxxxxxxx.supabase.co`)
@@ -97,9 +97,37 @@ Both pages run the identical `dashboard.js` — which login form you get is deci
 
 **Security note on this login system:** passwords are hashed (SHA-256 + a random salt per account) before they're ever sent to Supabase, so the database never stores plain text. That said, this is still a UI-level login, not full production-grade auth — see the "Security note" section further down for the honest limitations of a backend-less static site, and don't use this for anything beyond a small single-location team.
 
+## Waiting list (first come, first served)
+
+For walk-ins when every station's busy:
+
+1. **Waiting list** tab → add their name, phone, and (optionally) any food/drinks they want while they wait — it's the same order-pad UI as everywhere else, so quantities and totals work the same way.
+2. They're queued in the order they were added (oldest first, numbered #1, #2, …), each card showing how long they've been waiting.
+3. When a station frees up, hit **Start session** on their card — this carries their name, phone, and food order straight into **New Session**, already filled in. Staff just pick a station and hit Save. The waiting-list entry is automatically marked "Seated" the moment that session is actually saved (not the moment you click Start session, so nothing's lost if you change your mind on the way).
+4. **Edit** lets you fix a phone number or add/remove food while they're still waiting; **Remove** takes them off the queue (e.g. they left, or a no-show).
+
+## Station board
+
+The **Stations** tab shows every station and whether it's free right now — for answering "how long's the wait?" in person or on the phone. Occupied stations show who's on them, what they're playing, and a live countdown (turning red once overdue, same as everywhere else); free stations show "Available now" plus the next booking on that station if there is one.
+
+Admins additionally see a **Manage stations** panel on the same page to add, deactivate, or delete stations. Station names you add here appear as autocomplete suggestions on New Session and Edit (not a hard-locked dropdown — an ad-hoc entry like "Counter" for a food-only order still works), which is what lets the board reliably match a running session to a station.
+
+## Overtime billing
+
+If a session runs past its end time, checkout now accounts for it automatically:
+
+- **Within 5 minutes of the end time** (configurable via `OVERTIME_GRACE_MINUTES`) — no extra charge. Plenty of cafes let people wrap up naturally, and this avoids nickel-and-diming a customer who's back in 2 minutes.
+- **Past that grace period** — the customer is charged for every minute since the original end time (not just the minutes past the grace window), at the session's hourly rate ÷ 60. A session overdue by 12 minutes with a 5-minute grace period bills all 12 minutes, not just 7.
+- This shows up two places: as "(+₹X overtime)" right on the overdue session's countdown badge everywhere it appears (Overview, Billing, Records, the Station board), and as its own line item in the Checkout breakdown, recalculated fresh at the moment of payment (not frozen from whenever the checkout modal happened to be opened). The paid amount and a separate `overtime_amount` are both saved on the record.
+- Extending a session (**+15 min**) moves the end time forward and clears any accrued overtime, same as it always did — that's the right move if the customer's actually still playing past the original time.
+
 ## Editing an active or booked session
 
-Click **Edit** on any Active or Booked session card (Overview, Bookings, Billing, or Records) to open a full editor — station/table, which game(s) they're playing, customer name/phone, start time, duration, hourly rate, the entire food/drinks order (change quantities or remove items, not just add more), and staff notes. Saving recalculates the bill from scratch and re-arms the 5-minute alert. This is intentionally only available for Active/Booked sessions — once a session is Completed (paid via Checkout), it's locked as a record of what was actually charged.
+Click **Edit** on any Active or Booked session card (Overview, Bookings, Billing, or Records) to open a full editor — station/table, which game(s) they're playing, customer name/phone, start time, duration, hourly rate, the entire food/drinks order (change quantities or remove items, not just add more), and staff notes. Saving recalculates the bill from scratch and re-arms the 5-minute alert.
+
+Active sessions also get a **+ Food** button right next to Edit — it opens that same editor but jumps straight to the order section with a fresh item selector focused, for the common case of "the customer just ordered another round." Both buttons ultimately do the same save; +Food is just a shortcut to the part you actually came for.
+
+This is intentionally only available for Active/Booked sessions — once a session is Completed (paid via Checkout), it's locked as a record of what was actually charged.
 
 ## Billing & revenue
 
