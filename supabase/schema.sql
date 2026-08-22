@@ -39,6 +39,7 @@ create table if not exists public.sessions (
   id uuid primary key default gen_random_uuid(),
   type text not null default 'Walk-in' check (type in ('Walk-in', 'Booked')),
   station_name text not null,
+  game text,
   customer_name text not null,
   customer_phone text not null,
   start_time timestamptz,
@@ -71,6 +72,7 @@ do $$ begin
 end $$;
 alter table public.sessions add column if not exists paid boolean not null default false;
 alter table public.sessions add column if not exists paid_at timestamptz;
+alter table public.sessions add column if not exists game text;
 
 create index if not exists sessions_status_idx on public.sessions (status);
 create index if not exists sessions_end_time_idx on public.sessions (end_time);

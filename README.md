@@ -97,10 +97,14 @@ Both pages run the identical `dashboard.js` — which login form you get is deci
 
 **Security note on this login system:** passwords are hashed (SHA-256 + a random salt per account) before they're ever sent to Supabase, so the database never stores plain text. That said, this is still a UI-level login, not full production-grade auth — see the "Security note" section further down for the honest limitations of a backend-less static site, and don't use this for anything beyond a small single-location team.
 
+## Editing an active or booked session
+
+Click **Edit** on any Active or Booked session card (Overview, Bookings, Billing, or Records) to open a full editor — station/table, which game(s) they're playing, customer name/phone, start time, duration, hourly rate, the entire food/drinks order (change quantities or remove items, not just add more), and staff notes. Saving recalculates the bill from scratch and re-arms the 5-minute alert. This is intentionally only available for Active/Booked sessions — once a session is Completed (paid via Checkout), it's locked as a record of what was actually charged.
+
 ## Billing & revenue
 
 1. Start a session from **New Session** — station, customer, time, and any food/drinks ordered. Save it.
-2. While it's running, extend it (**+15 min**) or click **+ Food** on the session card — visible on Overview, Billing, or Records, wherever an active session shows up — to open an order pad and add more items mid-session (e.g. the customer orders a second round of drinks). It merges into the existing order (same item ordered twice just bumps the quantity) and recalculates the bill immediately.
+2. While it's running, extend it (**+15 min**) or open **Edit** to add/change food, adjust the time, or fix any other detail — see "Editing an active or booked session" below.
 3. When the customer's ready to leave, hit **Checkout** on the session card (visible on Overview, Billing, or Records) — a summary pops up with the time cost + food breakdown and the total due.
 4. Pick **Cash** or **Online** — this finalizes the session as *Completed*, stamps `paid_at`, and records which payment method was used. That's the only way a session becomes Completed, so nothing gets marked paid without a payment method attached.
 5. The **Billing** tab is just a live queue of every session still awaiting checkout, so a second staff member can pick up where another left off.

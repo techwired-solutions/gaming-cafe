@@ -337,7 +337,11 @@
           </div>
           <span class="rounded-full px-2 py-1 text-xs font-bold ${overdue ? "status-active" : "status-booked"}">${overdue ? "Arrived / overdue" : "Booked"}</span>
         </div>
-        <button type="button" class="activate-booking w-full mt-4 rounded-lg px-3 py-2 text-sm font-bold" style="background:#d8ff45;color:#10141e;">Mark active</button>`;
+        <div class="flex gap-2 mt-4">
+          <button type="button" class="edit-booking flex-1 rounded-lg border border-slate-600 px-3 py-2 text-sm font-bold text-slate-200">Edit</button>
+          <button type="button" class="activate-booking flex-1 rounded-lg px-3 py-2 text-sm font-bold" style="background:#d8ff45;color:#10141e;">Mark active</button>
+        </div>`;
+      card.querySelector(".edit-booking").addEventListener("click", () => openEditModal(record));
       card.querySelector(".activate-booking").addEventListener("click", async (event) => {
         const button = event.currentTarget;
         button.disabled = true;
@@ -406,6 +410,10 @@
       "record-status rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap " +
       (record.status === "Active" ? "status-active" : record.status === "Booked" ? "status-booked" : record.status === "Cancelled" ? "status-cancelled" : "status-completed");
 
+    const gameEl = card.querySelector(".record-game");
+    if (record.game) { gameEl.textContent = "🎮 " + record.game; gameEl.classList.remove("hidden"); }
+    else gameEl.classList.add("hidden");
+
     const food = card.querySelector(".record-food");
     const foodText = foodSummaryText(record);
     food.textContent = foodText;
@@ -422,19 +430,30 @@
     } else paymentEl.classList.add("hidden");
 
     const countdown = card.querySelector(".record-countdown");
-    const actions = card.querySelector(".record-active-actions");
+    const actions = card.querySelector(".record-actions");
+    const extendBtn = card.querySelector(".extend-15");
+    const checkoutBtn = card.querySelector(".open-checkout");
     card.classList.remove("overdue", "ending-soon");
+
     if (record.status === "Active" && record.end_time) {
       const diffMs = new Date(record.end_time) - new Date();
       countdown.textContent = timeRemainingText(record);
       countdown.classList.remove("hidden");
       countdown.className = "record-countdown mono mt-2 text-xs " + (diffMs <= 0 ? "text-[#ff6875]" : diffMs <= ALERT_MS ? "text-amber-300" : "text-slate-400");
-      actions.classList.remove("hidden");
-      actions.classList.add("flex");
       if (diffMs <= 0) card.classList.add("overdue");
       else if (diffMs <= ALERT_MS) card.classList.add("ending-soon");
     } else {
       countdown.classList.add("hidden");
+    }
+
+    // Edit is available on both Active and Booked sessions; extend/checkout
+    // only make sense once a session is actually running.
+    if (record.status === "Active" || record.status === "Booked") {
+      actions.classList.remove("hidden");
+      actions.classList.add("flex");
+      extendBtn.classList.toggle("hidden", record.status !== "Active");
+      checkoutBtn.classList.toggle("hidden", record.status !== "Active");
+    } else {
       actions.classList.add("hidden");
       actions.classList.remove("flex");
     }
@@ -481,9 +500,9 @@
       if (item) openCheckoutModal(item);
     });
 
-    card.querySelector(".open-add-food").addEventListener("click", () => {
+    card.querySelector(".open-edit").addEventListener("click", () => {
       const item = records.find((row) => row.id === card.dataset.recordId);
-      if (item) openAddFoodModal(item);
+      if (item) openEditModal(item);
     });
 
     return card;
@@ -555,99 +574,133 @@
     );
   }
 
-  // ---------- add food to an in-progress session ----------
-  let addFoodTarget = null;
+  // ---------- edit an active or booked session (timing, order, table, game) ----------
+  let editTarget = null;
 
-  function addFoodModalRow(selectedId = "", qty = 1) {
+  function edFoodRow(selectedId = "", qty = 1) {
     const row = document.createElement("div");
-    row.className = "af-row grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center";
+    row.className = "ed-row grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center";
     row.innerHTML = `
-      <select aria-label="Food or drink item" class="form-control af-select">${menuOptions(selectedId)}</select>
-      <input aria-label="Quantity" type="number" min="1" value="${qty}" class="form-control af-qty w-16">
-      <span class="af-price mono min-w-16 text-right text-sm text-[#d8ff45]">₹0</span>
-      <button type="button" aria-label="Remove food item" class="af-remove h-10 w-10 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400">×</button>`;
-    row.querySelector(".af-select").addEventListener("change", () => { updateAddFoodModalRow(row); recalcAddFoodModal(); });
-    row.querySelector(".af-qty").addEventListener("input", () => { updateAddFoodModalRow(row); recalcAddFoodModal(); });
-    row.querySelector(".af-remove").addEventListener("click", () => { row.remove(); recalcAddFoodModal(); });
-    document.getElementById("add-food-rows").appendChild(row);
-    updateAddFoodModalRow(row);
+      <select aria-label="Food or drink item" class="form-control ed-select">${menuOptions(selectedId)}</select>
+      <input aria-label="Quantity" type="number" min="1" value="${qty}" class="form-control ed-qty w-16">
+      <span class="ed-price mono min-w-16 text-right text-sm text-[#d8ff45]">₹0</span>
+      <button type="button" aria-label="Remove item" class="ed-remove h-10 w-10 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400">×</button>`;
+    row.querySelector(".ed-select").addEventListener("change", () => { updateEdRow(row); recalcEditModal(); });
+    row.querySelector(".ed-qty").addEventListener("input", () => { updateEdRow(row); recalcEditModal(); });
+    row.querySelector(".ed-remove").addEventListener("click", () => { row.remove(); recalcEditModal(); });
+    document.getElementById("edit-food-rows").appendChild(row);
+    updateEdRow(row);
   }
 
-  function updateAddFoodModalRow(row) {
-    const select = row.querySelector(".af-select");
+  function updateEdRow(row) {
+    const select = row.querySelector(".ed-select");
     const item = menuItems.find((entry) => entry.id === select.value);
-    const quantity = Math.max(1, Number(row.querySelector(".af-qty").value) || 1);
+    const quantity = Math.max(1, Number(row.querySelector(".ed-qty").value) || 1);
     const price = item ? item.price * quantity : 0;
     row.dataset.price = price;
     row.dataset.qty = quantity;
     row.dataset.itemId = item ? item.id : "";
     row.dataset.itemName = item ? item.name : "";
     row.dataset.unitPrice = item ? item.price : 0;
-    row.querySelector(".af-price").textContent = inr(price);
+    row.querySelector(".ed-price").textContent = inr(price);
   }
 
-  function collectAddFoodModalItems() {
-    return [...document.querySelectorAll("#add-food-rows .af-row")]
+  function collectEdItems() {
+    return [...document.querySelectorAll("#edit-food-rows .ed-row")]
       .filter((row) => row.dataset.itemId)
       .map((row) => ({ id: row.dataset.itemId, name: row.dataset.itemName, price: Number(row.dataset.unitPrice), qty: Number(row.dataset.qty) }));
   }
 
-  function recalcAddFoodModal() {
-    if (!addFoodTarget) return 0;
-    const timeCost = ((Number(addFoodTarget.duration_minutes) || 0) / 60) * (Number(addFoodTarget.rate) || 0);
-    const existingFoodTotal = Number(addFoodTarget.food_total) || 0;
-    const newRowsTotal = [...document.querySelectorAll("#add-food-rows .af-row")].reduce((sum, row) => sum + (Number(row.dataset.price) || 0), 0);
-    const total = Math.round(timeCost + existingFoodTotal + newRowsTotal);
-    document.getElementById("add-food-new-total").textContent = inr(total);
-    return total;
+  function recalcEditModal() {
+    const duration = Math.max(0, Number(document.getElementById("edit-duration").value) || 0);
+    const rate = Math.max(0, Number(document.getElementById("edit-rate").value) || 0);
+    const foodTotal = [...document.querySelectorAll("#edit-food-rows .ed-row")].reduce((sum, row) => sum + (Number(row.dataset.price) || 0), 0);
+    const total = Math.round((duration / 60) * rate + foodTotal);
+    document.getElementById("edit-new-total").textContent = inr(total);
+    return { total, foodTotal, duration, rate };
   }
 
-  function openAddFoodModal(record) {
-    addFoodTarget = record;
-    document.getElementById("add-food-customer").textContent = record.customer_name || "—";
-    document.getElementById("add-food-station").textContent = record.station_name || "";
-    const existingText = foodSummaryText(record);
-    document.getElementById("add-food-existing-note").textContent = existingText
-      ? "Already ordered: " + existingText.replace("🍟 ", "")
-      : "No food ordered yet on this session.";
-    document.getElementById("add-food-rows").innerHTML = "";
-    document.getElementById("add-food-menu-empty").classList.toggle("hidden", menuItems.length > 0);
-    addFoodModalRow();
-    recalcAddFoodModal();
-    document.getElementById("add-food-modal").classList.add("show");
+  function openEditModal(record) {
+    editTarget = record;
+    document.getElementById("edit-heading").textContent = `${record.customer_name || "—"} · ${record.status}`;
+    document.getElementById("edit-station").value = record.station_name || "";
+    document.getElementById("edit-game").value = record.game || "";
+    document.getElementById("edit-customer-name").value = record.customer_name || "";
+    document.getElementById("edit-customer-phone").value = record.customer_phone || "";
+    document.getElementById("edit-start-time").value = record.start_time ? localDateTimeValue(new Date(record.start_time)) : "";
+    document.getElementById("edit-duration").value = record.duration_minutes || 0;
+    document.getElementById("edit-rate").value = record.rate || 0;
+    document.getElementById("edit-notes").value = record.notes || "";
+    document.getElementById("edit-session-message").textContent = "";
+
+    document.getElementById("edit-food-rows").innerHTML = "";
+    document.getElementById("edit-menu-empty").classList.toggle("hidden", menuItems.length > 0);
+    (record.food_items || []).forEach((item) => edFoodRow(item.id, item.qty));
+    if (!record.food_items || !record.food_items.length) edFoodRow();
+
+    recalcEditModal();
+    document.getElementById("edit-session-modal").classList.add("show");
   }
 
-  function closeAddFoodModal() {
-    document.getElementById("add-food-modal").classList.remove("show");
-    addFoodTarget = null;
+  function closeEditModal() {
+    document.getElementById("edit-session-modal").classList.remove("show");
+    editTarget = null;
   }
 
-  function initAddFoodModal() {
-    const modal = document.getElementById("add-food-modal");
-    document.getElementById("add-food-add-row").addEventListener("click", () => addFoodModalRow());
-    document.getElementById("add-food-cancel").addEventListener("click", closeAddFoodModal);
-    modal.addEventListener("click", (event) => { if (event.target === modal) closeAddFoodModal(); });
-    document.getElementById("add-food-save").addEventListener("click", async () => {
-      if (!addFoodTarget) return;
-      const newItems = collectAddFoodModalItems();
-      if (!newItems.length) return closeAddFoodModal();
+  function initEditModal() {
+    const modal = document.getElementById("edit-session-modal");
+    document.getElementById("edit-add-food-row").addEventListener("click", () => edFoodRow());
+    document.getElementById("edit-session-cancel").addEventListener("click", closeEditModal);
+    modal.addEventListener("click", (event) => { if (event.target === modal) closeEditModal(); });
+    ["edit-duration", "edit-rate"].forEach((id) => document.getElementById(id).addEventListener("input", recalcEditModal));
 
-      const merged = (addFoodTarget.food_items || []).map((item) => ({ ...item }));
-      newItems.forEach((item) => {
-        const existing = merged.find((m) => m.id === item.id);
-        if (existing) existing.qty += item.qty;
-        else merged.push(item);
-      });
-      const foodTotal = merged.reduce((sum, item) => sum + item.price * item.qty, 0);
-      const timeCost = ((Number(addFoodTarget.duration_minutes) || 0) / 60) * (Number(addFoodTarget.rate) || 0);
-      const amount = Math.round(timeCost + foodTotal);
+    document.getElementById("edit-session-save").addEventListener("click", async () => {
+      if (!editTarget) return;
+      const station = document.getElementById("edit-station").value.trim();
+      const customerName = document.getElementById("edit-customer-name").value.trim();
+      const customerPhone = document.getElementById("edit-customer-phone").value.trim();
+      const msgEl = document.getElementById("edit-session-message");
+      if (!station || !customerName || !customerPhone) {
+        msgEl.textContent = "Station, customer name, and phone can't be empty.";
+        msgEl.className = "text-sm min-h-5 mt-2 text-red-300";
+        return;
+      }
 
-      const btn = document.getElementById("add-food-save");
+      const { total, foodTotal, duration, rate } = recalcEditModal();
+      const foodItems = collectEdItems();
+      const startVal = document.getElementById("edit-start-time").value;
+      const startIso = startVal ? new Date(startVal).toISOString() : editTarget.start_time || null;
+      const endIso = startIso ? new Date(new Date(startIso).getTime() + duration * 60000).toISOString() : null;
+
+      const btn = document.getElementById("edit-session-save");
       btn.disabled = true;
-      const { error } = await window.sb.from("sessions").update({ food_items: merged, food_total: foodTotal, amount }).eq("id", addFoodTarget.id);
+      const { error } = await window.sb
+        .from("sessions")
+        .update({
+          station_name: station,
+          game: document.getElementById("edit-game").value.trim(),
+          customer_name: customerName,
+          customer_phone: customerPhone,
+          start_time: startIso,
+          end_time: endIso,
+          duration_minutes: duration,
+          rate,
+          food_items: foodItems,
+          food_total: foodTotal,
+          amount: total,
+          notes: document.getElementById("edit-notes").value.trim(),
+          notified_5min: false
+        })
+        .eq("id", editTarget.id);
       btn.disabled = false;
-      if (error) showToast("Could not add food to this order.");
-      else { closeAddFoodModal(); showToast("Food added to the order."); }
+      if (error) {
+        msgEl.textContent = "Could not save changes: " + error.message;
+        msgEl.className = "text-sm min-h-5 mt-2 text-red-300";
+      } else {
+        overdueToasted.delete(editTarget.id);
+        closeEditModal();
+        showToast("Session updated.");
+      }
     });
   }
 
@@ -816,7 +869,7 @@
     applyRoleVisibility();
     initSidebar();
     initCheckoutModal();
-    initAddFoodModal();
+    initEditModal();
     switchPage("page-overview");
 
     document.getElementById("booking-search").addEventListener("input", renderBookings);
@@ -932,6 +985,7 @@
       const { error } = await window.sb.from("sessions").insert({
         type: status === "Booked" ? "Booked" : "Walk-in",
         station_name: station,
+        game: document.getElementById("game-name").value.trim(),
         customer_name: customer,
         customer_phone: phone,
         start_time: startIso,
