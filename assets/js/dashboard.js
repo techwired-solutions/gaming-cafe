@@ -481,6 +481,11 @@
       if (item) openCheckoutModal(item);
     });
 
+    card.querySelector(".open-add-food").addEventListener("click", () => {
+      const item = records.find((row) => row.id === card.dataset.recordId);
+      if (item) openAddFoodModal(item);
+    });
+
     return card;
   }
 
@@ -548,6 +553,102 @@
         else { closeCheckoutModal(); showToast(`Payment recorded — ${method}.`); }
       })
     );
+  }
+
+  // ---------- add food to an in-progress session ----------
+  let addFoodTarget = null;
+
+  function addFoodModalRow(selectedId = "", qty = 1) {
+    const row = document.createElement("div");
+    row.className = "af-row grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center";
+    row.innerHTML = `
+      <select aria-label="Food or drink item" class="form-control af-select">${menuOptions(selectedId)}</select>
+      <input aria-label="Quantity" type="number" min="1" value="${qty}" class="form-control af-qty w-16">
+      <span class="af-price mono min-w-16 text-right text-sm text-[#d8ff45]">₹0</span>
+      <button type="button" aria-label="Remove food item" class="af-remove h-10 w-10 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400">×</button>`;
+    row.querySelector(".af-select").addEventListener("change", () => { updateAddFoodModalRow(row); recalcAddFoodModal(); });
+    row.querySelector(".af-qty").addEventListener("input", () => { updateAddFoodModalRow(row); recalcAddFoodModal(); });
+    row.querySelector(".af-remove").addEventListener("click", () => { row.remove(); recalcAddFoodModal(); });
+    document.getElementById("add-food-rows").appendChild(row);
+    updateAddFoodModalRow(row);
+  }
+
+  function updateAddFoodModalRow(row) {
+    const select = row.querySelector(".af-select");
+    const item = menuItems.find((entry) => entry.id === select.value);
+    const quantity = Math.max(1, Number(row.querySelector(".af-qty").value) || 1);
+    const price = item ? item.price * quantity : 0;
+    row.dataset.price = price;
+    row.dataset.qty = quantity;
+    row.dataset.itemId = item ? item.id : "";
+    row.dataset.itemName = item ? item.name : "";
+    row.dataset.unitPrice = item ? item.price : 0;
+    row.querySelector(".af-price").textContent = inr(price);
+  }
+
+  function collectAddFoodModalItems() {
+    return [...document.querySelectorAll("#add-food-rows .af-row")]
+      .filter((row) => row.dataset.itemId)
+      .map((row) => ({ id: row.dataset.itemId, name: row.dataset.itemName, price: Number(row.dataset.unitPrice), qty: Number(row.dataset.qty) }));
+  }
+
+  function recalcAddFoodModal() {
+    if (!addFoodTarget) return 0;
+    const timeCost = ((Number(addFoodTarget.duration_minutes) || 0) / 60) * (Number(addFoodTarget.rate) || 0);
+    const existingFoodTotal = Number(addFoodTarget.food_total) || 0;
+    const newRowsTotal = [...document.querySelectorAll("#add-food-rows .af-row")].reduce((sum, row) => sum + (Number(row.dataset.price) || 0), 0);
+    const total = Math.round(timeCost + existingFoodTotal + newRowsTotal);
+    document.getElementById("add-food-new-total").textContent = inr(total);
+    return total;
+  }
+
+  function openAddFoodModal(record) {
+    addFoodTarget = record;
+    document.getElementById("add-food-customer").textContent = record.customer_name || "—";
+    document.getElementById("add-food-station").textContent = record.station_name || "";
+    const existingText = foodSummaryText(record);
+    document.getElementById("add-food-existing-note").textContent = existingText
+      ? "Already ordered: " + existingText.replace("🍟 ", "")
+      : "No food ordered yet on this session.";
+    document.getElementById("add-food-rows").innerHTML = "";
+    document.getElementById("add-food-menu-empty").classList.toggle("hidden", menuItems.length > 0);
+    addFoodModalRow();
+    recalcAddFoodModal();
+    document.getElementById("add-food-modal").classList.add("show");
+  }
+
+  function closeAddFoodModal() {
+    document.getElementById("add-food-modal").classList.remove("show");
+    addFoodTarget = null;
+  }
+
+  function initAddFoodModal() {
+    const modal = document.getElementById("add-food-modal");
+    document.getElementById("add-food-add-row").addEventListener("click", () => addFoodModalRow());
+    document.getElementById("add-food-cancel").addEventListener("click", closeAddFoodModal);
+    modal.addEventListener("click", (event) => { if (event.target === modal) closeAddFoodModal(); });
+    document.getElementById("add-food-save").addEventListener("click", async () => {
+      if (!addFoodTarget) return;
+      const newItems = collectAddFoodModalItems();
+      if (!newItems.length) return closeAddFoodModal();
+
+      const merged = (addFoodTarget.food_items || []).map((item) => ({ ...item }));
+      newItems.forEach((item) => {
+        const existing = merged.find((m) => m.id === item.id);
+        if (existing) existing.qty += item.qty;
+        else merged.push(item);
+      });
+      const foodTotal = merged.reduce((sum, item) => sum + item.price * item.qty, 0);
+      const timeCost = ((Number(addFoodTarget.duration_minutes) || 0) / 60) * (Number(addFoodTarget.rate) || 0);
+      const amount = Math.round(timeCost + foodTotal);
+
+      const btn = document.getElementById("add-food-save");
+      btn.disabled = true;
+      const { error } = await window.sb.from("sessions").update({ food_items: merged, food_total: foodTotal, amount }).eq("id", addFoodTarget.id);
+      btn.disabled = false;
+      if (error) showToast("Could not add food to this order.");
+      else { closeAddFoodModal(); showToast("Food added to the order."); }
+    });
   }
 
   // ---------- revenue (admin) ----------
@@ -715,6 +816,7 @@
     applyRoleVisibility();
     initSidebar();
     initCheckoutModal();
+    initAddFoodModal();
     switchPage("page-overview");
 
     document.getElementById("booking-search").addEventListener("input", renderBookings);

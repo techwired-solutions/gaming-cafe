@@ -100,7 +100,7 @@ Both pages run the identical `dashboard.js` — which login form you get is deci
 ## Billing & revenue
 
 1. Start a session from **New Session** — station, customer, time, and any food/drinks ordered. Save it.
-2. While it's running, extend it (**+15 min**) or add food from the record card as needed.
+2. While it's running, extend it (**+15 min**) or click **+ Food** on the session card — visible on Overview, Billing, or Records, wherever an active session shows up — to open an order pad and add more items mid-session (e.g. the customer orders a second round of drinks). It merges into the existing order (same item ordered twice just bumps the quantity) and recalculates the bill immediately.
 3. When the customer's ready to leave, hit **Checkout** on the session card (visible on Overview, Billing, or Records) — a summary pops up with the time cost + food breakdown and the total due.
 4. Pick **Cash** or **Online** — this finalizes the session as *Completed*, stamps `paid_at`, and records which payment method was used. That's the only way a session becomes Completed, so nothing gets marked paid without a payment method attached.
 5. The **Billing** tab is just a live queue of every session still awaiting checkout, so a second staff member can pick up where another left off.
