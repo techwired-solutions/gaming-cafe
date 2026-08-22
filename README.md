@@ -15,7 +15,7 @@ Plain HTML/CSS/JS — no framework. There's a small build step (`npm run build`)
 2. Pick a name (e.g. `chillpill-gaming-cafe`), a database password (save it somewhere), and a region close to Nepal (e.g. Singapore).
 3. Wait ~2 minutes for it to finish provisioning.
 4. Open **SQL Editor** (left sidebar) → **New query** → paste the entire contents of [`supabase/schema.sql`](supabase/schema.sql) → **Run**.
-   - This creates the `sessions`, `menu_items`, `settings`, `staff`, `stations`, and `waiting_list` tables, turns on Row Level Security, enables realtime sync, and seeds one starter login (see the "Staff logins" section below).
+   - This creates the `sessions`, `menu_items`, `settings`, `staff`, `stations`, `tables`, and `waiting_list` tables, turns on Row Level Security, enables realtime sync, and seeds one starter login (see the "Staff logins" section below).
    - If you re-run it later, it's safe — it uses `if not exists` / `on conflict` guards and won't touch data that's already there.
 5. Go to **Project Settings → API**. Copy:
    - **Project URL** (looks like `https://xxxxxxxx.supabase.co`)
@@ -110,7 +110,11 @@ For walk-ins when every station's busy:
 
 The **Stations** tab shows every station and whether it's free right now — for answering "how long's the wait?" in person or on the phone. Occupied stations show who's on them, what they're playing, and a live countdown (turning red once overdue, same as everywhere else); free stations show "Available now" plus the next booking on that station if there is one.
 
-Admins additionally see a **Manage stations** panel on the same page to add, deactivate, or delete stations. Station names you add here appear as autocomplete suggestions on New Session and Edit (not a hard-locked dropdown — an ad-hoc entry like "Counter" for a food-only order still works), which is what lets the board reliably match a running session to a station.
+Admins additionally see a **Manage stations** panel on the same page to add, rename, deactivate, or delete stations — click **Edit** on any station to change its name or type inline. Station names you add here appear as autocomplete suggestions on New Session and Edit (not a hard-locked dropdown — an ad-hoc entry like "Counter" for a food-only order still works), which is what lets the board reliably match a running session to a station.
+
+## Waiting-room tables
+
+Separate from the stations above, the **Waiting list** tab also has an admin-only **Manage tables** panel for the physical tables customers sit at while they wait — same add/edit/deactivate/delete pattern as stations. When staff add someone to the waiting list, they can optionally assign a table (autocomplete from this list, still free text so an ad-hoc spot works too); it shows on that customer's waiting card so staff can find and allocate by table at a glance, and stays on the record as a reference even after they're seated.
 
 ## Overtime billing
 

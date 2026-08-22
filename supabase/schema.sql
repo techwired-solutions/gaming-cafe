@@ -113,12 +113,12 @@ alter table public.settings add column if not exists whatsapp_number text not nu
 alter table public.settings add column if not exists whatsapp_message text not null default 'Hi! I''d like to book a PlayStation slot at ChillPill Gaming Cafe.';
 
 -- ---------------------------------------------------------------------
--- stations: the actual physical PlayStation stations/compartments in the
--- cafe, managed from the dashboard's Stations tab (admin-only setup).
--- Session's station_name is still free text (so a temporary/ad-hoc entry
--- like "Counter" for a food-only order still works), but New Session and
--- Edit both offer these as autocomplete suggestions, which is what lets
--- the availability board reliably match a running session to a station.
+-- stations: the actual physical PlayStation stations/booths in the cafe,
+-- managed from the dashboard's Stations tab (admin-only setup). Session's
+-- station_name is still free text (so a temporary/ad-hoc entry like
+-- "Counter" for a food-only order still works), but New Session and Edit
+-- both offer these as autocomplete suggestions, which is what lets the
+-- availability board reliably match a running session to a station.
 -- ---------------------------------------------------------------------
 create table if not exists public.stations (
   id uuid primary key default gen_random_uuid(),
@@ -129,15 +129,30 @@ create table if not exists public.stations (
 );
 
 -- ---------------------------------------------------------------------
+-- tables: the physical tables in the waiting room, managed from the
+-- dashboard's Waiting List tab (admin-only setup). Assigned to a waiting
+-- party so staff can find/allocate them by table, same autocomplete
+-- pattern as stations above.
+-- ---------------------------------------------------------------------
+create table if not exists public.tables (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------
 -- waiting_list: first-come-first-served queue for customers waiting on a
--- free station. They can order food while they wait; when their turn
--- comes, "Start session" on the dashboard carries their name/phone/food
--- order straight into New Session so staff only need to pick a station.
+-- free station. They can order food while they wait, and are optionally
+-- assigned a waiting-room table; when their turn comes, "Start session"
+-- on the dashboard carries their name/phone/food order straight into New
+-- Session so staff only need to pick a station.
 -- ---------------------------------------------------------------------
 create table if not exists public.waiting_list (
   id uuid primary key default gen_random_uuid(),
   customer_name text not null,
   customer_phone text not null,
+  table_name text,
   food_items jsonb not null default '[]'::jsonb,
   food_total numeric not null default 0,
   status text not null default 'Waiting' check (status in ('Waiting', 'Seated', 'Cancelled')),
@@ -146,6 +161,9 @@ create table if not exists public.waiting_list (
   staff_name text,
   created_at timestamptz not null default now()
 );
+
+-- Backward-compatible migration for databases created before tables existed.
+alter table public.waiting_list add column if not exists table_name text;
 
 create index if not exists waiting_list_status_idx on public.waiting_list (status);
 
@@ -184,6 +202,7 @@ alter table public.menu_items enable row level security;
 alter table public.settings enable row level security;
 alter table public.staff enable row level security;
 alter table public.stations enable row level security;
+alter table public.tables enable row level security;
 alter table public.waiting_list enable row level security;
 
 drop policy if exists "menu_items_all_anon" on public.menu_items;
@@ -200,6 +219,9 @@ create policy "staff_all_anon" on public.staff for all using (true) with check (
 
 drop policy if exists "stations_all_anon" on public.stations;
 create policy "stations_all_anon" on public.stations for all using (true) with check (true);
+
+drop policy if exists "tables_all_anon" on public.tables;
+create policy "tables_all_anon" on public.tables for all using (true) with check (true);
 
 drop policy if exists "waiting_list_all_anon" on public.waiting_list;
 create policy "waiting_list_all_anon" on public.waiting_list for all using (true) with check (true);
@@ -233,6 +255,10 @@ begin
   end;
   begin
     alter publication supabase_realtime add table public.stations;
+  exception when duplicate_object then null;
+  end;
+  begin
+    alter publication supabase_realtime add table public.tables;
   exception when duplicate_object then null;
   end;
   begin

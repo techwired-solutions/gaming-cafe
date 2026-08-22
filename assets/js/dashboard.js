@@ -774,6 +774,10 @@
     const waitMins = Math.max(0, Math.round((new Date() - new Date(entry.created_at)) / 60000));
     card.querySelector(".wl-wait").textContent = `waiting ${waitMins} min`;
 
+    const tableEl = card.querySelector(".wl-table");
+    if (entry.table_name) { tableEl.textContent = "🪑 " + entry.table_name; tableEl.classList.remove("hidden"); }
+    else tableEl.classList.add("hidden");
+
     const foodText = waitingFoodSummaryText(entry);
     const foodEl = card.querySelector(".wl-food");
     if (foodText) { foodEl.textContent = `🍟 ${foodText} — ${inr(entry.food_total)}`; foodEl.classList.remove("hidden"); }
@@ -796,6 +800,7 @@
         </div>
         <span class="wl-wait mono text-xs text-slate-400 whitespace-nowrap"></span>
       </div>
+      <p class="wl-table mt-1 text-xs text-slate-400 hidden"></p>
       <p class="wl-food mt-2 text-xs text-slate-400 hidden"></p>
       <p class="wl-notes mt-1 text-xs text-slate-500 italic hidden"></p>
       <div class="flex gap-2 mt-3">
@@ -867,6 +872,7 @@
     document.getElementById("waiting-edit-heading").textContent = entry.customer_name || "—";
     document.getElementById("waiting-edit-name").value = entry.customer_name || "";
     document.getElementById("waiting-edit-phone").value = entry.customer_phone || "";
+    document.getElementById("waiting-edit-table").value = entry.table_name || "";
     document.getElementById("waiting-edit-notes").value = entry.notes || "";
     document.getElementById("waiting-edit-message").textContent = "";
 
@@ -907,6 +913,7 @@
         .update({
           customer_name: name,
           customer_phone: phone,
+          table_name: document.getElementById("waiting-edit-table").value.trim(),
           food_items: collectFrItems("waiting-edit-food-rows"),
           food_total: frTotal("waiting-edit-food-rows"),
           notes: document.getElementById("waiting-edit-notes").value.trim()
@@ -976,33 +983,93 @@
       .join("");
   }
 
-  function renderStationManageList() {
-    const list = document.getElementById("station-manage-list");
+  // Generic admin CRUD list with inline rename/edit, shared by Stations and
+  // Tables management — both are "a named, active/inactive thing" with the
+  // only real difference being which fields are editable.
+  function renderManageList(containerId, items, dbTable, fields, labelFn) {
+    const list = document.getElementById(containerId);
     if (!list) return;
     list.innerHTML = "";
-    stations.forEach((station) => {
+    items.forEach((item) => {
       const row = document.createElement("div");
-      row.className = "flex items-center justify-between gap-2 rounded-lg border border-slate-700 bg-[#111722] px-3 py-2 text-sm";
+      row.className = "rounded-lg border border-slate-700 bg-[#111722] px-3 py-2 text-sm";
+      const editInputs = fields
+        .map((f) => `<input type="text" class="form-control mng-field flex-1" data-key="${f.key}" placeholder="${f.placeholder || ""}" value="${(item[f.key] || "").replace(/"/g, "&quot;")}">`)
+        .join("");
       row.innerHTML = `
-        <div class="min-w-0">
-          <span class="truncate">${station.name}</span>
-          <span class="text-xs text-slate-500 mono ml-1">${station.type || ""}</span>
-          ${!station.active ? '<span class="text-xs text-[#ff6875] ml-2">Inactive</span>' : ""}
+        <div class="view-mode flex items-center justify-between gap-2">
+          <div class="min-w-0">${labelFn(item)}</div>
+          <div class="flex gap-1.5 shrink-0">
+            <button type="button" class="mng-edit rounded-lg border border-slate-600 px-2 py-1 text-xs text-slate-300">Edit</button>
+            <button type="button" class="mng-toggle rounded-lg border border-slate-600 px-2 py-1 text-xs text-slate-300">${item.active ? "Deactivate" : "Activate"}</button>
+            <button type="button" class="mng-delete rounded-lg border border-slate-600 px-2 py-1 text-xs text-[#ff6875]">Delete</button>
+          </div>
         </div>
-        <div class="flex gap-1.5 shrink-0">
-          <button type="button" class="st-toggle rounded-lg border border-slate-600 px-2 py-1 text-xs text-slate-300">${station.active ? "Deactivate" : "Activate"}</button>
-          <button type="button" class="st-delete rounded-lg border border-slate-600 px-2 py-1 text-xs text-[#ff6875]">Delete</button>
+        <div class="edit-mode hidden mt-2 flex flex-wrap gap-2">
+          ${editInputs}
+          <button type="button" class="mng-save rounded-lg px-3 text-xs font-bold whitespace-nowrap" style="background:#d8ff45;color:#10141e;">Save</button>
+          <button type="button" class="mng-cancel rounded-lg border border-slate-600 px-3 text-xs text-slate-300 whitespace-nowrap">Cancel</button>
         </div>`;
-      row.querySelector(".st-toggle").addEventListener("click", async () => {
-        const { error } = await window.sb.from("stations").update({ active: !station.active }).eq("id", station.id);
-        if (error) showToast("Could not update this station.");
+
+      const viewMode = row.querySelector(".view-mode");
+      const editMode = row.querySelector(".edit-mode");
+      row.querySelector(".mng-edit").addEventListener("click", () => {
+        viewMode.classList.add("hidden");
+        editMode.classList.remove("hidden");
+        editMode.classList.add("flex");
       });
-      row.querySelector(".st-delete").addEventListener("click", async () => {
-        const { error } = await window.sb.from("stations").delete().eq("id", station.id);
-        if (error) showToast("Could not delete this station.");
+      row.querySelector(".mng-cancel").addEventListener("click", () => {
+        editMode.classList.add("hidden");
+        editMode.classList.remove("flex");
+        viewMode.classList.remove("hidden");
+      });
+      row.querySelector(".mng-save").addEventListener("click", async () => {
+        const payload = {};
+        row.querySelectorAll(".mng-field").forEach((input) => { payload[input.dataset.key] = input.value.trim(); });
+        if (!payload.name) return showToast("Name can't be empty.");
+        const { error } = await window.sb.from(dbTable).update(payload).eq("id", item.id);
+        if (error) showToast(error.message.includes("duplicate") ? "That name is already taken." : "Could not save changes.");
+      });
+      row.querySelector(".mng-toggle").addEventListener("click", async () => {
+        const { error } = await window.sb.from(dbTable).update({ active: !item.active }).eq("id", item.id);
+        if (error) showToast("Could not update this item.");
+      });
+      row.querySelector(".mng-delete").addEventListener("click", async () => {
+        const { error } = await window.sb.from(dbTable).delete().eq("id", item.id);
+        if (error) showToast("Could not delete this item.");
       });
       list.appendChild(row);
     });
+  }
+
+  function renderStationManageList() {
+    renderManageList(
+      "station-manage-list",
+      stations,
+      "stations",
+      [{ key: "name", placeholder: "Name" }, { key: "type", placeholder: "Type" }],
+      (s) => `<span class="truncate">${s.name}</span><span class="text-xs text-slate-500 mono ml-1">${s.type || ""}</span>${!s.active ? '<span class="text-xs text-[#ff6875] ml-2">Inactive</span>' : ""}`
+    );
+  }
+
+  // ---------- tables (waiting room, admin-managed) ----------
+  let waitingTables = [];
+
+  function renderTableDatalist() {
+    document.getElementById("table-list").innerHTML = waitingTables
+      .filter((t) => t.active)
+      .map((t) => `<option value="${t.name}"></option>`)
+      .join("");
+  }
+
+  function renderTableManageList() {
+    renderManageList(
+      "table-manage-list",
+      waitingTables,
+      "tables",
+      [{ key: "name", placeholder: "Table name" }],
+      (t) => `<span class="truncate">${t.name}</span>${!t.active ? '<span class="text-xs text-[#ff6875] ml-2">Inactive</span>' : ""}`
+    );
   }
 
   // ---------- revenue (admin) ----------
@@ -1161,13 +1228,21 @@
     if (currentStaff && currentStaff.role === "admin") renderStationManageList();
   }
 
+  async function fetchTables() {
+    const { data, error } = await window.sb.from("tables").select("*").order("name", { ascending: true });
+    if (error) return;
+    waitingTables = data || [];
+    renderTableDatalist();
+    if (currentStaff && currentStaff.role === "admin") renderTableManageList();
+  }
+
   function setConnectionStatus(ok, label) {
     document.getElementById("connection-dot").style.background = ok ? "#d8ff45" : "#ff6875";
     document.getElementById("connection-label").textContent = label;
   }
 
   async function loadAll() {
-    await Promise.all([fetchSessions(), fetchMenu(), fetchSettings(), fetchStaff(), fetchWaitingList(), fetchStations()]);
+    await Promise.all([fetchSessions(), fetchMenu(), fetchSettings(), fetchStaff(), fetchWaitingList(), fetchStations(), fetchTables()]);
   }
 
   function subscribeRealtime() {
@@ -1179,6 +1254,7 @@
       .on("postgres_changes", { event: "*", schema: "public", table: "staff" }, fetchStaff)
       .on("postgres_changes", { event: "*", schema: "public", table: "waiting_list" }, fetchWaitingList)
       .on("postgres_changes", { event: "*", schema: "public", table: "stations" }, fetchStations)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tables" }, fetchTables)
       .subscribe((status) => {
         if (status === "SUBSCRIBED") setConnectionStatus(true, "Live");
       });
@@ -1357,6 +1433,7 @@
       const { error } = await window.sb.from("waiting_list").insert({
         customer_name: name,
         customer_phone: phone,
+        table_name: document.getElementById("waiting-table").value.trim(),
         food_items: collectFrItems("waiting-food-rows"),
         food_total: frTotal("waiting-food-rows"),
         notes: document.getElementById("waiting-notes").value.trim(),
@@ -1390,6 +1467,19 @@
         event.target.reset();
         document.getElementById("station-form-type").value = "PS5";
         showToast("Station added.");
+      }
+    });
+
+    document.getElementById("table-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const name = document.getElementById("table-form-name").value.trim();
+      if (!name) return;
+      if (!sdkReady) return showToast("Supabase isn't connected yet.");
+      const { error } = await window.sb.from("tables").insert({ name, active: true });
+      if (error) showToast(error.message.includes("duplicate") ? "A table with that name already exists." : "Could not add table.");
+      else {
+        event.target.reset();
+        showToast("Table added.");
       }
     });
 
