@@ -158,10 +158,21 @@ create policy "staff_all_anon" on public.staff for all using (true) with check (
 -- ---------------------------------------------------------------------
 -- Realtime: lets the dashboard update instantly across multiple devices,
 -- and lets the public site's menu/content stay in sync without a page
--- refresh. If any of these error with "already a member", that's fine —
--- ignore it.
+-- refresh. Wrapped in existence checks so re-running this script never
+-- errors with "already a member of publication".
 -- ---------------------------------------------------------------------
-alter publication supabase_realtime add table public.sessions;
-alter publication supabase_realtime add table public.menu_items;
-alter publication supabase_realtime add table public.settings;
-alter publication supabase_realtime add table public.staff;
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'sessions') then
+    alter publication supabase_realtime add table public.sessions;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'menu_items') then
+    alter publication supabase_realtime add table public.menu_items;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'settings') then
+    alter publication supabase_realtime add table public.settings;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'staff') then
+    alter publication supabase_realtime add table public.staff;
+  end if;
+end $$;
