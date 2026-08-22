@@ -2,10 +2,10 @@
 
 A two-page project for a hourly-PlayStation gaming cafe:
 
-- **`index.html`** — the public website (info, ambience, games, pricing, food menu, contact/map, WhatsApp booking button). No online booking form — customers message you on WhatsApp and you confirm manually.
-- **`dashboard.html`** — the owner's console (private, password-gated) for tracking sessions, time remaining, food orders, billing, and the food/drinks menu. Backed by Supabase so it works from any device/browser and multiple staff can see the same live data.
+- **`index.html`** — the public website (info, ambience, games, pricing, food menu, contact/map, WhatsApp booking button). No online booking form — customers message you on WhatsApp and you confirm manually. Cafe name, hours, pricing text, WhatsApp number, and the food menu are all editable live from the dashboard, no code changes needed.
+- **`dashboard.html`** — the owner console, with individual staff logins and a sidebar organizing everything: Overview, Bookings, New Session, Billing, Records, and (admin-only) Revenue, Menu & Pricing, Cafe Content, and Staff. Backed by Supabase so it works from any device/browser and multiple staff see the same live data in real time.
 
-Plain HTML/CSS/JS — no framework. There's one tiny build step (`scripts/generate-config.js`) whose only job is to keep your real Supabase keys, WhatsApp number, and dashboard password **out of git entirely**; see step 2 below.
+Plain HTML/CSS/JS — no framework. There's one tiny build step (`scripts/generate-config.js`) whose only job is to keep your real Supabase keys and WhatsApp number **out of git entirely**; see step 2 below.
 
 ---
 
@@ -15,15 +15,17 @@ Plain HTML/CSS/JS — no framework. There's one tiny build step (`scripts/genera
 2. Pick a name (e.g. `chillpill-gaming-cafe`), a database password (save it somewhere), and a region close to Nepal (e.g. Singapore).
 3. Wait ~2 minutes for it to finish provisioning.
 4. Open **SQL Editor** (left sidebar) → **New query** → paste the entire contents of [`supabase/schema.sql`](supabase/schema.sql) → **Run**.
-   - This creates the `sessions`, `menu_items`, and `settings` tables, turns on Row Level Security, and enables realtime sync.
-   - If you re-run it later, it's safe — it uses `if not exists` / `on conflict` guards.
+   - This creates the `sessions`, `menu_items`, `settings`, and `staff` tables, turns on Row Level Security, enables realtime sync, and seeds one starter login (see the "Staff logins" section below).
+   - If you re-run it later, it's safe — it uses `if not exists` / `on conflict` guards and won't touch data that's already there.
 5. Go to **Project Settings → API**. Copy:
    - **Project URL** (looks like `https://xxxxxxxx.supabase.co`)
    - **anon public** key (a long string under "Project API keys")
 
+If you already ran an older version of this schema (before staff logins/billing existed), just re-run the current `schema.sql` — every new column and table is added with `if not exists` guards, so your existing sessions and menu are untouched.
+
 ## 2. Fill in your config
 
-Real values (Supabase keys, WhatsApp number, dashboard password) are **never committed to git**. They're layered on top of the tracked `assets/js/config.js` defaults by a small override file, `assets/js/config.local.js` — which is gitignored — so the repo stays safe to make public later even though it currently has your real values applied locally.
+Real values (Supabase keys, WhatsApp number) are **never committed to git**. They're layered on top of the tracked `assets/js/config.js` defaults by a small override file, `assets/js/config.local.js` — which is gitignored — so the repo stays safe to make public later even though it currently has your real values applied locally.
 
 **For local testing on your own computer:**
 
@@ -37,12 +39,13 @@ Real values (Supabase keys, WhatsApp number, dashboard password) are **never com
 | `SUPABASE_URL` | Your Project URL from step 1 |
 | `SUPABASE_ANON_KEY` | Your anon public key from step 1 |
 | `WHATSAPP_NUMBER` | Your WhatsApp number, country code + digits only, e.g. `9779812345678` |
-| `DASHBOARD_PASSWORD` | A password only you/staff know, to open the dashboard |
-| `CAFE_NAME`, `CAFE_TAGLINE`, `CAFE_LOCATION`, `CAFE_ADDRESS_LINE`, `OPENING_HOURS`, `WHATSAPP_DEFAULT_MESSAGE`, `DEFAULT_HOURLY_RATE`, `ALERT_MINUTES_BEFORE_END` | Optional — only set these if you want to override the defaults already in `assets/js/config.js` without editing code |
+| `CAFE_NAME`, `CAFE_TAGLINE`, `CAFE_LOCATION`, `CAFE_ADDRESS_LINE`, `OPENING_HOURS`, `WHATSAPP_DEFAULT_MESSAGE`, `DEFAULT_HOURLY_RATE`, `ALERT_MINUTES_BEFORE_END` | Optional first-load fallbacks only — once Supabase is connected, the **Cafe Content** tab in the dashboard is the real, live-editable source of truth for all of these except `DEFAULT_HOURLY_RATE` (set from **Menu & Pricing**) |
+
+There's no `DASHBOARD_PASSWORD` anymore — staff sign in with their own username/password instead (see below).
 
 After adding/changing env vars in Vercel, trigger a redeploy for them to take effect.
 
-Everything else (pricing table numbers, game list, ambience section) lives directly in `index.html` as plain text/HTML — search for the section (`<section id="pricing">`, `<section id="games">`, etc.) and edit it like a normal web page.
+Everything else that isn't staff-editable (game list, ambience section layout) lives directly in `index.html` as plain text/HTML — search for the section (`<section id="games">`, etc.) and edit it like a normal web page.
 
 ## 3. Add real photos (optional but recommended)
 
@@ -71,6 +74,34 @@ Then open the printed `http://localhost:...` URL. Visit `/dashboard.html` for th
 
 ---
 
+## Staff logins & roles
+
+There's no single shared dashboard password anymore — each staff member (and the admin) signs in with their own username and password, and every session/order they create is stamped with their name.
+
+- **First login:** `schema.sql` seeds one starter account — username `admin`, password `ChangeMe123!`. **Change this immediately** after signing in: Staff tab → find "Admin" → **Reset pw**. That generates a new random password and shows it once — write it down, that's your real password now. (If you'd rather pick your own memorable one, create a second admin account with the password you want, sign in as that one, then deactivate the original `admin` account.) Either way, don't leave `ChangeMe123!` active.
+- **Two roles:**
+  - **Admin** — sees everything, including Revenue, Menu & Pricing, Cafe Content, and Staff.
+  - **Staff** — sees Overview, Bookings, New Session, Billing, and Records (all staff share the same records — nothing is hidden between staff members), but not the admin-only sections. Only admins can delete a record.
+- **Adding staff:** Staff tab → "Add staff account" → give them a name, username, and a temporary password, tell them directly (there's no email step). They should ideally change it themselves later via an admin-issued **Reset pw**.
+- **Attribution:** every session created shows "👤 staff name" on its card, and the Revenue tab breaks down takings per staff member.
+
+**Security note on this login system:** passwords are hashed (SHA-256 + a random salt per account) before they're ever sent to Supabase, so the database never stores plain text. That said, this is still a UI-level login, not full production-grade auth — see the "Security note" section further down for the honest limitations of a backend-less static site, and don't use this for anything beyond a small single-location team.
+
+## Billing & revenue
+
+1. Start a session from **New Session** — station, customer, time, and any food/drinks ordered. Save it.
+2. While it's running, extend it (**+15 min**) or add food from the record card as needed.
+3. When the customer's ready to leave, hit **Checkout** on the session card (visible on Overview, Billing, or Records) — a summary pops up with the time cost + food breakdown and the total due.
+4. Pick **Cash** or **Online** — this finalizes the session as *Completed*, stamps `paid_at`, and records which payment method was used. That's the only way a session becomes Completed, so nothing gets marked paid without a payment method attached.
+5. The **Billing** tab is just a live queue of every session still awaiting checkout, so a second staff member can pick up where another left off.
+6. The **Revenue** tab (admin-only) totals everything: overall, cash vs online split with bars, today's total, and a per-staff breakdown — useful for reconciling a shift or spotting who's driving sales.
+
+## Cafe content (CMS)
+
+The admin-only **Cafe Content** tab edits the cafe's name, tagline, short location, full address, opening hours, WhatsApp number, and default WhatsApp message — these are stored in Supabase's `settings` table and the public website (`index.html`) reads them live on every page load, falling back to the placeholders in `assets/js/config.js` only if Supabase isn't reachable. **Menu & Pricing** (also admin-only) is the same idea for food/drink items and the default hourly rate. Change either and the public site updates without a redeploy — just a page refresh for visitors.
+
+---
+
 ## How the time tracking & 5-minute alert works
 
 - When you save a session as **Active** (or mark a **Booked** customer as arrived), the console stores a `start_time` and computes `end_time = start_time + duration`.
@@ -80,39 +111,40 @@ Then open the printed `http://localhost:...` URL. Visit `/dashboard.html` for th
   - Sends a **browser notification** (if you click "Enable alerts" once and allow the permission prompt) — this fires even if the dashboard tab is in the background, as long as the browser/computer stays on.
   - Marks that session so it won't alert again for the same 5-minute warning.
 - When the timer hits zero, it fires a second "Time's up!" alert.
-- Use the **+15 min** button on an active card to extend a session on the spot (recalculates the bill and re-arms the alert), or **Mark complete** to close it out.
+- Use the **+15 min** button on an active card to extend a session on the spot (recalculates the bill and re-arms the alert), or **Checkout** to finalize billing and close it out (see "Billing & revenue" above).
 
 Browser notifications only work while the dashboard is open in a tab (even backgrounded) on a device that's powered on — there's no SMS/push-to-phone in this version. If you want a phone alert regardless of whether the dashboard is open, that would need a small server-side add-on (e.g. a Supabase Edge Function + WhatsApp/SMS API) — let me know if you'd like that added later.
 
 ## Security note (please read)
 
-This project uses only Supabase's public **anon key** — there's no login-account system (no Supabase Auth). That keeps setup simple, but it means:
+This project uses only Supabase's public **anon key** — there's no Supabase Auth (real login-account system) under the hood, just a `staff` table the dashboard checks passwords against. That keeps setup simple (no servers to run), but it means:
 
-- The dashboard's password screen is a **UI-level lock only**. It stops casual visitors from opening the console in a browser, but it does **not** protect the underlying database — anyone who extracts your anon key and URL from the deployed JS could, in theory, read/write the `sessions` and `menu_items` tables directly via the Supabase API.
-- This is a normal, common trade-off for a small single-location business tool, but don't store anything more sensitive than name/phone/order info in it (no payment details, no ID documents).
-- If you later want real protection: add Supabase Auth (owner + staff logins) and change the Row Level Security policies in `supabase/schema.sql` from `using (true)` to `using (auth.uid() is not null)`. Ask me and I can wire that up.
-- Separately: your Supabase anon key, WhatsApp number, and dashboard password never touch git (see step 2) — they only ever exist in Vercel's encrypted Environment Variables and in your own gitignored `config.local.js`. This means the repo itself stays safe to make public later even though the *deployed site* will always expose the anon key and password in its JS (that part is unavoidable for a backend-less static site, and is what the point above is about).
+- Staff logins are a **UI-level lock only**. They stop casual visitors from opening the console, and passwords are hashed (not stored in plain text), but this does **not** protect the underlying database — anyone who extracts your anon key and URL from the deployed JS could, in theory, read/write every table (including staff password hashes) directly via the Supabase API, bypassing the login screen entirely.
+- This is a normal, common trade-off for a small single-location business tool, but don't store anything more sensitive than name/phone/order info in it (no payment details, no ID documents), and don't reuse a staff member's dashboard password anywhere else.
+- If you later want real protection: switch to Supabase Auth and change the Row Level Security policies in `supabase/schema.sql` from `using (true)` to `using (auth.uid() is not null)`. Ask me and I can wire that up.
+- Separately: your Supabase anon key and WhatsApp number never touch git (see step 2) — they only ever exist in Vercel's encrypted Environment Variables and in your own gitignored `config.local.js`. This means the repo itself stays safe to make public later even though the *deployed site* will always expose the anon key in its JS (that part is unavoidable for a backend-less static site, and is what the point above is about).
 
 ## Project structure
 
 ```
 Gaming-Cafe/
-├─ index.html                     # public website
-├─ dashboard.html                 # owner console (password-gated)
+├─ index.html                     # public website (reads live content + menu from Supabase)
+├─ dashboard.html                 # owner console — sidebar, staff login, CMS, billing
 ├─ vercel.json                    # build command + clean URLs + noindex header for /dashboard
 ├─ package.json                   # "build" script → scripts/generate-config.js
 ├─ scripts/
 │  └─ generate-config.js          # turns Vercel env vars into config.local.js at build time
 ├─ assets/
 │  ├─ js/
-│  │  ├─ config.js                # tracked, public-safe defaults (committed)
+│  │  ├─ config.js                # tracked, public-safe fallback defaults (committed)
 │  │  ├─ config.local.example.js  # template — copy to config.local.js for local dev (committed)
 │  │  ├─ config.local.js          # ← your real values (gitignored, never committed)
 │  │  ├─ supabaseClient.js        # builds the shared Supabase client
-│  │  ├─ dashboard.js             # owner console logic
-│  │  └─ site.js                  # public site logic
+│  │  ├─ passwordHash.js          # SHA-256 + salt helper for staff login/creation
+│  │  ├─ dashboard.js             # owner console logic (staff auth, sidebar, billing, CMS)
+│  │  └─ site.js                  # public site logic (live content + menu)
 │  ├─ css/                        # (styles are inline in each page; folder reserved for future use)
 │  └─ images/                     # put your real photos here
 └─ supabase/
-   └─ schema.sql                  # run once in Supabase's SQL editor
+   └─ schema.sql                  # run once in Supabase's SQL editor (safe to re-run/migrate)
 ```

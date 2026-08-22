@@ -13,6 +13,5 @@
 Object.assign(window.APP_CONFIG, {
   SUPABASE_URL: "https://your-project-ref.supabase.co",
   SUPABASE_ANON_KEY: "your-supabase-anon-public-key",
-  WHATSAPP_NUMBER: "9779800000000",
-  DASHBOARD_PASSWORD: "choose-a-real-password"
+  WHATSAPP_NUMBER: "9779800000000"
 });

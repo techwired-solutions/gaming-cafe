@@ -7,12 +7,15 @@
 
   const CFG = window.APP_CONFIG || {};
   const ALERT_MS = (CFG.ALERT_MINUTES_BEFORE_END || 5) * 60 * 1000;
+  const ADMIN_ONLY_PAGES = new Set(["page-revenue", "page-menu", "page-content", "page-staff"]);
 
   let menuItems = [];
   let records = [];
+  let staffList = [];
+  let currentStaff = null; // { id, name, username, role }
   let sdkReady = false;
   let realtimeChannel = null;
-  const overdueToasted = new Set(); // session ids we've already toasted "time's up" for
+  const overdueToasted = new Set();
 
   // ---------- helpers ----------
   const inr = (value) =>
@@ -23,6 +26,20 @@
 
   const fmtDateTime = (iso) =>
     iso ? new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso)) : "";
+
+  const isToday = (iso) => {
+    if (!iso) return false;
+    const d = new Date(iso), n = new Date();
+    return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+  };
+
+  const normalizeUsername = (s) => (s || "").trim().toLowerCase();
+
+  const randomPassword = (len = 10) => {
+    const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+    const bytes = crypto.getRandomValues(new Uint8Array(len));
+    return [...bytes].map((b) => chars[b % chars.length]).join("");
+  };
 
   function showToast(message) {
     const toast = document.getElementById("toast");
@@ -64,47 +81,115 @@
     beep();
     showToast(body);
     if (window.Notification && Notification.permission === "granted") {
-      try { new Notification(title, { body, icon: undefined }); } catch (e) {}
+      try { new Notification(title, { body }); } catch (e) {}
     }
   }
 
-  // ---------- lock screen ----------
-  function initLockScreen() {
+  // ---------- login ----------
+  function initLogin() {
     const lockScreen = document.getElementById("lock-screen");
     const appRoot = document.getElementById("app-root");
     const form = document.getElementById("lock-form");
-    const input = document.getElementById("lock-password");
+    const usernameInput = document.getElementById("lock-username");
+    const passwordInput = document.getElementById("lock-password");
     const error = document.getElementById("lock-error");
     const warning = document.getElementById("lock-config-warning");
 
-    if (!CFG.DASHBOARD_PASSWORD || CFG.DASHBOARD_PASSWORD.startsWith("PLACEHOLDER")) {
-      warning.classList.remove("hidden");
-    }
+    if (!window.SUPABASE_CONFIGURED) warning.classList.remove("hidden");
 
-    function unlock() {
+    function unlock(staff) {
+      currentStaff = staff;
+      sessionStorage.setItem("chillpill_staff", JSON.stringify(staff));
       lockScreen.remove();
       appRoot.classList.remove("hidden");
       bootstrap();
     }
 
-    if (sessionStorage.getItem("chillpill_unlocked") === "1") {
-      unlock();
-      return;
+    async function tryResumeSession() {
+      const raw = sessionStorage.getItem("chillpill_staff");
+      if (!raw || !window.SUPABASE_CONFIGURED) return;
+      try {
+        const staff = JSON.parse(raw);
+        const { data, error: err } = await window.sb.from("staff").select("*").eq("id", staff.id).maybeSingle();
+        if (!err && data && data.active) {
+          unlock({ id: data.id, name: data.name, username: data.username, role: data.role });
+        } else {
+          sessionStorage.removeItem("chillpill_staff");
+        }
+      } catch (e) {
+        sessionStorage.removeItem("chillpill_staff");
+      }
     }
 
-    form.addEventListener("submit", (event) => {
+    form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (input.value === CFG.DASHBOARD_PASSWORD) {
-        sessionStorage.setItem("chillpill_unlocked", "1");
-        unlock();
-      } else {
-        error.textContent = "Incorrect password.";
-        input.value = "";
-        input.focus();
+      error.textContent = "";
+      if (!window.SUPABASE_CONFIGURED) {
+        error.textContent = "Supabase isn't configured yet — see README.md.";
+        return;
+      }
+      const username = normalizeUsername(usernameInput.value);
+      const password = passwordInput.value;
+      if (!username || !password) return;
+
+      const submitBtn = form.querySelector("button[type=submit]");
+      submitBtn.disabled = true;
+      try {
+        const { data, error: err } = await window.sb.from("staff").select("*").eq("username", username).maybeSingle();
+        if (err || !data || !data.active) throw new Error("invalid");
+        const hash = await window.ChillPillCrypto.hashPassword(password, data.password_salt);
+        if (hash !== data.password_hash) throw new Error("invalid");
+        unlock({ id: data.id, name: data.name, username: data.username, role: data.role });
+      } catch (e) {
+        error.textContent = "Invalid username or password.";
+        passwordInput.value = "";
+        passwordInput.focus();
+      } finally {
+        submitBtn.disabled = false;
       }
     });
 
+    tryResumeSession();
     lucide.createIcons();
+  }
+
+  // ---------- sidebar / page navigation ----------
+  function switchPage(pageId) {
+    if (ADMIN_ONLY_PAGES.has(pageId) && (!currentStaff || currentStaff.role !== "admin")) pageId = "page-overview";
+    document.querySelectorAll(".page-view").forEach((el) => el.classList.toggle("active", el.id === pageId));
+    document.querySelectorAll(".sidebar-link").forEach((link) => link.classList.toggle("active", link.dataset.page === pageId));
+    const activeLink = document.querySelector(`.sidebar-link[data-page="${pageId}"]`);
+    document.getElementById("page-title").textContent = activeLink ? activeLink.textContent.trim() : "Overview";
+    document.getElementById("sidebar").classList.remove("open");
+    document.getElementById("sidebar-backdrop").classList.remove("show");
+  }
+
+  function initSidebar() {
+    document.querySelectorAll(".sidebar-link").forEach((link) =>
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+        switchPage(link.dataset.page);
+      })
+    );
+    const sidebar = document.getElementById("sidebar");
+    const backdrop = document.getElementById("sidebar-backdrop");
+    document.getElementById("sidebar-toggle").addEventListener("click", () => {
+      sidebar.classList.add("open");
+      backdrop.classList.add("show");
+    });
+    backdrop.addEventListener("click", () => { sidebar.classList.remove("open"); backdrop.classList.remove("show"); });
+
+    document.getElementById("logout-button").addEventListener("click", () => {
+      sessionStorage.removeItem("chillpill_staff");
+      location.reload();
+    });
+  }
+
+  function applyRoleVisibility() {
+    const isAdmin = currentStaff && currentStaff.role === "admin";
+    document.querySelectorAll(".admin-only").forEach((el) => el.classList.toggle("hidden", !isAdmin));
+    document.getElementById("current-staff-name").textContent = currentStaff ? currentStaff.name : "—";
+    document.getElementById("current-staff-role").textContent = currentStaff ? currentStaff.role.toUpperCase() + " · @" + currentStaff.username : "";
   }
 
   // ---------- menu (food & drinks) ----------
@@ -231,15 +316,18 @@
       : "No overdue bookings.";
   }
 
-  // ---------- records / sessions ----------
+  // ---------- records / session cards ----------
   function updateSummary() {
     const activeSessions = records.filter((r) => r.status === "Active");
     const endingSoon = activeSessions.filter((r) => r.end_time && new Date(r.end_time) - new Date() > 0 && new Date(r.end_time) - new Date() <= ALERT_MS);
+    const completedToday = records.filter((r) => r.status === "Completed" && isToday(r.paid_at || r.created_at));
+    const todayRevenue = records.filter((r) => r.paid && isToday(r.paid_at)).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
     document.getElementById("active-count").textContent = activeSessions.length;
     document.getElementById("ending-soon-count").textContent = endingSoon.length;
-    document.getElementById("completed-count").textContent = records.filter((r) => r.status === "Completed").length;
+    document.getElementById("completed-count").textContent = completedToday.length;
     document.getElementById("food-count").textContent = records.filter((r) => r.food_items && r.food_items.length).length;
-    document.getElementById("sales-total").textContent = inr(records.reduce((sum, r) => sum + (Number(r.amount) || 0), 0));
+    document.getElementById("today-revenue").textContent = inr(todayRevenue);
     document.getElementById("record-count").textContent = records.length;
   }
 
@@ -275,6 +363,16 @@
     food.textContent = foodText;
     food.classList.toggle("hidden", !foodText);
 
+    const staffEl = card.querySelector(".record-staff");
+    if (record.staff_name) { staffEl.textContent = "👤 " + record.staff_name; staffEl.classList.remove("hidden"); }
+    else staffEl.classList.add("hidden");
+
+    const paymentEl = card.querySelector(".record-payment");
+    if (record.paid && record.payment_method) {
+      paymentEl.textContent = record.payment_method;
+      paymentEl.className = "record-payment rounded-full px-2 py-0.5 font-bold " + (record.payment_method === "Cash" ? "badge-cash" : "badge-online");
+    } else paymentEl.classList.add("hidden");
+
     const countdown = card.querySelector(".record-countdown");
     const actions = card.querySelector(".record-active-actions");
     card.classList.remove("overdue", "ending-soon");
@@ -293,6 +391,7 @@
       actions.classList.remove("flex");
     }
 
+    card.querySelector(".delete-wrap").classList.toggle("hidden", !(currentStaff && currentStaff.role === "admin"));
     card.querySelector(".record-created").textContent = record.created_at ? fmtDateTime(record.created_at) : "";
   }
 
@@ -329,39 +428,168 @@
       else { overdueToasted.delete(item.id); showToast("Extended by 15 minutes."); }
     });
 
-    card.querySelector(".mark-complete").addEventListener("click", async () => {
+    card.querySelector(".open-checkout").addEventListener("click", () => {
       const item = records.find((row) => row.id === card.dataset.recordId);
-      if (!item) return;
-      const { error } = await window.sb.from("sessions").update({ status: "Completed" }).eq("id", item.id);
-      if (error) showToast("Could not update this record.");
-      else { overdueToasted.delete(item.id); showToast("Session marked complete."); }
+      if (item) openCheckoutModal(item);
     });
 
     return card;
   }
 
-  function renderRecords() {
-    const sorted = [...records].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    const list = document.getElementById("records-list");
-    const existing = new Map([...list.children].map((card) => [card.dataset.recordId, card]));
-    sorted.forEach((record) => {
+  function syncCardList(container, list) {
+    const existing = new Map([...container.children].map((card) => [card.dataset.recordId, card]));
+    list.forEach((record) => {
       const card = existing.get(record.id);
       if (card) { updateCard(card, record); existing.delete(record.id); }
-      else list.appendChild(createCard(record));
+      else container.appendChild(createCard(record));
     });
     existing.forEach((card) => card.remove());
-    document.getElementById("empty-records").classList.toggle("hidden", records.length > 0);
-    updateSummary();
-    renderBookings();
   }
 
-  // ---------- time-based alerts (runs every tick, independent of re-renders) ----------
-  function checkTimeAlerts() {
-    // re-render countdowns on active cards without a full refetch
-    document.querySelectorAll("#records-list article").forEach((card) => {
-      const record = records.find((r) => r.id === card.dataset.recordId);
-      if (record) updateCard(card, record);
+  function renderAllLists() {
+    const sorted = [...records].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const active = sorted.filter((r) => r.status === "Active");
+
+    syncCardList(document.getElementById("records-list"), sorted);
+    document.getElementById("empty-records").classList.toggle("hidden", records.length > 0);
+
+    syncCardList(document.getElementById("overview-active-list"), active);
+    document.getElementById("overview-empty").classList.toggle("hidden", active.length > 0);
+
+    syncCardList(document.getElementById("billing-list"), active);
+    document.getElementById("empty-billing").classList.toggle("hidden", active.length > 0);
+
+    updateSummary();
+    renderBookings();
+    if (currentStaff && currentStaff.role === "admin") renderRevenue();
+  }
+
+  // ---------- checkout modal ----------
+  function openCheckoutModal(record) {
+    const modal = document.getElementById("checkout-modal");
+    modal.dataset.recordId = record.id;
+    document.getElementById("checkout-customer").textContent = record.customer_name || "—";
+    document.getElementById("checkout-station").textContent = `${record.station_name || ""} · ${record.duration_minutes || 0} min`;
+    const timeCost = ((Number(record.duration_minutes) || 0) / 60) * (Number(record.rate) || 0);
+    const foodLines = (record.food_items || []).map((f) => `${f.name} ×${f.qty} — ${inr(f.price * f.qty)}`);
+    document.getElementById("checkout-breakdown").innerHTML =
+      [`Time: ${record.duration_minutes || 0} min @ ₹${record.rate || 0}/hr — ${inr(timeCost)}`, ...foodLines].map((l) => `<span class="block">${l}</span>`).join("");
+    document.getElementById("checkout-amount").textContent = inr(record.amount);
+    modal.classList.add("show");
+  }
+
+  function closeCheckoutModal() {
+    document.getElementById("checkout-modal").classList.remove("show");
+  }
+
+  function initCheckoutModal() {
+    const modal = document.getElementById("checkout-modal");
+    document.getElementById("checkout-cancel").addEventListener("click", closeCheckoutModal);
+    modal.addEventListener("click", (event) => { if (event.target === modal) closeCheckoutModal(); });
+    modal.querySelectorAll(".checkout-pay-btn").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        const recordId = modal.dataset.recordId;
+        const method = btn.dataset.method;
+        btn.disabled = true;
+        const { error } = await window.sb
+          .from("sessions")
+          .update({ status: "Completed", paid: true, payment_method: method, paid_at: new Date().toISOString() })
+          .eq("id", recordId);
+        btn.disabled = false;
+        if (error) showToast("Could not record payment: " + error.message);
+        else { closeCheckoutModal(); showToast(`Payment recorded — ${method}.`); }
+      })
+    );
+  }
+
+  // ---------- revenue (admin) ----------
+  function renderRevenue() {
+    const paid = records.filter((r) => r.paid);
+    const total = paid.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const cash = paid.filter((r) => r.payment_method === "Cash").reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const online = paid.filter((r) => r.payment_method === "Online").reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const today = paid.filter((r) => isToday(r.paid_at)).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+    document.getElementById("revenue-total").textContent = inr(total);
+    document.getElementById("revenue-cash").textContent = inr(cash);
+    document.getElementById("revenue-online").textContent = inr(online);
+    document.getElementById("revenue-today").textContent = inr(today);
+
+    const splitEl = document.getElementById("revenue-split");
+    const bar = (label, value) => `
+      <div>
+        <div class="flex justify-between text-xs mb-1"><span>${label}</span><span class="mono text-slate-300">${inr(value)}</span></div>
+        <div class="revenue-bar-track"><div class="revenue-bar-fill" style="width:${total > 0 ? Math.round((value / total) * 100) : 0}%"></div></div>
+      </div>`;
+    splitEl.innerHTML = bar("Cash", cash) + bar("Online", online);
+
+    const byStaff = {};
+    paid.forEach((r) => {
+      const key = r.staff_name || "Unassigned";
+      byStaff[key] = (byStaff[key] || 0) + (Number(r.amount) || 0);
     });
+    const staffEntries = Object.entries(byStaff).sort((a, b) => b[1] - a[1]);
+    const staffEl = document.getElementById("revenue-by-staff");
+    document.getElementById("revenue-by-staff-empty").classList.toggle("hidden", staffEntries.length > 0);
+    staffEl.innerHTML = staffEntries.map(([name, amount]) => bar(name, amount)).join("");
+  }
+
+  // ---------- staff management (admin) ----------
+  function renderStaffList() {
+    const list = document.getElementById("staff-list");
+    list.innerHTML = "";
+    staffList.forEach((staff) => {
+      const row = document.createElement("div");
+      row.className = "rounded-lg border border-slate-700 bg-[#111722] px-3 py-2.5 text-sm";
+      row.innerHTML = `
+        <div class="flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <p class="font-medium truncate">${staff.name} <span class="text-xs text-slate-500">@${staff.username}</span></p>
+            <p class="text-xs text-slate-500">${staff.role} · ${staff.active ? "Active" : "Deactivated"}</p>
+          </div>
+          <div class="flex gap-1.5 shrink-0">
+            <button type="button" class="toggle-active rounded-lg border border-slate-600 px-2 py-1.5 text-xs text-slate-300">${staff.active ? "Deactivate" : "Activate"}</button>
+            <button type="button" class="reset-password rounded-lg border border-slate-600 px-2 py-1.5 text-xs text-slate-300">Reset pw</button>
+          </div>
+        </div>
+        <div class="reset-result hidden mt-2 text-xs rounded bg-[#0f1520] border border-slate-700 p-2"></div>`;
+      row.querySelector(".toggle-active").addEventListener("click", async () => {
+        if (staff.id === currentStaff.id && staff.active) return showToast("You can't deactivate your own account while signed in.");
+        const { error } = await window.sb.from("staff").update({ active: !staff.active }).eq("id", staff.id);
+        if (error) showToast("Could not update this account.");
+      });
+      row.querySelector(".reset-password").addEventListener("click", async () => {
+        const btn = row.querySelector(".reset-password");
+        btn.disabled = true;
+        const newPassword = randomPassword();
+        const salt = window.ChillPillCrypto.randomSalt();
+        const hash = await window.ChillPillCrypto.hashPassword(newPassword, salt);
+        const { error } = await window.sb.from("staff").update({ password_hash: hash, password_salt: salt }).eq("id", staff.id);
+        btn.disabled = false;
+        if (error) return showToast("Could not reset password.");
+        const resultEl = row.querySelector(".reset-result");
+        resultEl.textContent = `New password for ${staff.username}: ${newPassword} — share this now, it won't be shown again.`;
+        resultEl.classList.remove("hidden");
+      });
+      list.appendChild(row);
+    });
+  }
+
+  function fillContentForm(settings) {
+    if (!settings) return;
+    document.getElementById("cms-name").value = settings.cafe_name || "";
+    document.getElementById("cms-tagline").value = settings.cafe_tagline || "";
+    document.getElementById("cms-location").value = settings.cafe_location || "";
+    document.getElementById("cms-address").value = settings.cafe_address || "";
+    document.getElementById("cms-hours").value = settings.opening_hours || "";
+    document.getElementById("cms-whatsapp").value = settings.whatsapp_number || "";
+    document.getElementById("cms-whatsapp-message").value = settings.whatsapp_message || "";
+    document.getElementById("sidebar-cafe-name").textContent = settings.cafe_name || "ChillPill Gaming Cafe";
+  }
+
+  // ---------- time-based alerts ----------
+  function checkTimeAlerts() {
+    renderAllLists();
 
     records
       .filter((r) => r.status === "Active" && r.end_time)
@@ -369,7 +597,7 @@
         const diffMs = new Date(record.end_time) - new Date();
         if (diffMs > 0 && diffMs <= ALERT_MS && !record.notified_5min) {
           notifyOwner("Session ending soon", `${record.customer_name} at ${record.station_name} ends in ${Math.round(diffMs / 60000)} min.`);
-          record.notified_5min = true; // optimistic, avoid re-firing before DB round-trip
+          record.notified_5min = true;
           const card = document.querySelector(`#records-list article[data-record-id="${record.id}"]`);
           if (card) { card.classList.add("flash-alert"); setTimeout(() => card.classList.remove("flash-alert"), 3800); }
           await window.sb.from("sessions").update({ notified_5min: true }).eq("id", record.id);
@@ -379,8 +607,6 @@
           notifyOwner("Time's up!", `${record.customer_name}'s session at ${record.station_name} has ended.`);
         }
       });
-
-    updateSummary();
   }
 
   // ---------- supabase data loading ----------
@@ -388,7 +614,7 @@
     const { data, error } = await window.sb.from("sessions").select("*").order("created_at", { ascending: false });
     if (error) { showMessage("Could not load records: " + error.message, true); return; }
     records = data || [];
-    renderRecords();
+    renderAllLists();
   }
 
   async function fetchMenu() {
@@ -405,6 +631,14 @@
     document.getElementById("admin-rate").value = data.default_rate;
     document.getElementById("rate").value = data.default_rate;
     calculateAmount();
+    fillContentForm(data);
+  }
+
+  async function fetchStaff() {
+    const { data, error } = await window.sb.from("staff").select("*").order("created_at", { ascending: true });
+    if (error) return;
+    staffList = data || [];
+    renderStaffList();
   }
 
   function setConnectionStatus(ok, label) {
@@ -413,7 +647,7 @@
   }
 
   async function loadAll() {
-    await Promise.all([fetchSessions(), fetchMenu(), fetchSettings()]);
+    await Promise.all([fetchSessions(), fetchMenu(), fetchSettings(), fetchStaff()]);
   }
 
   function subscribeRealtime() {
@@ -422,6 +656,7 @@
       .on("postgres_changes", { event: "*", schema: "public", table: "sessions" }, fetchSessions)
       .on("postgres_changes", { event: "*", schema: "public", table: "menu_items" }, fetchMenu)
       .on("postgres_changes", { event: "*", schema: "public", table: "settings" }, fetchSettings)
+      .on("postgres_changes", { event: "*", schema: "public", table: "staff" }, fetchStaff)
       .subscribe((status) => {
         if (status === "SUBSCRIBED") setConnectionStatus(true, "Live");
       });
@@ -429,7 +664,10 @@
 
   // ---------- bootstrap ----------
   function bootstrap() {
-    document.getElementById("header-title").textContent = (CFG.CAFE_NAME || "ChillPill Gaming Cafe").toUpperCase();
+    applyRoleVisibility();
+    initSidebar();
+    initCheckoutModal();
+    switchPage("page-overview");
 
     document.getElementById("booking-search").addEventListener("input", renderBookings);
     document.getElementById("notification-button").addEventListener("click", () => {
@@ -452,11 +690,9 @@
       const rate = Math.max(0, Number(document.getElementById("admin-rate").value) || 0);
       document.getElementById("rate").value = rate;
       calculateAmount();
-      if (sdkReady) {
-        const { error } = await window.sb.from("settings").update({ default_rate: rate, updated_at: new Date().toISOString() }).eq("id", 1);
-        if (error) showToast("Rate updated locally, but could not save to Supabase.");
-        else showToast("Default hourly rate saved.");
-      } else showToast("Rate applied to this entry (Supabase not connected).");
+      if (!sdkReady) return showToast("Supabase isn't connected.");
+      const { error } = await window.sb.from("settings").update({ default_rate: rate, updated_at: new Date().toISOString() }).eq("id", 1);
+      showToast(error ? "Could not save the default rate." : "Default hourly rate saved.");
     });
 
     document.getElementById("menu-form").addEventListener("submit", async (event) => {
@@ -470,6 +706,49 @@
       else { event.target.reset(); showToast("Menu item added."); }
     });
 
+    document.getElementById("content-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!sdkReady) return;
+      const payload = {
+        cafe_name: document.getElementById("cms-name").value.trim() || "ChillPill Gaming Cafe",
+        cafe_tagline: document.getElementById("cms-tagline").value.trim(),
+        cafe_location: document.getElementById("cms-location").value.trim(),
+        cafe_address: document.getElementById("cms-address").value.trim(),
+        opening_hours: document.getElementById("cms-hours").value.trim(),
+        whatsapp_number: document.getElementById("cms-whatsapp").value.replace(/[^\d]/g, ""),
+        whatsapp_message: document.getElementById("cms-whatsapp-message").value.trim(),
+        updated_at: new Date().toISOString()
+      };
+      const { error } = await window.sb.from("settings").update(payload).eq("id", 1);
+      const el = document.getElementById("content-message");
+      el.textContent = error ? "Could not save: " + error.message : "Saved — the public website now reflects these changes.";
+      el.className = "mt-3 text-sm min-h-5 " + (error ? "text-red-300" : "text-[#d8ff45]");
+      if (!error) showToast("Cafe content updated.");
+    });
+
+    document.getElementById("staff-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const name = document.getElementById("staff-name").value.trim();
+      const username = normalizeUsername(document.getElementById("staff-username").value);
+      const password = document.getElementById("staff-password").value;
+      const role = document.getElementById("staff-role").value;
+      const msgEl = document.getElementById("staff-form-message");
+      if (!name || !username || !password) return;
+      if (!sdkReady) { msgEl.textContent = "Supabase isn't connected yet."; msgEl.className = "text-sm min-h-5 text-red-300"; return; }
+      const salt = window.ChillPillCrypto.randomSalt();
+      const hash = await window.ChillPillCrypto.hashPassword(password, salt);
+      const { error } = await window.sb.from("staff").insert({ name, username, password_hash: hash, password_salt: salt, role, active: true });
+      if (error) {
+        msgEl.textContent = error.message.includes("duplicate") ? "That username is already taken." : "Could not create account: " + error.message;
+        msgEl.className = "text-sm min-h-5 text-red-300";
+      } else {
+        event.target.reset();
+        msgEl.textContent = `Account created. Share the username "${username}" and the password you entered with them directly.`;
+        msgEl.className = "text-sm min-h-5 text-[#d8ff45]";
+        showToast("Staff account created.");
+      }
+    });
+
     document.getElementById("end-time").addEventListener("change", () => {
       const start = document.getElementById("start-time").value, end = document.getElementById("end-time").value;
       if (start && end) {
@@ -480,17 +759,9 @@
     });
     ["duration-minutes", "rate"].forEach((id) => document.getElementById(id).addEventListener("input", calculateAmount));
 
-    document.querySelectorAll(".nav-tab").forEach((button) =>
-      button.addEventListener("click", () => {
-        document.querySelectorAll(".nav-tab").forEach((tab) => tab.classList.remove("active"));
-        button.classList.add("active");
-        document.getElementById(button.dataset.target).scrollIntoView({ behavior: "smooth", block: "start" });
-      })
-    );
-
     document.getElementById("session-form").addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!sdkReady) return showMessage("Supabase isn't connected. Edit assets/js/config.js with your project URL and anon key, then reload.", true);
+      if (!sdkReady) return showMessage("Supabase isn't connected. Edit assets/js/config.js (or config.local.js), then reload.", true);
 
       const station = document.getElementById("station-name").value.trim();
       const customer = document.getElementById("customer-name").value.trim();
@@ -522,7 +793,9 @@
         amount: total,
         status,
         notes: document.getElementById("notes").value.trim(),
-        notified_5min: false
+        notified_5min: false,
+        staff_id: currentStaff ? currentStaff.id : null,
+        staff_name: currentStaff ? currentStaff.name : null
       });
 
       button.disabled = false;
@@ -536,8 +809,8 @@
         document.getElementById("food-order-list").innerHTML = "";
         addFoodRow();
         calculateAmount();
-        showMessage("Record saved.", false);
-        showToast("New lounge record saved.");
+        showMessage("Session saved.", false);
+        showToast("New session saved.");
       } else {
         showMessage("Could not save this record: " + error.message, true);
       }
@@ -565,5 +838,5 @@
     });
   }
 
-  document.addEventListener("DOMContentLoaded", initLockScreen);
+  document.addEventListener("DOMContentLoaded", initLogin);
 })();

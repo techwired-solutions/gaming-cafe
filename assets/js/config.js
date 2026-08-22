@@ -2,8 +2,7 @@
  * ChillPill Gaming Cafe — shared configuration (tracked defaults)
  * ---------------------------------------------------------------
  * This file only holds PUBLIC, non-sensitive defaults and is safe to commit.
- * Real values (Supabase keys, WhatsApp number, dashboard password) are layered
- * on top by one of:
+ * Real values (Supabase keys, WhatsApp number) are layered on top by one of:
  *   - assets/js/config.local.js  (gitignored — for local development; copy
  *     assets/js/config.local.example.js to get started)
  *   - Vercel Environment Variables, turned into config.local.js automatically
@@ -17,7 +16,9 @@ window.APP_CONFIG = {
   SUPABASE_URL: "PLACEHOLDER_SUPABASE_URL",        // e.g. https://abcdefgh.supabase.co
   SUPABASE_ANON_KEY: "PLACEHOLDER_SUPABASE_ANON_KEY", // the long "anon public" key
 
-  // --- Cafe info (shown on the public site & dashboard header) ---
+  // --- Cafe info fallback (the real, editable copy lives in Supabase's
+  // `settings` table — dashboard → Cafe Content tab — and takes priority
+  // over these once Supabase is connected) ---
   CAFE_NAME: "ChillPill Gaming Cafe",
   CAFE_TAGLINE: "Console gaming, snacks & good vibes.",
   CAFE_LOCATION: "Budhanilkantha, Kathmandu",
@@ -29,11 +30,8 @@ window.APP_CONFIG = {
   WHATSAPP_NUMBER: "PLACEHOLDER_WHATSAPP_NUMBER",
   WHATSAPP_DEFAULT_MESSAGE: "Hi! I'd like to book a PlayStation slot at ChillPill Gaming Cafe.",
 
-  // --- Dashboard access (placeholder — overridden by config.local.js / env vars) ---
-  // Simple shared password shown on the dashboard's lock screen before it
-  // loads. This is a UI-level deterrent only, not real security — see the
-  // "Security note" section in README.md before relying on it.
-  DASHBOARD_PASSWORD: "PLACEHOLDER_CHANGE_ME",
+  // Dashboard access is per-staff now (Staff tab in the dashboard creates
+  // individual logins) — there's no shared dashboard password anymore.
 
   // --- Billing defaults ---
   DEFAULT_HOURLY_RATE: 100,
