@@ -62,28 +62,38 @@ No server needed — but browsers restrict some things when opening `file://` di
 npx serve .
 ```
 
-Then open the printed `http://localhost:...` URL. Visit `/dashboard.html` for the owner console. (Make sure you've created `assets/js/config.local.js` per step 2 first, otherwise you'll see placeholder values and a "Supabase not configured" notice.)
+Then open the printed `http://localhost:...` URL. (Make sure you've created `assets/js/config.local.js` per step 2 first, otherwise you'll see placeholder values and a "Supabase not configured" notice.)
+
+The `/admin` and `/staff` clean URLs (see below) only work once deployed on Vercel — they come from `vercel.json`'s rewrites, which a plain local static server doesn't apply. To test both login modes locally, use `?as=admin` / `?as=staff` on the plain file instead, e.g. `http://localhost:.../dashboard.html?as=staff`.
 
 ## 5. Deploy to Vercel
 
 1. Push this folder to a GitHub repo (or drag-and-drop deploy from the Vercel dashboard).
 2. In Vercel: **Add New Project** → import the repo → framework preset **"Other"** → **Deploy**. Vercel will auto-detect `vercel.json`'s `buildCommand` (`npm run build`), which runs `scripts/generate-config.js`.
 3. **Before or right after** the first deploy, add the Environment Variables from step 2 (Project → Settings → Environment Variables), then redeploy so they take effect.
-4. Your site will be live at `your-project.vercel.app`. The dashboard is reachable at `/dashboard` or `/dashboard.html` (kept out of search engines via `vercel.json`).
+4. Your site will be live at `your-project.vercel.app`. The owner console has two URLs (see "Staff logins & roles" below for the difference): **`/admin`** and **`/staff`** — both kept out of search engines via `vercel.json`. (`/dashboard` and `/dashboard.html` still work too, defaulting to the staff-style login, for anyone with the old link.)
 5. Point your own domain at it later from the Vercel project's **Domains** tab, if you have one.
 
 ---
 
 ## Staff logins & roles
 
-There's no single shared dashboard password anymore — each staff member (and the admin) signs in with their own username and password, and every session/order they create is stamped with their name.
+There's no single shared dashboard password anymore — each staff member signs in with their own username and password, and every session/order they create is stamped with their name. The admin login is the one exception, kept deliberately simple like the original single-password setup.
 
-- **First login:** `schema.sql` seeds one starter account — username `admin`, password `ChangeMe123!`. **Change this immediately** after signing in: Staff tab → find "Admin" → **Reset pw**. That generates a new random password and shows it once — write it down, that's your real password now. (If you'd rather pick your own memorable one, create a second admin account with the password you want, sign in as that one, then deactivate the original `admin` account.) Either way, don't leave `ChangeMe123!` active.
+**Two separate sign-in pages:**
+
+- **`/admin`** — password only, no username. It checks the password against every active admin account and signs you in as whichever one matches. This is the quick, original-style login for the owner.
+- **`/staff`** — username + password, for everyone else. Regular staff accounts only work here (an admin *can* also sign in this way with their username if they want, but doesn't need to).
+
+Both pages are really the same `dashboard.html`/`dashboard.js` — which login form you get is decided purely by the URL you opened.
+
+- **First login:** `schema.sql` seeds one starter account — username `admin`, password `ChangeMe123!`. Sign in at `/admin` with just that password, then **change it immediately**: Staff tab → find "Admin" → **Reset pw**. That generates a new random password and shows it once — write it down, that's your real password now. (If you'd rather pick your own memorable one, create a second admin account with the password you want, sign in as that one via `/admin`, then deactivate the original `admin` account.) Either way, don't leave `ChangeMe123!` active.
 - **Two roles:**
   - **Admin** — sees everything, including Revenue, Menu & Pricing, Cafe Content, and Staff.
   - **Staff** — sees Overview, Bookings, New Session, Billing, and Records (all staff share the same records — nothing is hidden between staff members), but not the admin-only sections. Only admins can delete a record.
-- **Adding staff:** Staff tab → "Add staff account" → give them a name, username, and a temporary password, tell them directly (there's no email step). They should ideally change it themselves later via an admin-issued **Reset pw**.
+- **Adding staff:** Staff tab → "Add staff account" → give them a name, username, and a temporary password, tell them directly (there's no email step) along with the `/staff` link. They should ideally change it themselves later via an admin-issued **Reset pw**.
 - **Attribution:** every session created shows "👤 staff name" on its card, and the Revenue tab breaks down takings per staff member.
+- **If you create a second (or third) admin account:** the `/admin` password-only login matches against *any* active admin, so if two admins happen to pick the same password, either one's password unlocks both identities (whichever is checked first). Give each admin a distinct password to avoid that ambiguity.
 
 **Security note on this login system:** passwords are hashed (SHA-256 + a random salt per account) before they're ever sent to Supabase, so the database never stores plain text. That said, this is still a UI-level login, not full production-grade auth — see the "Security note" section further down for the honest limitations of a backend-less static site, and don't use this for anything beyond a small single-location team.
 
@@ -129,7 +139,7 @@ This project uses only Supabase's public **anon key** — there's no Supabase Au
 ```
 Gaming-Cafe/
 ├─ index.html                     # public website (reads live content + menu from Supabase)
-├─ dashboard.html                 # owner console — sidebar, staff login, CMS, billing
+├─ dashboard.html                 # owner console, served at both /admin and /staff
 ├─ vercel.json                    # build command + clean URLs + noindex header for /dashboard
 ├─ package.json                   # "build" script → scripts/generate-config.js
 ├─ scripts/

@@ -106,16 +106,18 @@
       <div class="w-12 h-12 rounded-xl bg-[#d8ff45] text-[#10141e] grid place-items-center mb-4">
         <i data-lucide="gamepad-2" width="22" height="22"></i>
       </div>
-      <h1 class="text-xl font-bold">Staff login</h1>
-      <p class="text-sm text-slate-400 mt-1 mb-5">Sign in with your ChillPill staff account.</p>
-      <label class="block text-sm font-medium mb-2" for="lock-username">Username</label>
-      <input id="lock-username" type="text" class="form-control mb-3" autocomplete="username" required>
+      <h1 id="lock-heading" class="text-xl font-bold">Staff login</h1>
+      <p id="lock-subheading" class="text-sm text-slate-400 mt-1 mb-5">Sign in with your ChillPill staff account.</p>
+      <div id="lock-username-field">
+        <label class="block text-sm font-medium mb-2" for="lock-username">Username</label>
+        <input id="lock-username" type="text" class="form-control mb-3" autocomplete="username">
+      </div>
       <label class="block text-sm font-medium mb-2" for="lock-password">Password</label>
       <input id="lock-password" type="password" class="form-control" autocomplete="current-password" required>
       <p id="lock-error" class="text-sm text-[#ff6875] mt-2 min-h-5"></p>
       <button type="submit" class="w-full mt-3 rounded-xl px-5 py-3 font-bold" style="background:#d8ff45;color:#10141e;">Sign in</button>
       <p id="lock-config-warning" class="hidden text-xs text-amber-300 mt-4">⚠️ Supabase isn't configured yet — edit assets/js/config.js (or config.local.js) first.</p>
-      <p class="text-xs text-slate-500 mt-4">First time setting up? Default login is <span class="mono">admin</span> / <span class="mono">ChangeMe123!</span> — change it immediately from Staff → Reset password.</p>
+      <p id="lock-hint" class="text-xs text-slate-500 mt-4"></p>
     </form>
   </div>
 

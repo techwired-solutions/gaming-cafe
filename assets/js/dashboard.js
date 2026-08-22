@@ -86,14 +86,46 @@
   }
 
   // ---------- login ----------
+  // /admin -> password-only, matched against any active admin account.
+  // /staff (or anything else, incl. dashboard.html directly) -> normal
+  // username + password. Also overridable with ?as=admin / ?as=staff for
+  // local testing, since a plain static server won't apply vercel.json's
+  // path rewrites the way Vercel itself does.
+  function getLoginMode() {
+    const path = location.pathname;
+    if (path.startsWith("/admin")) return "admin";
+    if (path.startsWith("/staff")) return "staff";
+    const override = new URLSearchParams(location.search).get("as");
+    return override === "admin" ? "admin" : "staff";
+  }
+
   function initLogin() {
+    const mode = getLoginMode();
     const lockScreen = document.getElementById("lock-screen");
     const appRoot = document.getElementById("app-root");
     const form = document.getElementById("lock-form");
+    const usernameField = document.getElementById("lock-username-field");
     const usernameInput = document.getElementById("lock-username");
     const passwordInput = document.getElementById("lock-password");
     const error = document.getElementById("lock-error");
     const warning = document.getElementById("lock-config-warning");
+    const heading = document.getElementById("lock-heading");
+    const subheading = document.getElementById("lock-subheading");
+    const hint = document.getElementById("lock-hint");
+
+    if (mode === "admin") {
+      usernameField.classList.add("hidden");
+      usernameInput.required = false;
+      heading.textContent = "Admin login";
+      subheading.textContent = "Enter the admin password to continue.";
+      hint.textContent = "First time setting up? Default password is ChangeMe123! — change it immediately from Staff → Reset password.";
+    } else {
+      usernameField.classList.remove("hidden");
+      usernameInput.required = true;
+      heading.textContent = "Staff login";
+      subheading.textContent = "Sign in with your ChillPill staff account.";
+      hint.textContent = "";
+    }
 
     if (!window.SUPABASE_CONFIGURED) warning.classList.remove("hidden");
 
@@ -121,6 +153,26 @@
       }
     }
 
+    async function loginByUsername(password) {
+      const username = normalizeUsername(usernameInput.value);
+      if (!username || !password) return null;
+      const { data, error: err } = await window.sb.from("staff").select("*").eq("username", username).maybeSingle();
+      if (err || !data || !data.active) return null;
+      const hash = await window.ChillPillCrypto.hashPassword(password, data.password_salt);
+      return hash === data.password_hash ? data : null;
+    }
+
+    async function loginByAdminPassword(password) {
+      if (!password) return null;
+      const { data, error: err } = await window.sb.from("staff").select("*").eq("role", "admin").eq("active", true);
+      if (err || !data || !data.length) return null;
+      for (const candidate of data) {
+        const hash = await window.ChillPillCrypto.hashPassword(password, candidate.password_salt);
+        if (hash === candidate.password_hash) return candidate;
+      }
+      return null;
+    }
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       error.textContent = "";
@@ -128,20 +180,16 @@
         error.textContent = "Supabase isn't configured yet — see README.md.";
         return;
       }
-      const username = normalizeUsername(usernameInput.value);
       const password = passwordInput.value;
-      if (!username || !password) return;
 
       const submitBtn = form.querySelector("button[type=submit]");
       submitBtn.disabled = true;
       try {
-        const { data, error: err } = await window.sb.from("staff").select("*").eq("username", username).maybeSingle();
-        if (err || !data || !data.active) throw new Error("invalid");
-        const hash = await window.ChillPillCrypto.hashPassword(password, data.password_salt);
-        if (hash !== data.password_hash) throw new Error("invalid");
-        unlock({ id: data.id, name: data.name, username: data.username, role: data.role });
+        const matched = mode === "admin" ? await loginByAdminPassword(password) : await loginByUsername(password);
+        if (!matched) throw new Error("invalid");
+        unlock({ id: matched.id, name: matched.name, username: matched.username, role: matched.role });
       } catch (e) {
-        error.textContent = "Invalid username or password.";
+        error.textContent = mode === "admin" ? "Incorrect password." : "Invalid username or password.";
         passwordInput.value = "";
         passwordInput.focus();
       } finally {
