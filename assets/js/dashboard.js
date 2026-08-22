@@ -1,5 +1,5 @@
 /**
- * PlayBox Gaming Cafe — Owner console logic.
+ * ChillPill Gaming Cafe — Owner console logic.
  * Talks to Supabase directly from the browser using the anon key.
  */
 (function () {
@@ -87,7 +87,7 @@
       bootstrap();
     }
 
-    if (sessionStorage.getItem("playbox_unlocked") === "1") {
+    if (sessionStorage.getItem("chillpill_unlocked") === "1") {
       unlock();
       return;
     }
@@ -95,7 +95,7 @@
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       if (input.value === CFG.DASHBOARD_PASSWORD) {
-        sessionStorage.setItem("playbox_unlocked", "1");
+        sessionStorage.setItem("chillpill_unlocked", "1");
         unlock();
       } else {
         error.textContent = "Incorrect password.";
@@ -418,7 +418,7 @@
 
   function subscribeRealtime() {
     realtimeChannel = window.sb
-      .channel("playbox-dashboard")
+      .channel("chillpill-dashboard")
       .on("postgres_changes", { event: "*", schema: "public", table: "sessions" }, fetchSessions)
       .on("postgres_changes", { event: "*", schema: "public", table: "menu_items" }, fetchMenu)
       .on("postgres_changes", { event: "*", schema: "public", table: "settings" }, fetchSettings)
@@ -429,7 +429,7 @@
 
   // ---------- bootstrap ----------
   function bootstrap() {
-    document.getElementById("header-title").textContent = (CFG.CAFE_NAME || "PlayBox Gaming Cafe").toUpperCase();
+    document.getElementById("header-title").textContent = (CFG.CAFE_NAME || "ChillPill Gaming Cafe").toUpperCase();
 
     document.getElementById("booking-search").addEventListener("input", renderBookings);
     document.getElementById("notification-button").addEventListener("click", () => {

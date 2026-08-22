@@ -1,4 +1,4 @@
--- PlayBox Gaming Cafe — Supabase schema
+-- ChillPill Gaming Cafe — Supabase schema
 -- Run this once in Supabase Dashboard → SQL Editor → New query → paste → Run.
 
 create extension if not exists pgcrypto;
@@ -46,13 +46,13 @@ create index if not exists sessions_end_time_idx on public.sessions (end_time);
 create table if not exists public.settings (
   id integer primary key default 1,
   default_rate numeric not null default 100,
-  cafe_name text not null default 'PlayBox Gaming Cafe',
+  cafe_name text not null default 'ChillPill Gaming Cafe',
   updated_at timestamptz not null default now(),
   constraint settings_singleton check (id = 1)
 );
 
 insert into public.settings (id, default_rate, cafe_name)
-values (1, 100, 'PlayBox Gaming Cafe')
+values (1, 100, 'ChillPill Gaming Cafe')
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------

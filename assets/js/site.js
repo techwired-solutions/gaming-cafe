@@ -1,5 +1,5 @@
 /**
- * PlayBox Gaming Cafe — public website logic.
+ * ChillPill Gaming Cafe — public website logic.
  * Fills in cafe info from config.js, wires up WhatsApp links, and pulls a
  * read-only, live menu list from Supabase (falls back to a friendly message
  * if Supabase isn't configured yet).
@@ -38,7 +38,7 @@
   }
 
   function fillCafeInfo() {
-    document.title = `${CFG.CAFE_NAME || "PlayBox Gaming Cafe"} — ${CFG.CAFE_LOCATION || ""}`;
+    document.title = `${CFG.CAFE_NAME || "ChillPill Gaming Cafe"} — ${CFG.CAFE_LOCATION || ""}`;
     const set = (id, value) => { const el = document.getElementById(id); if (el && value) el.textContent = value; };
     set("hero-tagline", CFG.CAFE_TAGLINE);
     set("hero-location", "📍 " + (CFG.CAFE_LOCATION || ""));

@@ -1,5 +1,5 @@
 /**
- * PlayBox Gaming Cafe — shared configuration (tracked defaults)
+ * ChillPill Gaming Cafe — shared configuration (tracked defaults)
  * ---------------------------------------------------------------
  * This file only holds PUBLIC, non-sensitive defaults and is safe to commit.
  * Real values (Supabase keys, WhatsApp number, dashboard password) are layered
@@ -18,7 +18,7 @@ window.APP_CONFIG = {
   SUPABASE_ANON_KEY: "PLACEHOLDER_SUPABASE_ANON_KEY", // the long "anon public" key
 
   // --- Cafe info (shown on the public site & dashboard header) ---
-  CAFE_NAME: "PlayBox Gaming Cafe",
+  CAFE_NAME: "ChillPill Gaming Cafe",
   CAFE_TAGLINE: "Console gaming, snacks & good vibes.",
   CAFE_LOCATION: "Budhanilkantha, Kathmandu",
   CAFE_ADDRESS_LINE: "Budhanilkantha, Kathmandu, Nepal",
@@ -27,7 +27,7 @@ window.APP_CONFIG = {
   // --- WhatsApp booking (placeholder — overridden by config.local.js / env vars) ---
   // Country code + number, digits only, no + or spaces (e.g. 9779812345678).
   WHATSAPP_NUMBER: "PLACEHOLDER_WHATSAPP_NUMBER",
-  WHATSAPP_DEFAULT_MESSAGE: "Hi! I'd like to book a PlayStation slot at PlayBox Gaming Cafe.",
+  WHATSAPP_DEFAULT_MESSAGE: "Hi! I'd like to book a PlayStation slot at ChillPill Gaming Cafe.",
 
   // --- Dashboard access (placeholder — overridden by config.local.js / env vars) ---
   // Simple shared password shown on the dashboard's lock screen before it

@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "playbox-static-site",
+      "name": "chillpill-static-site",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["serve", "-l", "5050", "."],
       "port": 5050

@@ -1,4 +1,4 @@
-# PlayBox Gaming Cafe — website + owner console
+# ChillPill Gaming Cafe — website + owner console
 
 A two-page project for a hourly-PlayStation gaming cafe:
 
@@ -12,7 +12,7 @@ Plain HTML/CSS/JS — no framework. There's one tiny build step (`scripts/genera
 ## 1. Create your Supabase project
 
 1. Go to [supabase.com](https://supabase.com) → sign up / log in → **New project**.
-2. Pick a name (e.g. `playbox-gaming-cafe`), a database password (save it somewhere), and a region close to Nepal (e.g. Singapore).
+2. Pick a name (e.g. `chillpill-gaming-cafe`), a database password (save it somewhere), and a region close to Nepal (e.g. Singapore).
 3. Wait ~2 minutes for it to finish provisioning.
 4. Open **SQL Editor** (left sidebar) → **New query** → paste the entire contents of [`supabase/schema.sql`](supabase/schema.sql) → **Run**.
    - This creates the `sessions`, `menu_items`, and `settings` tables, turns on Row Level Security, and enables realtime sync.

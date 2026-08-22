@@ -10,7 +10,7 @@
 
   if (isPlaceholder) {
     console.warn(
-      "[PlayBox] Supabase is not configured yet. Edit assets/js/config.js with your " +
+      "[ChillPill] Supabase is not configured yet. Edit assets/js/config.js with your " +
       "SUPABASE_URL and SUPABASE_ANON_KEY. See README.md for setup steps."
     );
     window.sb = null;

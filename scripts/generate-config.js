@@ -2,7 +2,7 @@
 /**
  * Runs as Vercel's build command (see vercel.json / package.json).
  *
- * Reads the PlayBox config keys from environment variables (set in Vercel →
+ * Reads the ChillPill config keys from environment variables (set in Vercel →
  * Project → Settings → Environment Variables — see README.md for the full
  * list) and writes them into assets/js/config.local.js, which
  * index.html/dashboard.html load right after the tracked assets/js/config.js
@@ -42,7 +42,7 @@ KEYS.forEach((key) => {
 const outPath = path.join(__dirname, "..", "assets", "js", "config.local.js");
 
 if (Object.keys(overrides).length === 0) {
-  console.log("[generate-config] No PlayBox environment variables set — leaving assets/js/config.js placeholders as-is.");
+  console.log("[generate-config] No ChillPill environment variables set — leaving assets/js/config.js placeholders as-is.");
   process.exit(0);
 }
 
