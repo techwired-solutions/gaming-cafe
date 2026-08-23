@@ -302,11 +302,12 @@
                 <div><label class="block text-sm font-medium mb-2" for="customer-phone">Customer phone</label><input id="customer-phone" class="form-control" type="tel" required></div>
                 <div><label class="block text-sm font-medium mb-2" for="session-status">Current status</label>
                   <select id="session-status" class="form-control">
-                    <option value="Active">Active (playing now)</option>
+                    <option id="session-status-active-option" value="Active">Active (playing now)</option>
                     <option value="Booked">Booked (arriving later)</option>
                   </select>
                 </div>
               </div>
+              <p id="station-conflict-warning" class="hidden text-xs text-amber-300 mt-3"></p>
               <div class="border-t border-slate-700/80 mt-6 pt-5">
                 <div class="flex items-center justify-between mb-4">
                   <h3 class="font-semibold text-lg">Time tracking</h3>

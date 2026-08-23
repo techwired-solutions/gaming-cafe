@@ -133,6 +133,16 @@ Active sessions also get a **+ Food** button right next to Edit — a much small
 
 This is intentionally only available for Active/Booked sessions — once a session is Completed (paid via Checkout), it's locked as a record of what was actually charged.
 
+## Can't double-book a station
+
+A station can only have one Active session at a time — the console enforces this in a few places:
+
+- **New Session**: typing (or picking from the list) a station that's currently Active hides "Active (playing now)" from the Current status dropdown entirely — only "Booked" is offered — and shows a note saying who's on it and when it frees up. If you pick a start time for the booking that's still inside that session's remaining time, saving is blocked with an error naming the free-at time; pick a station or a later time to proceed.
+- **Bookings tab**: "Mark active" on a booking refuses (with a toast explaining why) if that station has since become occupied by someone else.
+- **Edit**: changing an Active session's station to one another Active session is already using is blocked the same way.
+
+This only guards against clashing with a **currently Active** session — it doesn't yet check two *Booked* reservations against each other for the same station and overlapping times, so still use judgment when double-booking ahead of time.
+
 ## Billing & revenue
 
 1. Start a session from **New Session** — station, customer, time, and any food/drinks ordered. Save it.

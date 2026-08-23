@@ -17,6 +17,11 @@
   let sdkReady = false;
   let realtimeChannel = null;
   const overdueToasted = new Set();
+  // Cached once (not re-queried by id each time) because a detached DOM
+  // node stops being findable via getElementById — this option gets
+  // removed/reinserted as station conflicts come and go, so the reference
+  // has to survive that round-trip.
+  let sessionStatusActiveOption = null;
 
   // ---------- helpers ----------
   const inr = (value) =>
@@ -375,6 +380,43 @@
     return { total, foodTotal, timeCost, duration, rate };
   }
 
+  // Keeps the New Session form honest about station availability: hides
+  // "Active" from the status dropdown (forcing Booked) whenever the typed
+  // station already has a live session, and flags it as blocked if the
+  // chosen start time still falls inside that session's remaining time.
+  function updateStationConflictUI() {
+    const stationName = document.getElementById("station-name").value;
+    const statusSelect = document.getElementById("session-status");
+    const activeOption = sessionStatusActiveOption;
+    const warningEl = document.getElementById("station-conflict-warning");
+    const conflict = findActiveStationConflict(stationName);
+
+    if (!conflict) {
+      if (activeOption && !statusSelect.contains(activeOption)) statusSelect.insertBefore(activeOption, statusSelect.firstChild);
+      warningEl.classList.add("hidden");
+      warningEl.textContent = "";
+      return { conflict: null, blocked: false };
+    }
+
+    if (statusSelect.contains(activeOption)) activeOption.remove();
+    if (statusSelect.value === "Active" || !statusSelect.value) statusSelect.value = "Booked";
+
+    const conflictEndTime = timeInputValue(new Date(conflict.end_time));
+    const startTimeStr = document.getElementById("start-time").value;
+    const chosenStart = startTimeStr ? combineDateAndTime(new Date(), startTimeStr) : null;
+    const blocked = !!(chosenStart && chosenStart < new Date(conflict.end_time));
+
+    warningEl.classList.remove("hidden");
+    if (blocked) {
+      warningEl.textContent = `⚠ ${stationName} is occupied by ${conflict.customer_name} until ${conflictEndTime} — pick a start time after that, or choose a different station.`;
+      warningEl.className = "text-xs text-[#ff6875] mt-3";
+    } else {
+      warningEl.textContent = `${stationName} is currently occupied by ${conflict.customer_name} until ${conflictEndTime}. Only a booking starting after that time is allowed.`;
+      warningEl.className = "text-xs text-amber-300 mt-3";
+    }
+    return { conflict, blocked };
+  }
+
   function renderMenu() {
     const list = document.getElementById("menu-list");
     list.innerHTML = "";
@@ -417,6 +459,11 @@
         </div>`;
       card.querySelector(".edit-booking").addEventListener("click", () => openEditModal(record));
       card.querySelector(".activate-booking").addEventListener("click", async (event) => {
+        const conflict = findActiveStationConflict(record.station_name, record.id);
+        if (conflict) {
+          showToast(`${record.station_name} is already active (${conflict.customer_name}) until ${timeInputValue(new Date(conflict.end_time))} — it can't be double-booked.`);
+          return;
+        }
         const button = event.currentTarget;
         button.disabled = true;
         const start = new Date();
@@ -460,6 +507,16 @@
   function foodSummaryText(record) {
     if (!record.food_items || !record.food_items.length) return "";
     return "🍟 " + record.food_items.map((f) => `${f.name} ×${f.qty}`).join(", ");
+  }
+
+  // A station can only have one Active session at a time. This finds that
+  // session (if any) so New Session / Edit / "Mark active" can all refuse
+  // to double-book it — excludeId lets an Edit save ignore the record
+  // being edited when checking against itself.
+  function findActiveStationConflict(stationName, excludeId = null) {
+    const name = (stationName || "").trim().toLowerCase();
+    if (!name) return null;
+    return records.find((r) => r.status === "Active" && r.id !== excludeId && (r.station_name || "").trim().toLowerCase() === name) || null;
   }
 
   // Grace period after end_time before overtime starts accruing. Once past
@@ -852,6 +909,14 @@
         msgEl.textContent = "Station, customer name, and phone can't be empty.";
         msgEl.className = "text-sm min-h-5 mt-2 text-red-300";
         return;
+      }
+      if (editTarget.status === "Active") {
+        const conflict = findActiveStationConflict(station, editTarget.id);
+        if (conflict) {
+          msgEl.textContent = `${station} is already active (${conflict.customer_name}) — pick a different station.`;
+          msgEl.className = "text-sm min-h-5 mt-2 text-red-300";
+          return;
+        }
       }
 
       const { total, foodTotal, duration, rate } = recalcEditModal();
@@ -1554,8 +1619,10 @@
       }
     });
 
+    document.getElementById("station-name").addEventListener("input", updateStationConflictUI);
     document.getElementById("start-time").addEventListener("input", () => {
       syncEndFromDuration("start-time", "duration-minutes", "end-time");
+      updateStationConflictUI();
     });
     document.getElementById("end-time").addEventListener("input", () => {
       syncDurationFromEnd("start-time", "duration-minutes", "end-time");
@@ -1576,11 +1643,21 @@
       const phone = document.getElementById("customer-phone").value.trim();
       if (!station || !customer || !phone) return showMessage("Please enter the station, customer name, and phone number.", true);
 
+      // Re-check fresh at submit time, not just relying on the live UI
+      // state — a station can only run one Active session at once.
+      const { conflict, blocked } = updateStationConflictUI();
+      const status = document.getElementById("session-status").value;
+      if (conflict && status === "Active") {
+        return showMessage(`${station} is already active (${conflict.customer_name}) — this session must be Booked instead.`, true);
+      }
+      if (conflict && blocked) {
+        return showMessage(`${station} is occupied until ${timeInputValue(new Date(conflict.end_time))} — pick a start time after that.`, true);
+      }
+
       const button = document.getElementById("save-button");
       button.disabled = true;
       button.classList.add("opacity-60");
 
-      const status = document.getElementById("session-status").value;
       const startTimeStr = document.getElementById("start-time").value;
       const { total, foodTotal, duration, rate } = calculateAmount();
       const foodItems = collectFrItems("food-order-list");
@@ -1622,6 +1699,7 @@
         document.getElementById("rate").value = document.getElementById("admin-rate").value;
         document.getElementById("start-time").value = timeInputValue(new Date());
         syncEndFromDuration("start-time", "duration-minutes", "end-time");
+        updateStationConflictUI();
         clearFrContainer("food-order-list");
         addFrRow("food-order-list");
         calculateAmount();
@@ -1700,6 +1778,7 @@
     initWaitingEditModal();
 
     // initial state
+    sessionStatusActiveOption = document.getElementById("session-status-active-option");
     document.getElementById("start-time").value = timeInputValue(new Date());
     document.getElementById("session-today-label").textContent = fmtDateLabel(new Date());
     syncEndFromDuration("start-time", "duration-minutes", "end-time");
