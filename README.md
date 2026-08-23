@@ -135,13 +135,13 @@ This is intentionally only available for Active/Booked sessions — once a sessi
 
 ## Can't double-book a station
 
-A station can only have one Active session at a time — the console enforces this in a few places:
+A station can't have two overlapping sessions — Active or Booked — at once. This is enforced everywhere a station and a time get chosen:
 
-- **New Session**: typing (or picking from the list) a station that's currently Active hides "Active (playing now)" from the Current status dropdown entirely — only "Booked" is offered — and shows a note saying who's on it and when it frees up. If you pick a start time for the booking that's still inside that session's remaining time, saving is blocked with an error naming the free-at time; pick a station or a later time to proceed.
-- **Bookings tab**: "Mark active" on a booking refuses (with a toast explaining why) if that station has since become occupied by someone else.
-- **Edit**: changing an Active session's station to one another Active session is already using is blocked the same way.
+- **New Session**: typing (or picking from the list) a station that's currently Active hides "Active (playing now)" from the Current status dropdown entirely — only "Booked" is offered — with a note saying who's on it and when it frees up. Separately, whatever time window you're about to save (start time + duration, for *either* Active or Booked) is checked against every other Active/Booked session on that station — if it overlaps, saving is blocked with an error naming who's got it and from when to when. This catches two Booked reservations clashing, and also a walk-in Active session that would run into a booking already on the books for later.
+- **Bookings tab**: "Mark active" refuses (with a toast explaining why) if activating it right now would overlap another Active or Booked session on that station.
+- **Edit**: changing an Active or Booked session's station or time to overlap another Active/Booked session on that station is blocked the same way.
 
-This only guards against clashing with a **currently Active** session — it doesn't yet check two *Booked* reservations against each other for the same station and overlapping times, so still use judgment when double-booking ahead of time.
+The one thing this doesn't cover: it only compares against sessions already in the system — if a customer calls to reserve a slot you haven't entered yet, there's obviously nothing to check against until it's entered.
 
 ## Billing & revenue
 

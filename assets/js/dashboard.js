@@ -385,36 +385,54 @@
   // station already has a live session, and flags it as blocked if the
   // chosen start time still falls inside that session's remaining time.
   function updateStationConflictUI() {
-    const stationName = document.getElementById("station-name").value;
+    const stationName = document.getElementById("station-name").value.trim();
     const statusSelect = document.getElementById("session-status");
     const activeOption = sessionStatusActiveOption;
     const warningEl = document.getElementById("station-conflict-warning");
-    const conflict = findActiveStationConflict(stationName);
 
-    if (!conflict) {
+    // "Active" is only offered as a status when the station is actually
+    // free right now — a future time-window clash (checked below) is a
+    // different, non-fatal-to-this-option situation.
+    const liveConflict = findActiveStationConflict(stationName);
+    if (!liveConflict) {
       if (activeOption && !statusSelect.contains(activeOption)) statusSelect.insertBefore(activeOption, statusSelect.firstChild);
+    } else {
+      if (statusSelect.contains(activeOption)) activeOption.remove();
+      if (statusSelect.value === "Active" || !statusSelect.value) statusSelect.value = "Booked";
+    }
+
+    if (!stationName) {
       warningEl.classList.add("hidden");
       warningEl.textContent = "";
       return { conflict: null, blocked: false };
     }
 
-    if (statusSelect.contains(activeOption)) activeOption.remove();
-    if (statusSelect.value === "Active" || !statusSelect.value) statusSelect.value = "Booked";
-
-    const conflictEndTime = timeInputValue(new Date(conflict.end_time));
+    // Does the chosen time window (start + duration) land on top of *any*
+    // other Active or Booked session on this station — catches two
+    // bookings clashing, not just "someone's on it right now."
     const startTimeStr = document.getElementById("start-time").value;
-    const chosenStart = startTimeStr ? combineDateAndTime(new Date(), startTimeStr) : null;
-    const blocked = !!(chosenStart && chosenStart < new Date(conflict.end_time));
+    const duration = Number(document.getElementById("duration-minutes").value) || 0;
+    const candidateStart = startTimeStr ? combineDateAndTime(new Date(), startTimeStr) : new Date();
+    const candidateEnd = new Date(candidateStart.getTime() + duration * 60000);
+    const overlap = findStationTimeOverlap(stationName, candidateStart, candidateEnd);
 
     warningEl.classList.remove("hidden");
-    if (blocked) {
-      warningEl.textContent = `⚠ ${stationName} is occupied by ${conflict.customer_name} until ${conflictEndTime} — pick a start time after that, or choose a different station.`;
+    if (overlap) {
+      const overlapWord = overlap.status === "Active" ? "an active" : "a booked";
+      warningEl.textContent = `⚠ ${stationName} already has ${overlapWord} session for ${overlap.customer_name} from ${timeInputValue(new Date(overlap.start_time))} to ${timeInputValue(new Date(overlap.end_time))} — pick a different time or station.`;
       warningEl.className = "text-xs text-[#ff6875] mt-3";
-    } else {
-      warningEl.textContent = `${stationName} is currently occupied by ${conflict.customer_name} until ${conflictEndTime}. Only a booking starting after that time is allowed.`;
-      warningEl.className = "text-xs text-amber-300 mt-3";
+      return { conflict: overlap, blocked: true };
     }
-    return { conflict, blocked };
+
+    if (liveConflict) {
+      warningEl.textContent = `${stationName} is currently occupied by ${liveConflict.customer_name} until ${timeInputValue(new Date(liveConflict.end_time))}.`;
+      warningEl.className = "text-xs text-amber-300 mt-3";
+      return { conflict: liveConflict, blocked: false };
+    }
+
+    warningEl.classList.add("hidden");
+    warningEl.textContent = "";
+    return { conflict: null, blocked: false };
   }
 
   function renderMenu() {
@@ -459,15 +477,16 @@
         </div>`;
       card.querySelector(".edit-booking").addEventListener("click", () => openEditModal(record));
       card.querySelector(".activate-booking").addEventListener("click", async (event) => {
-        const conflict = findActiveStationConflict(record.station_name, record.id);
+        const start = new Date();
+        const end = new Date(start.getTime() + (Number(record.duration_minutes) || 60) * 60000);
+        const conflict = findStationTimeOverlap(record.station_name, start, end, record.id);
         if (conflict) {
-          showToast(`${record.station_name} is already active (${conflict.customer_name}) until ${timeInputValue(new Date(conflict.end_time))} — it can't be double-booked.`);
+          const conflictWord = conflict.status === "Active" ? "an active" : "a booked";
+          showToast(`${record.station_name} already has ${conflictWord} session (${conflict.customer_name}) that overlaps this time — it can't be double-booked.`);
           return;
         }
         const button = event.currentTarget;
         button.disabled = true;
-        const start = new Date();
-        const end = new Date(start.getTime() + (Number(record.duration_minutes) || 60) * 60000);
         const { error } = await window.sb
           .from("sessions")
           .update({ status: "Active", start_time: start.toISOString(), end_time: end.toISOString(), notified_5min: false })
@@ -517,6 +536,26 @@
     const name = (stationName || "").trim().toLowerCase();
     if (!name) return null;
     return records.find((r) => r.status === "Active" && r.id !== excludeId && (r.station_name || "").trim().toLowerCase() === name) || null;
+  }
+
+  // Broader than findActiveStationConflict: catches any Active *or* Booked
+  // session on the same station whose time window overlaps the candidate
+  // window — e.g. two Booked reservations clashing, or a new booking
+  // landing on top of one that's already running.
+  function findStationTimeOverlap(stationName, candidateStart, candidateEnd, excludeId = null) {
+    const name = (stationName || "").trim().toLowerCase();
+    if (!name || !candidateStart || !candidateEnd) return null;
+    return (
+      records.find((r) => {
+        if (r.id === excludeId) return false;
+        if (r.status !== "Active" && r.status !== "Booked") return false;
+        if ((r.station_name || "").trim().toLowerCase() !== name) return false;
+        if (!r.start_time || !r.end_time) return false;
+        const rStart = new Date(r.start_time);
+        const rEnd = new Date(r.end_time);
+        return candidateStart < rEnd && rStart < candidateEnd;
+      }) || null
+    );
   }
 
   // Grace period after end_time before overtime starts accruing. Once past
@@ -910,14 +949,6 @@
         msgEl.className = "text-sm min-h-5 mt-2 text-red-300";
         return;
       }
-      if (editTarget.status === "Active") {
-        const conflict = findActiveStationConflict(station, editTarget.id);
-        if (conflict) {
-          msgEl.textContent = `${station} is already active (${conflict.customer_name}) — pick a different station.`;
-          msgEl.className = "text-sm min-h-5 mt-2 text-red-300";
-          return;
-        }
-      }
 
       const { total, foodTotal, duration, rate } = recalcEditModal();
       const foodItems = collectFrItems("edit-food-rows");
@@ -925,6 +956,19 @@
       const startDate = startTimeStr ? combineDateAndTime(editBaseDate, startTimeStr) : null;
       const startIso = startDate ? startDate.toISOString() : editTarget.start_time || null;
       const endIso = startDate ? new Date(startDate.getTime() + duration * 60000).toISOString() : null;
+
+      // A station can't run two overlapping Active/Booked sessions — check
+      // the (possibly just-changed) station and time window against
+      // everything else, excluding this record itself.
+      if ((editTarget.status === "Active" || editTarget.status === "Booked") && startIso && endIso) {
+        const conflict = findStationTimeOverlap(station, new Date(startIso), new Date(endIso), editTarget.id);
+        if (conflict) {
+          const conflictWord = conflict.status === "Active" ? "an active" : "a booked";
+          msgEl.textContent = `${station} already has ${conflictWord} session (${conflict.customer_name}) that overlaps this time — pick a different time or station.`;
+          msgEl.className = "text-sm min-h-5 mt-2 text-red-300";
+          return;
+        }
+      }
 
       const btn = document.getElementById("edit-session-save");
       btn.disabled = true;
@@ -1627,10 +1671,12 @@
     document.getElementById("end-time").addEventListener("input", () => {
       syncDurationFromEnd("start-time", "duration-minutes", "end-time");
       calculateAmount();
+      updateStationConflictUI();
     });
     document.getElementById("duration-minutes").addEventListener("input", () => {
       syncEndFromDuration("start-time", "duration-minutes", "end-time");
       calculateAmount();
+      updateStationConflictUI();
     });
     document.getElementById("rate").addEventListener("input", calculateAmount);
 
@@ -1644,14 +1690,12 @@
       if (!station || !customer || !phone) return showMessage("Please enter the station, customer name, and phone number.", true);
 
       // Re-check fresh at submit time, not just relying on the live UI
-      // state — a station can only run one Active session at once.
+      // state — a station can't run two overlapping sessions at once.
       const { conflict, blocked } = updateStationConflictUI();
       const status = document.getElementById("session-status").value;
-      if (conflict && status === "Active") {
-        return showMessage(`${station} is already active (${conflict.customer_name}) — this session must be Booked instead.`, true);
-      }
-      if (conflict && blocked) {
-        return showMessage(`${station} is occupied until ${timeInputValue(new Date(conflict.end_time))} — pick a start time after that.`, true);
+      if (blocked) {
+        const conflictWord = conflict.status === "Active" ? "an active" : "a booked";
+        return showMessage(`${station} already has ${conflictWord} session (${conflict.customer_name}) that overlaps this time — pick a different time or station.`, true);
       }
 
       const button = document.getElementById("save-button");
