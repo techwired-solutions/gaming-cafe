@@ -122,12 +122,12 @@ If a session runs past its end time, checkout now accounts for it automatically:
 
 - **Within 5 minutes of the end time** (configurable via `OVERTIME_GRACE_MINUTES`) — no extra charge. Plenty of cafes let people wrap up naturally, and this avoids nickel-and-diming a customer who's back in 2 minutes.
 - **Past that grace period** — the customer is charged for every minute since the original end time (not just the minutes past the grace window), at the session's hourly rate ÷ 60. A session overdue by 12 minutes with a 5-minute grace period bills all 12 minutes, not just 7.
-- This shows up two places: as "(+₹X overtime)" right on the overdue session's countdown badge everywhere it appears (Overview, Billing, Records, the Station board), and as its own line item in the Checkout breakdown, recalculated fresh at the moment of payment (not frozen from whenever the checkout modal happened to be opened). The paid amount and a separate `overtime_amount` are both saved on the record.
-- Extending a session (**+15 min**) moves the end time forward and clears any accrued overtime, same as it always did — that's the right move if the customer's actually still playing past the original time.
+- This shows up two places: as "(+₹X overtime)" right on the overdue session's countdown badge everywhere it appears (Overview, Billing, Records, the Station board), and as its own line item in the Checkout breakdown — along with any discount entered — recalculated fresh at the moment of payment (not frozen from whenever the checkout modal happened to be opened). The paid amount, `overtime_amount`, and `discount_amount` are all saved on the record.
+- Extending a session (any number of minutes, via the box next to **+ Add min**) moves the end time forward and clears any accrued overtime — that's the right move if the customer's actually still playing past the original time.
 
 ## Editing an active or booked session
 
-Click **Edit** on any Active or Booked session card (Overview, Bookings, Billing, or Records) to open a full editor — station/table, which game(s) they're playing, customer name/phone, start time, duration, hourly rate, the entire food/drinks order (change quantities or remove items, not just add more), and staff notes. Saving recalculates the bill from scratch and re-arms the 5-minute alert.
+Click **Edit** on any Active or Booked session card (Overview, Bookings, Billing, or Records) to open a full editor — station/table, which game(s) they're playing, customer name/phone, start time, end time, duration, hourly rate, the entire food/drinks order (change quantities or remove items, not just add more), and staff notes. Start/end/duration stay in sync the same way they do on New Session, and the date shown is the record's own original date, not necessarily today. Saving recalculates the bill from scratch and re-arms the 5-minute alert.
 
 Active sessions also get a **+ Food** button right next to Edit — it opens that same editor but jumps straight to the order section with a fresh item selector focused, for the common case of "the customer just ordered another round." Both buttons ultimately do the same save; +Food is just a shortcut to the part you actually came for.
 
@@ -136,11 +136,11 @@ This is intentionally only available for Active/Booked sessions — once a sessi
 ## Billing & revenue
 
 1. Start a session from **New Session** — station, customer, time, and any food/drinks ordered. Save it.
-2. While it's running, extend it (**+15 min**) or open **Edit** to add/change food, adjust the time, or fix any other detail — see "Editing an active or booked session" below.
-3. When the customer's ready to leave, hit **Checkout** on the session card (visible on Overview, Billing, or Records) — a summary pops up with the time cost + food breakdown and the total due.
-4. Pick **Cash** or **Online** — this finalizes the session as *Completed*, stamps `paid_at`, and records which payment method was used. That's the only way a session becomes Completed, so nothing gets marked paid without a payment method attached.
+2. While it's running, extend it by any number of minutes (type it into the small box next to **+ Add min** — defaults to 15, but 5, 20, 60, whatever the customer asks for works the same way) or open **Edit** to add/change food, adjust the time, or fix any other detail — see "Editing an active or booked session" below.
+3. When the customer's ready to leave, hit **Checkout** on the session card (visible on Overview, Billing, or Records) — a summary pops up with the time cost + food breakdown and the total due. If you're giving them a discount, enter a rupee amount in the **Discount** field right there — the total updates live as you type, and it can't take the bill below ₹0.
+4. Pick **Cash** or **Online** — this finalizes the session as *Completed*, stamps `paid_at`, and records which payment method was used (plus the discount, if any). That's the only way a session becomes Completed, so nothing gets marked paid without a payment method attached.
 5. The **Billing** tab is just a live queue of every session still awaiting checkout, so a second staff member can pick up where another left off.
-6. The **Revenue** tab (admin-only) totals everything: overall, cash vs online split with bars, today's total, and a per-staff breakdown — useful for reconciling a shift or spotting who's driving sales.
+6. The **Revenue** tab (admin-only) totals everything: overall, cash vs online split with bars, today's total, total discounts given, and a per-staff breakdown — useful for reconciling a shift or spotting who's driving sales.
 
 ## Cafe content (CMS)
 
@@ -150,14 +150,22 @@ The admin-only **Cafe Content** tab edits the cafe's name, tagline, short locati
 
 ## How the time tracking & 5-minute alert works
 
-- When you save a session as **Active** (or mark a **Booked** customer as arrived), the console stores a `start_time` and computes `end_time = start_time + duration`.
+Sessions only ever run same-day (this is a walk-in cafe, not multi-day bookings), so **New Session** and **Edit** only ask for a time-of-day — no date picker. The date is filled in automatically and shown as a small read-only label next to "Time tracking": today's date when creating a session, or the record's own original date when editing an older one (so fixing a past record's time doesn't accidentally move it to today).
+
+Start time, end time, and duration all stay in sync automatically — change any one of the three and the other two update to match:
+- Start time defaults to right now when you open New Session.
+- Change **Duration**, and **End time** recalculates.
+- Change **End time**, and **Duration** recalculates.
+
+The rest of the tracking behavior:
+- Saving a session as **Active** (or marking a **Booked** customer as arrived) stores a `start_time` and computes `end_time = start_time + duration`.
 - Every active session card shows a live **"Ends in Xh Ym"** countdown. The card border turns amber when under the alert threshold, and red once it's overdue.
 - Exactly **5 minutes before `end_time`** (configurable via `ALERT_MINUTES_BEFORE_END`), the owner console:
   - Plays a short beep and shows an in-app toast.
   - Sends a **browser notification** (if you click "Enable alerts" once and allow the permission prompt) — this fires even if the dashboard tab is in the background, as long as the browser/computer stays on.
   - Marks that session so it won't alert again for the same 5-minute warning.
-- When the timer hits zero, it fires a second "Time's up!" alert.
-- Use the **+15 min** button on an active card to extend a session on the spot (recalculates the bill and re-arms the alert), or **Checkout** to finalize billing and close it out (see "Billing & revenue" above).
+- When the timer hits zero, it fires a second "Time's up!" alert, and (see "Overtime billing" below) starts accruing an overtime charge after a grace period.
+- Extend an active session by any number of minutes (type it into the box next to **+ Add min**, defaulting to 15), or **Checkout** to finalize billing and close it out (see "Billing & revenue" above).
 
 Browser notifications only work while the dashboard is open in a tab (even backgrounded) on a device that's powered on — there's no SMS/push-to-phone in this version. If you want a phone alert regardless of whether the dashboard is open, that would need a small server-side add-on (e.g. a Supabase Edge Function + WhatsApp/SMS API) — let me know if you'd like that added later.
 

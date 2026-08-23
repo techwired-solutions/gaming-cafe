@@ -22,8 +22,51 @@
   const inr = (value) =>
     new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value || 0);
 
-  const localDateTimeValue = (date) =>
-    new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  // Sessions are always same-day (walk-in cafe, not multi-day bookings), so
+  // time-tracking inputs only ever ask for a time-of-day — the date is
+  // filled in automatically: "today" when creating a session, or the
+  // record's own existing date when editing one (so editing an older
+  // record doesn't silently move it to today).
+  const timeInputValue = (date) => String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0");
+
+  const combineDateAndTime = (baseDate, timeStr) => {
+    if (!timeStr) return null;
+    const [h, m] = timeStr.split(":").map(Number);
+    const result = new Date(baseDate);
+    result.setHours(h, m, 0, 0);
+    return result;
+  };
+
+  const parseTimeToMinutes = (timeStr) => {
+    if (!timeStr) return null;
+    const [h, m] = timeStr.split(":").map(Number);
+    return h * 60 + m;
+  };
+
+  const minutesToTimeStr = (totalMinutes) => {
+    const m = ((totalMinutes % 1440) + 1440) % 1440;
+    return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+  };
+
+  const fmtDateLabel = (date) => new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+
+  // Keeps an end-time field in sync with start-time + duration, or vice
+  // versa, for a given trio of field ids — shared by New Session and Edit.
+  function syncEndFromDuration(startId, durationId, endId) {
+    const startMin = parseTimeToMinutes(document.getElementById(startId).value);
+    const duration = Number(document.getElementById(durationId).value) || 0;
+    if (startMin == null) return;
+    document.getElementById(endId).value = minutesToTimeStr(startMin + duration);
+  }
+
+  function syncDurationFromEnd(startId, durationId, endId) {
+    const startMin = parseTimeToMinutes(document.getElementById(startId).value);
+    const endMin = parseTimeToMinutes(document.getElementById(endId).value);
+    if (startMin == null || endMin == null) return;
+    let diff = endMin - startMin;
+    if (diff < 0) diff += 1440; // rolled past midnight
+    document.getElementById(durationId).value = diff;
+  }
 
   const fmtDateTime = (iso) =>
     iso ? new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso)) : "";
@@ -467,7 +510,7 @@
 
     const countdown = card.querySelector(".record-countdown");
     const actions = card.querySelector(".record-actions");
-    const extendBtn = card.querySelector(".extend-15");
+    const extendGroup = card.querySelector(".extend-time-group");
     const checkoutBtn = card.querySelector(".open-checkout");
     const addFoodBtn = card.querySelector(".open-add-food");
     const editBtn = card.querySelector(".open-edit");
@@ -490,7 +533,7 @@
       actions.classList.remove("hidden");
       actions.classList.add("flex");
       const isActive = record.status === "Active";
-      extendBtn.classList.toggle("hidden", !isActive);
+      extendGroup.classList.toggle("hidden", !isActive);
       checkoutBtn.classList.toggle("hidden", !isActive);
       addFoodBtn.classList.toggle("hidden", !isActive);
       editBtn.classList.toggle("col-span-2", !isActive);
@@ -521,11 +564,14 @@
       if (error) { button.disabled = false; showToast("Could not remove this record."); }
     });
 
-    card.querySelector(".extend-15").addEventListener("click", async () => {
+    card.querySelector(".extend-apply").addEventListener("click", async () => {
       const item = records.find((row) => row.id === card.dataset.recordId);
       if (!item) return;
-      const newEnd = new Date((item.end_time ? new Date(item.end_time) : new Date()).getTime() + 15 * 60000);
-      const newDuration = (Number(item.duration_minutes) || 0) + 15;
+      const input = card.querySelector(".extend-minutes-input");
+      const minutesToAdd = Math.round(Number(input.value) || 0);
+      if (minutesToAdd <= 0) return showToast("Enter how many minutes to add.");
+      const newEnd = new Date((item.end_time ? new Date(item.end_time) : new Date()).getTime() + minutesToAdd * 60000);
+      const newDuration = (Number(item.duration_minutes) || 0) + minutesToAdd;
       const timeCost = (newDuration / 60) * (Number(item.rate) || 0);
       const amount = Math.round(timeCost + (Number(item.food_total) || 0));
       const { error } = await window.sb
@@ -533,7 +579,7 @@
         .update({ end_time: newEnd.toISOString(), duration_minutes: newDuration, amount, notified_5min: false })
         .eq("id", item.id);
       if (error) showToast("Could not extend this session.");
-      else { overdueToasted.delete(item.id); showToast("Extended by 15 minutes."); }
+      else { overdueToasted.delete(item.id); showToast(`Extended by ${minutesToAdd} minute${minutesToAdd === 1 ? "" : "s"}.`); }
     });
 
     card.querySelector(".open-checkout").addEventListener("click", () => {
@@ -587,14 +633,17 @@
   function renderCheckoutBreakdown(record) {
     const timeCost = ((Number(record.duration_minutes) || 0) / 60) * (Number(record.rate) || 0);
     const overtime = computeOvertimeCharge(record);
+    const subtotal = Math.round((Number(record.amount) || 0) + overtime.amount);
+    const discount = Math.min(subtotal, Math.max(0, Number(document.getElementById("checkout-discount").value) || 0));
     const foodLines = (record.food_items || []).map((f) => `${f.name} ×${f.qty} — ${inr(f.price * f.qty)}`);
     const lines = [`Time: ${record.duration_minutes || 0} min @ ₹${record.rate || 0}/hr — ${inr(timeCost)}`, ...foodLines];
     if (overtime.amount > 0) {
       lines.push(`Overtime: ${overtime.minutes} min past end time (after a ${OVERTIME_GRACE_MINUTES}-min grace period) — ${inr(overtime.amount)}`);
     }
+    if (discount > 0) lines.push(`Discount: −${inr(discount)}`);
     document.getElementById("checkout-breakdown").innerHTML = lines.map((l) => `<span class="block">${l}</span>`).join("");
-    document.getElementById("checkout-amount").textContent = inr(Math.round((Number(record.amount) || 0) + overtime.amount));
-    return overtime;
+    document.getElementById("checkout-amount").textContent = inr(subtotal - discount);
+    return { overtime, discount, grandTotal: subtotal - discount };
   }
 
   function openCheckoutModal(record) {
@@ -602,6 +651,7 @@
     modal.dataset.recordId = record.id;
     document.getElementById("checkout-customer").textContent = record.customer_name || "—";
     document.getElementById("checkout-station").textContent = `${record.station_name || ""} · ${record.duration_minutes || 0} min`;
+    document.getElementById("checkout-discount").value = 0;
     renderCheckoutBreakdown(record);
     modal.classList.add("show");
     clearInterval(Number(modal.dataset.refreshTimer) || 0);
@@ -621,31 +671,46 @@
     const modal = document.getElementById("checkout-modal");
     document.getElementById("checkout-cancel").addEventListener("click", closeCheckoutModal);
     modal.addEventListener("click", (event) => { if (event.target === modal) closeCheckoutModal(); });
+    document.getElementById("checkout-discount").addEventListener("input", () => {
+      const record = records.find((r) => r.id === modal.dataset.recordId);
+      if (record) renderCheckoutBreakdown(record);
+    });
     modal.querySelectorAll(".checkout-pay-btn").forEach((btn) =>
       btn.addEventListener("click", async () => {
         const recordId = modal.dataset.recordId;
         const method = btn.dataset.method;
         const record = records.find((r) => r.id === recordId);
         if (!record) return;
-        // Recompute overtime fresh at the moment of payment, not from when
-        // the modal happened to be opened, so the charge reflects the
-        // actual checkout time.
-        const overtime = computeOvertimeCharge(record);
-        const finalAmount = Math.round((Number(record.amount) || 0) + overtime.amount);
+        // Recompute fresh at the moment of payment, not from when the modal
+        // happened to be opened, so the charge reflects actual checkout time.
+        const { overtime, discount, grandTotal } = renderCheckoutBreakdown(record);
         btn.disabled = true;
         const { error } = await window.sb
           .from("sessions")
-          .update({ status: "Completed", paid: true, payment_method: method, paid_at: new Date().toISOString(), amount: finalAmount, overtime_amount: overtime.amount })
+          .update({
+            status: "Completed",
+            paid: true,
+            payment_method: method,
+            paid_at: new Date().toISOString(),
+            amount: grandTotal,
+            overtime_amount: overtime.amount,
+            discount_amount: discount
+          })
           .eq("id", recordId);
         btn.disabled = false;
         if (error) showToast("Could not record payment: " + error.message);
-        else { closeCheckoutModal(); showToast(`Payment recorded — ${method}${overtime.amount > 0 ? ` (incl. ${inr(overtime.amount)} overtime)` : ""}.`); }
+        else {
+          closeCheckoutModal();
+          const extras = [overtime.amount > 0 ? `+${inr(overtime.amount)} overtime` : null, discount > 0 ? `−${inr(discount)} discount` : null].filter(Boolean).join(", ");
+          showToast(`Payment recorded — ${method}${extras ? ` (${extras})` : ""}.`);
+        }
       })
     );
   }
 
   // ---------- edit an active or booked session (timing, order, table, game) ----------
   let editTarget = null;
+  let editBaseDate = new Date(); // the calendar date edit-start-time/edit-end-time apply to
 
   function recalcEditModal() {
     const duration = Math.max(0, Number(document.getElementById("edit-duration").value) || 0);
@@ -663,8 +728,15 @@
     document.getElementById("edit-game").value = record.game || "";
     document.getElementById("edit-customer-name").value = record.customer_name || "";
     document.getElementById("edit-customer-phone").value = record.customer_phone || "";
-    document.getElementById("edit-start-time").value = record.start_time ? localDateTimeValue(new Date(record.start_time)) : "";
+
+    // Editing an older record keeps its original date (just changing the
+    // time-of-day) instead of silently moving it to today.
+    editBaseDate = record.start_time ? new Date(record.start_time) : record.created_at ? new Date(record.created_at) : new Date();
+    document.getElementById("edit-today-label").textContent = fmtDateLabel(editBaseDate);
+    document.getElementById("edit-start-time").value = record.start_time ? timeInputValue(new Date(record.start_time)) : timeInputValue(new Date());
     document.getElementById("edit-duration").value = record.duration_minutes || 0;
+    if (record.end_time) document.getElementById("edit-end-time").value = timeInputValue(new Date(record.end_time));
+    else syncEndFromDuration("edit-start-time", "edit-duration", "edit-end-time");
     document.getElementById("edit-rate").value = record.rate || 0;
     document.getElementById("edit-notes").value = record.notes || "";
     document.getElementById("edit-session-message").textContent = "";
@@ -701,7 +773,16 @@
     document.getElementById("edit-add-food-row").addEventListener("click", () => addFrRow("edit-food-rows"));
     document.getElementById("edit-session-cancel").addEventListener("click", closeEditModal);
     modal.addEventListener("click", (event) => { if (event.target === modal) closeEditModal(); });
-    ["edit-duration", "edit-rate"].forEach((id) => document.getElementById(id).addEventListener("input", recalcEditModal));
+    document.getElementById("edit-rate").addEventListener("input", recalcEditModal);
+    document.getElementById("edit-start-time").addEventListener("input", () => syncEndFromDuration("edit-start-time", "edit-duration", "edit-end-time"));
+    document.getElementById("edit-end-time").addEventListener("input", () => {
+      syncDurationFromEnd("edit-start-time", "edit-duration", "edit-end-time");
+      recalcEditModal();
+    });
+    document.getElementById("edit-duration").addEventListener("input", () => {
+      syncEndFromDuration("edit-start-time", "edit-duration", "edit-end-time");
+      recalcEditModal();
+    });
 
     document.getElementById("edit-session-save").addEventListener("click", async () => {
       if (!editTarget) return;
@@ -717,9 +798,10 @@
 
       const { total, foodTotal, duration, rate } = recalcEditModal();
       const foodItems = collectFrItems("edit-food-rows");
-      const startVal = document.getElementById("edit-start-time").value;
-      const startIso = startVal ? new Date(startVal).toISOString() : editTarget.start_time || null;
-      const endIso = startIso ? new Date(new Date(startIso).getTime() + duration * 60000).toISOString() : null;
+      const startTimeStr = document.getElementById("edit-start-time").value;
+      const startDate = startTimeStr ? combineDateAndTime(editBaseDate, startTimeStr) : null;
+      const startIso = startDate ? startDate.toISOString() : editTarget.start_time || null;
+      const endIso = startDate ? new Date(startDate.getTime() + duration * 60000).toISOString() : null;
 
       const btn = document.getElementById("edit-session-save");
       btn.disabled = true;
@@ -1079,11 +1161,13 @@
     const cash = paid.filter((r) => r.payment_method === "Cash").reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
     const online = paid.filter((r) => r.payment_method === "Online").reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
     const today = paid.filter((r) => isToday(r.paid_at)).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const discounts = paid.reduce((sum, r) => sum + (Number(r.discount_amount) || 0), 0);
 
     document.getElementById("revenue-total").textContent = inr(total);
     document.getElementById("revenue-cash").textContent = inr(cash);
     document.getElementById("revenue-online").textContent = inr(online);
     document.getElementById("revenue-today").textContent = inr(today);
+    document.getElementById("revenue-discounts").textContent = inr(discounts);
 
     const splitEl = document.getElementById("revenue-split");
     const bar = (label, value) => `
@@ -1345,15 +1429,18 @@
       }
     });
 
-    document.getElementById("end-time").addEventListener("change", () => {
-      const start = document.getElementById("start-time").value, end = document.getElementById("end-time").value;
-      if (start && end) {
-        const minutes = Math.round((new Date(end) - new Date(start)) / 60000);
-        if (minutes >= 0) document.getElementById("duration-minutes").value = minutes;
-      }
+    document.getElementById("start-time").addEventListener("input", () => {
+      syncEndFromDuration("start-time", "duration-minutes", "end-time");
+    });
+    document.getElementById("end-time").addEventListener("input", () => {
+      syncDurationFromEnd("start-time", "duration-minutes", "end-time");
       calculateAmount();
     });
-    ["duration-minutes", "rate"].forEach((id) => document.getElementById(id).addEventListener("input", calculateAmount));
+    document.getElementById("duration-minutes").addEventListener("input", () => {
+      syncEndFromDuration("start-time", "duration-minutes", "end-time");
+      calculateAmount();
+    });
+    document.getElementById("rate").addEventListener("input", calculateAmount);
 
     document.getElementById("session-form").addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1369,11 +1456,12 @@
       button.classList.add("opacity-60");
 
       const status = document.getElementById("session-status").value;
-      const start = document.getElementById("start-time").value;
+      const startTimeStr = document.getElementById("start-time").value;
       const { total, foodTotal, duration, rate } = calculateAmount();
       const foodItems = collectFrItems("food-order-list");
-      const startIso = start ? new Date(start).toISOString() : status !== "Booked" ? new Date().toISOString() : null;
-      const endIso = startIso ? new Date(new Date(startIso).getTime() + duration * 60000).toISOString() : null;
+      const startDate = startTimeStr ? combineDateAndTime(new Date(), startTimeStr) : status !== "Booked" ? new Date() : null;
+      const startIso = startDate ? startDate.toISOString() : null;
+      const endIso = startDate ? new Date(startDate.getTime() + duration * 60000).toISOString() : null;
 
       const { error } = await window.sb.from("sessions").insert({
         type: status === "Booked" ? "Booked" : "Walk-in",
@@ -1407,7 +1495,8 @@
         event.target.reset();
         document.getElementById("duration-minutes").value = 60;
         document.getElementById("rate").value = document.getElementById("admin-rate").value;
-        document.getElementById("start-time").value = localDateTimeValue(new Date());
+        document.getElementById("start-time").value = timeInputValue(new Date());
+        syncEndFromDuration("start-time", "duration-minutes", "end-time");
         clearFrContainer("food-order-list");
         addFrRow("food-order-list");
         calculateAmount();
@@ -1486,7 +1575,9 @@
     initWaitingEditModal();
 
     // initial state
-    document.getElementById("start-time").value = localDateTimeValue(new Date());
+    document.getElementById("start-time").value = timeInputValue(new Date());
+    document.getElementById("session-today-label").textContent = fmtDateLabel(new Date());
+    syncEndFromDuration("start-time", "duration-minutes", "end-time");
     registerFoodContainer("food-order-list", calculateAmount);
     registerFoodContainer("edit-food-rows", recalcEditModal);
     registerFoodContainer("waiting-food-rows", recalcWaitingForm);

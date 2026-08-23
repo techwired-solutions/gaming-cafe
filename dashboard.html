@@ -307,10 +307,13 @@
                 </div>
               </div>
               <div class="border-t border-slate-700/80 mt-6 pt-5">
-                <h3 class="font-semibold mb-4 text-lg">Time tracking</h3>
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="font-semibold text-lg">Time tracking</h3>
+                  <span id="session-today-label" class="mono text-xs text-slate-500"></span>
+                </div>
                 <div class="grid sm:grid-cols-2 gap-4">
-                  <div><label class="block text-sm font-medium mb-2" for="start-time">Start time</label><input id="start-time" class="form-control" type="datetime-local"></div>
-                  <div><label class="block text-sm font-medium mb-2" for="end-time">End time</label><input id="end-time" class="form-control" type="datetime-local"></div>
+                  <div><label class="block text-sm font-medium mb-2" for="start-time">Start time</label><input id="start-time" class="form-control" type="time"></div>
+                  <div><label class="block text-sm font-medium mb-2" for="end-time">End time</label><input id="end-time" class="form-control" type="time"></div>
                   <div><label class="block text-sm font-medium mb-2" for="duration-minutes">Duration (minutes)</label><input id="duration-minutes" class="form-control" type="number" min="0" value="60"></div>
                   <div><label class="block text-sm font-medium mb-2" for="rate">Hourly rate (₹)</label><input id="rate" class="form-control" type="number" min="0" value="100"></div>
                 </div>
@@ -390,6 +393,7 @@
             <article class="panel rounded-2xl p-4"><i data-lucide="wallet" class="text-amber-300" width="19" height="19"></i><p id="revenue-cash" class="mono text-2xl font-bold mt-5">₹0</p><p class="text-sm text-slate-400 mt-1">Cash</p></article>
             <article class="panel rounded-2xl p-4"><i data-lucide="credit-card" class="text-sky-300" width="19" height="19"></i><p id="revenue-online" class="mono text-2xl font-bold mt-5">₹0</p><p class="text-sm text-slate-400 mt-1">Online</p></article>
             <article class="panel rounded-2xl p-4"><i data-lucide="calendar-check" class="text-[#d8ff45]" width="19" height="19"></i><p id="revenue-today" class="mono text-2xl font-bold mt-5">₹0</p><p class="text-sm text-slate-400 mt-1">Today</p></article>
+            <article class="panel rounded-2xl p-4"><i data-lucide="tag" class="text-orange-300" width="19" height="19"></i><p id="revenue-discounts" class="mono text-2xl font-bold mt-5">₹0</p><p class="text-sm text-slate-400 mt-1">Discounts given</p></article>
           </div>
           <div class="grid md:grid-cols-2 gap-5">
             <div class="panel rounded-2xl p-5">
@@ -489,6 +493,10 @@
         <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold mt-3">Total due</p>
         <p id="checkout-amount" class="mono text-3xl text-[#d8ff45] font-bold mt-1">₹0</p>
       </div>
+      <div class="mt-3">
+        <label class="block text-xs text-slate-400 mb-1" for="checkout-discount">Discount (₹, optional)</label>
+        <input id="checkout-discount" type="number" min="0" value="0" class="form-control">
+      </div>
       <p class="text-sm font-medium mt-4 mb-2">How did they pay?</p>
       <div class="grid grid-cols-2 gap-3">
         <button type="button" class="checkout-pay-btn rounded-xl py-3 font-bold flex flex-col items-center gap-1" data-method="Cash" style="background:#1c2333;border:1px solid #405069;">
@@ -516,9 +524,13 @@
       </div>
 
       <div class="border-t border-slate-700 mt-4 pt-4">
-        <h4 class="font-semibold text-sm mb-3">Time tracking</h4>
-        <div class="grid sm:grid-cols-3 gap-3">
-          <div><label class="block text-xs text-slate-400 mb-1" for="edit-start-time">Start time</label><input id="edit-start-time" class="form-control" type="datetime-local"></div>
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="font-semibold text-sm">Time tracking</h4>
+          <span id="edit-today-label" class="mono text-xs text-slate-500"></span>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div><label class="block text-xs text-slate-400 mb-1" for="edit-start-time">Start time</label><input id="edit-start-time" class="form-control" type="time"></div>
+          <div><label class="block text-xs text-slate-400 mb-1" for="edit-end-time">End time</label><input id="edit-end-time" class="form-control" type="time"></div>
           <div><label class="block text-xs text-slate-400 mb-1" for="edit-duration">Duration (min)</label><input id="edit-duration" class="form-control" type="number" min="0"></div>
           <div><label class="block text-xs text-slate-400 mb-1" for="edit-rate">Rate (₹/hr)</label><input id="edit-rate" class="form-control" type="number" min="0"></div>
         </div>
@@ -620,7 +632,10 @@
         <div class="grid grid-cols-2 gap-2">
           <button type="button" class="open-edit rounded-lg border border-slate-600 px-2 py-1.5 text-xs font-bold text-slate-200 flex items-center justify-center gap-1"><i data-lucide="pencil" width="13" height="13"></i>Edit</button>
           <button type="button" class="open-add-food rounded-lg border border-slate-600 px-2 py-1.5 text-xs font-bold text-slate-200 flex items-center justify-center gap-1"><i data-lucide="sandwich" width="13" height="13"></i>+ Food</button>
-          <button type="button" class="extend-15 rounded-lg border border-[#d8ff45] px-2 py-1.5 text-xs font-bold text-[#d8ff45]">+15 min</button>
+          <div class="extend-time-group flex gap-1">
+            <input type="number" min="1" value="15" aria-label="Minutes to add" class="extend-minutes-input form-control w-14 px-1.5 text-center" style="min-height:30px;">
+            <button type="button" class="extend-apply flex-1 rounded-lg border border-[#d8ff45] px-1 text-xs font-bold text-[#d8ff45] whitespace-nowrap">+ Add min</button>
+          </div>
           <button type="button" class="open-checkout rounded-lg bg-[#d8ff45] px-2 py-1.5 text-xs font-bold text-[#10141e]">Checkout</button>
         </div>
       </div>

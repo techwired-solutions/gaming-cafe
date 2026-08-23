@@ -50,6 +50,7 @@ create table if not exists public.sessions (
   food_total numeric not null default 0,
   amount numeric not null default 0,
   overtime_amount numeric not null default 0,
+  discount_amount numeric not null default 0,
   status text not null default 'Active' check (status in ('Booked', 'Active', 'Completed', 'Cancelled')),
   notes text,
   notified_5min boolean not null default false,
@@ -75,6 +76,7 @@ alter table public.sessions add column if not exists paid boolean not null defau
 alter table public.sessions add column if not exists paid_at timestamptz;
 alter table public.sessions add column if not exists game text;
 alter table public.sessions add column if not exists overtime_amount numeric not null default 0;
+alter table public.sessions add column if not exists discount_amount numeric not null default 0;
 
 create index if not exists sessions_status_idx on public.sessions (status);
 create index if not exists sessions_end_time_idx on public.sessions (end_time);
