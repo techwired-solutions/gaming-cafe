@@ -24,8 +24,11 @@
   let sessionStatusActiveOption = null;
 
   // ---------- helpers ----------
+  // Nepalese Rupee — Intl has no built-in "रु" symbol output, so this
+  // formats the number plainly and prefixes it by hand. Name kept as
+  // `inr` since it's just an internal identifier used everywhere below.
   const inr = (value) =>
-    new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value || 0);
+    "रु " + new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(value || 0);
 
   // Sessions are always same-day (walk-in cafe, not multi-day bookings), so
   // time-tracking inputs only ever ask for a time-of-day — the date is
@@ -312,7 +315,7 @@
     row.innerHTML = `
       <select aria-label="Food or drink item" class="form-control fr-select">${menuOptions(selectedId)}</select>
       <input aria-label="Quantity" type="number" min="1" value="${qty}" class="form-control fr-qty w-16">
-      <span class="fr-price mono min-w-16 text-right text-sm text-[#d8ff45]">₹0</span>
+      <span class="fr-price mono min-w-16 text-right text-sm text-[#d8ff45]">रु 0</span>
       <button type="button" aria-label="Remove item" class="fr-remove h-10 w-10 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400">×</button>`;
     const notify = () => { const cb = frChangeHandlers[containerId]; if (cb) cb(); };
     row.querySelector(".fr-select").addEventListener("change", () => { updateFrRow(row); notify(); });
@@ -746,8 +749,8 @@
 
   function discountCapLabel(mode, timeCost, duration) {
     const cap = Math.round(timeCost * (DISCOUNT_MAX_PERCENT / 100));
-    if (mode === "percent") return `Max ${DISCOUNT_MAX_PERCENT}% (₹${cap} on this session)`;
-    if (mode === "amount") return `Max ₹${cap} — ${DISCOUNT_MAX_PERCENT}% of the ₹${Math.round(timeCost)} play-time charge`;
+    if (mode === "percent") return `Max ${DISCOUNT_MAX_PERCENT}% (${inr(cap)} on this session)`;
+    if (mode === "amount") return `Max ${inr(cap)} — ${DISCOUNT_MAX_PERCENT}% of the ${inr(Math.round(timeCost))} play-time charge`;
     if (mode === "minutes") return `Max ${duration} min — the full time played`;
     return "";
   }
@@ -783,7 +786,7 @@
     document.getElementById("checkout-discount-cap").textContent = discountCapLabel(checkoutDiscountMode, timeCost, record.duration_minutes || 0);
 
     const foodLines = (record.food_items || []).map((f) => `${f.name} ×${f.qty} — ${inr(f.price * f.qty)}`);
-    const lines = [`Time: ${record.duration_minutes || 0} min @ ₹${record.rate || 0}/hr — ${inr(timeCost)}`, ...foodLines];
+    const lines = [`Time: ${record.duration_minutes || 0} min @ ${inr(record.rate || 0)}/hr — ${inr(timeCost)}`, ...foodLines];
     if (overtime.amount > 0) {
       lines.push(`Overtime: ${overtime.minutes} min past end time (after a ${OVERTIME_GRACE_MINUTES}-min grace period) — ${inr(overtime.amount)}`);
     }

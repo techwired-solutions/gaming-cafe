@@ -22,7 +22,7 @@
   };
 
   const inr = (value) =>
-    new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value || 0);
+    "रु " + new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(value || 0);
 
   function whatsappUrl(message) {
     const number = (live.WHATSAPP_NUMBER || "").replace(/[^\d]/g, "");

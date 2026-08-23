@@ -122,7 +122,7 @@ If a session runs past its end time, checkout now accounts for it automatically:
 
 - **Within 5 minutes of the end time** (configurable via `OVERTIME_GRACE_MINUTES`) — no extra charge. Plenty of cafes let people wrap up naturally, and this avoids nickel-and-diming a customer who's back in 2 minutes.
 - **Past that grace period** — the customer is charged for every minute since the original end time (not just the minutes past the grace window), at the session's hourly rate ÷ 60. A session overdue by 12 minutes with a 5-minute grace period bills all 12 minutes, not just 7.
-- This shows up two places: as "(+₹X overtime)" right on the overdue session's countdown badge everywhere it appears (Overview, Billing, Records, the Station board), and as its own line item in the Checkout breakdown — along with any discount entered — recalculated fresh at the moment of payment (not frozen from whenever the checkout modal happened to be opened). The paid amount, `overtime_amount`, and `discount_amount` are all saved on the record.
+- This shows up two places: as "(+रु X overtime)" right on the overdue session's countdown badge everywhere it appears (Overview, Billing, Records, the Station board), and as its own line item in the Checkout breakdown — along with any discount entered — recalculated fresh at the moment of payment (not frozen from whenever the checkout modal happened to be opened). The paid amount, `overtime_amount`, and `discount_amount` are all saved on the record.
 - Extending a session (any number of minutes, via the box next to **+ Add min**) moves the end time forward and clears any accrued overtime — that's the right move if the customer's actually still playing past the original time.
 
 ## Editing an active or booked session
@@ -159,7 +159,7 @@ The one thing this doesn't cover: it only compares against sessions already in t
 Checkout has three ways to give a discount, picked with the icon buttons above the discount field — **they only ever apply to the play-time charge (duration × rate), never to food/drinks or the overtime charge**:
 
 - **Percent** — e.g. 10%, 15%. Capped at **20%** — typing more just clamps back down to 20 as you type.
-- **Amount (₹)** — a flat rupee amount off the play-time charge specifically (not the whole bill). Also capped at 20% *of that play-time charge* — e.g. on a ₹600 time charge, the most you can take off is ₹120, even if food pushes the total bill higher. Typing more clamps down to the cap.
+- **Amount (रु)** — a flat rupee amount off the play-time charge specifically (not the whole bill). Also capped at 20% *of that play-time charge* — e.g. on a रु 600 time charge, the most you can take off is रु 120, even if food pushes the total bill higher. Typing more clamps down to the cap.
 - **Minutes** — waives a number of minutes of play time outright (e.g. comp 30 minutes for a customer who played 120). No 20% cap here — the only limit is the session's actual duration, since you can't waive more time than was played.
 
 Switching between the three resets the field to 0 so a value typed for one mode doesn't carry over and get misread in another. The breakdown and total update live as you type, and whichever mode was used — plus the exact percent/amount/minutes entered — is saved on the record (`discount_type`, `discount_value`, `discount_amount`) for the books.
