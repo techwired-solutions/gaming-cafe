@@ -331,9 +331,19 @@
   }
 
   function collectFrItems(containerId) {
-    return [...document.querySelectorAll(`#${containerId} .fr-row`)]
+    const raw = [...document.querySelectorAll(`#${containerId} .fr-row`)]
       .filter((row) => row.dataset.itemId)
       .map((row) => ({ id: row.dataset.itemId, name: row.dataset.itemName, price: Number(row.dataset.unitPrice), qty: Number(row.dataset.qty) }));
+    // Merge rows that ended up pointing at the same menu item (e.g. picked
+    // twice in separate rows) so the saved order shows "Item ×2", not two
+    // separate "Item ×1" lines.
+    const merged = [];
+    raw.forEach((item) => {
+      const existing = merged.find((m) => m.id === item.id);
+      if (existing) existing.qty += item.qty;
+      else merged.push({ ...item });
+    });
+    return merged;
   }
 
   function frTotal(containerId) {
@@ -594,7 +604,7 @@
 
     card.querySelector(".open-add-food").addEventListener("click", () => {
       const item = records.find((row) => row.id === card.dataset.recordId);
-      if (item) openEditModal(item, { focusFood: true });
+      if (item) openQuickFoodModal(item);
     });
 
     return card;
@@ -630,20 +640,72 @@
   }
 
   // ---------- checkout modal ----------
+  // Discounts only ever apply to the base play-time charge (duration × rate)
+  // — never to food/drinks, and never to the overtime charge either. Staff
+  // can give up to 20% off via percent or amount; the third mode waives
+  // minutes of play time outright and isn't percentage-capped (bounded only
+  // by how long the customer actually played).
+  const DISCOUNT_MAX_PERCENT = 20;
+  let checkoutDiscountMode = "amount";
+
+  function discountCapLabel(mode, timeCost, duration) {
+    const cap = Math.round(timeCost * (DISCOUNT_MAX_PERCENT / 100));
+    if (mode === "percent") return `Max ${DISCOUNT_MAX_PERCENT}% (₹${cap} on this session)`;
+    if (mode === "amount") return `Max ₹${cap} — ${DISCOUNT_MAX_PERCENT}% of the ₹${Math.round(timeCost)} play-time charge`;
+    if (mode === "minutes") return `Max ${duration} min — the full time played`;
+    return "";
+  }
+
+  function computeDiscount(record, mode, rawValue) {
+    const timeCost = ((Number(record.duration_minutes) || 0) / 60) * (Number(record.rate) || 0);
+    const duration = Number(record.duration_minutes) || 0;
+    let value = Math.max(0, Number(rawValue) || 0);
+    let amount = 0;
+    if (mode === "percent") {
+      value = Math.min(DISCOUNT_MAX_PERCENT, value);
+      amount = Math.round((timeCost * value) / 100);
+    } else if (mode === "amount") {
+      value = Math.min(Math.round(timeCost * (DISCOUNT_MAX_PERCENT / 100)), Math.round(value));
+      amount = value;
+    } else if (mode === "minutes") {
+      value = Math.min(duration, Math.round(value));
+      amount = Math.round((value / 60) * (Number(record.rate) || 0));
+    } else {
+      value = 0;
+    }
+    return { mode, value, amount };
+  }
+
   function renderCheckoutBreakdown(record) {
     const timeCost = ((Number(record.duration_minutes) || 0) / 60) * (Number(record.rate) || 0);
     const overtime = computeOvertimeCharge(record);
     const subtotal = Math.round((Number(record.amount) || 0) + overtime.amount);
-    const discount = Math.min(subtotal, Math.max(0, Number(document.getElementById("checkout-discount").value) || 0));
+
+    const rawValue = document.getElementById("checkout-discount-value").value;
+    const discount = computeDiscount(record, checkoutDiscountMode, rawValue);
+    if (String(discount.value) !== String(rawValue)) document.getElementById("checkout-discount-value").value = discount.value;
+    document.getElementById("checkout-discount-cap").textContent = discountCapLabel(checkoutDiscountMode, timeCost, record.duration_minutes || 0);
+
     const foodLines = (record.food_items || []).map((f) => `${f.name} ×${f.qty} — ${inr(f.price * f.qty)}`);
     const lines = [`Time: ${record.duration_minutes || 0} min @ ₹${record.rate || 0}/hr — ${inr(timeCost)}`, ...foodLines];
     if (overtime.amount > 0) {
       lines.push(`Overtime: ${overtime.minutes} min past end time (after a ${OVERTIME_GRACE_MINUTES}-min grace period) — ${inr(overtime.amount)}`);
     }
-    if (discount > 0) lines.push(`Discount: −${inr(discount)}`);
+    if (discount.amount > 0) {
+      const discountLabel =
+        discount.mode === "percent" ? `${discount.value}% off play time` : discount.mode === "minutes" ? `${discount.value} min waived` : `Discount on play time`;
+      lines.push(`${discountLabel}: −${inr(discount.amount)}`);
+    }
     document.getElementById("checkout-breakdown").innerHTML = lines.map((l) => `<span class="block">${l}</span>`).join("");
-    document.getElementById("checkout-amount").textContent = inr(subtotal - discount);
-    return { overtime, discount, grandTotal: subtotal - discount };
+    const grandTotal = Math.max(0, subtotal - discount.amount);
+    document.getElementById("checkout-amount").textContent = inr(grandTotal);
+    return { overtime, discount, grandTotal };
+  }
+
+  function setCheckoutDiscountMode(mode) {
+    checkoutDiscountMode = mode;
+    document.querySelectorAll(".discount-mode-btn").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
+    document.getElementById("checkout-discount-value").value = 0;
   }
 
   function openCheckoutModal(record) {
@@ -651,7 +713,7 @@
     modal.dataset.recordId = record.id;
     document.getElementById("checkout-customer").textContent = record.customer_name || "—";
     document.getElementById("checkout-station").textContent = `${record.station_name || ""} · ${record.duration_minutes || 0} min`;
-    document.getElementById("checkout-discount").value = 0;
+    setCheckoutDiscountMode("amount");
     renderCheckoutBreakdown(record);
     modal.classList.add("show");
     clearInterval(Number(modal.dataset.refreshTimer) || 0);
@@ -671,7 +733,14 @@
     const modal = document.getElementById("checkout-modal");
     document.getElementById("checkout-cancel").addEventListener("click", closeCheckoutModal);
     modal.addEventListener("click", (event) => { if (event.target === modal) closeCheckoutModal(); });
-    document.getElementById("checkout-discount").addEventListener("input", () => {
+    modal.querySelectorAll(".discount-mode-btn").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        setCheckoutDiscountMode(btn.dataset.mode);
+        const record = records.find((r) => r.id === modal.dataset.recordId);
+        if (record) renderCheckoutBreakdown(record);
+      })
+    );
+    document.getElementById("checkout-discount-value").addEventListener("input", () => {
       const record = records.find((r) => r.id === modal.dataset.recordId);
       if (record) renderCheckoutBreakdown(record);
     });
@@ -694,14 +763,16 @@
             paid_at: new Date().toISOString(),
             amount: grandTotal,
             overtime_amount: overtime.amount,
-            discount_amount: discount
+            discount_amount: discount.amount,
+            discount_type: discount.amount > 0 ? discount.mode : null,
+            discount_value: discount.amount > 0 ? discount.value : 0
           })
           .eq("id", recordId);
         btn.disabled = false;
         if (error) showToast("Could not record payment: " + error.message);
         else {
           closeCheckoutModal();
-          const extras = [overtime.amount > 0 ? `+${inr(overtime.amount)} overtime` : null, discount > 0 ? `−${inr(discount)} discount` : null].filter(Boolean).join(", ");
+          const extras = [overtime.amount > 0 ? `+${inr(overtime.amount)} overtime` : null, discount.amount > 0 ? `−${inr(discount.amount)} discount` : null].filter(Boolean).join(", ");
           showToast(`Payment recorded — ${method}${extras ? ` (${extras})` : ""}.`);
         }
       })
@@ -721,7 +792,7 @@
     return { total, foodTotal, duration, rate };
   }
 
-  function openEditModal(record, options = {}) {
+  function openEditModal(record) {
     editTarget = record;
     document.getElementById("edit-heading").textContent = `${record.customer_name || "—"} · ${record.status}`;
     document.getElementById("edit-station").value = record.station_name || "";
@@ -748,19 +819,6 @@
 
     recalcEditModal();
     document.getElementById("edit-session-modal").classList.add("show");
-
-    // "+ Food" quick action opens this same editor but jumps straight to
-    // the order section and focuses an empty row, since adding food is the
-    // most common reason to reopen an already-running session.
-    if (options.focusFood) {
-      setTimeout(() => {
-        const foodSection = document.getElementById("edit-food-rows");
-        foodSection.scrollIntoView({ behavior: "smooth", block: "center" });
-        const emptyRow = [...foodSection.querySelectorAll(".fr-row")].find((row) => !row.dataset.itemId);
-        const targetSelect = emptyRow ? emptyRow.querySelector(".fr-select") : foodSection.querySelector(".fr-select");
-        if (targetSelect) targetSelect.focus();
-      }, 50);
-    }
   }
 
   function closeEditModal() {
@@ -831,6 +889,72 @@
         overdueToasted.delete(editTarget.id);
         closeEditModal();
         showToast("Session updated.");
+      }
+    });
+  }
+
+  // ---------- quick add food (active sessions only) ----------
+  // A slimmed-down version of Edit that shows only the order, for the very
+  // common case of "the customer just ordered more food" — no need to wade
+  // through station/time/notes fields just to add a snack.
+  let quickFoodTarget = null;
+
+  function recalcQuickFood() {
+    if (!quickFoodTarget) return 0;
+    const timeCost = ((Number(quickFoodTarget.duration_minutes) || 0) / 60) * (Number(quickFoodTarget.rate) || 0);
+    const total = Math.round(timeCost + frTotal("quick-food-rows"));
+    document.getElementById("quick-food-new-total").textContent = inr(total);
+    return total;
+  }
+
+  function openQuickFoodModal(record) {
+    quickFoodTarget = record;
+    document.getElementById("quick-food-heading").textContent = record.customer_name || "—";
+    document.getElementById("quick-food-station").textContent = record.station_name || "";
+    document.getElementById("quick-food-message").textContent = "";
+
+    clearFrContainer("quick-food-rows");
+    document.getElementById("quick-food-menu-empty").classList.toggle("hidden", menuItems.length > 0);
+    (record.food_items || []).forEach((item) => addFrRow("quick-food-rows", item.id, item.qty));
+    if (!record.food_items || !record.food_items.length) addFrRow("quick-food-rows");
+
+    recalcQuickFood();
+    document.getElementById("quick-food-modal").classList.add("show");
+    setTimeout(() => {
+      const emptyRow = [...document.querySelectorAll("#quick-food-rows .fr-row")].find((row) => !row.dataset.itemId);
+      if (emptyRow) emptyRow.querySelector(".fr-select").focus();
+    }, 50);
+  }
+
+  function closeQuickFoodModal() {
+    document.getElementById("quick-food-modal").classList.remove("show");
+    quickFoodTarget = null;
+  }
+
+  function initQuickFoodModal() {
+    const modal = document.getElementById("quick-food-modal");
+    document.getElementById("quick-food-add-row").addEventListener("click", () => addFrRow("quick-food-rows"));
+    document.getElementById("quick-food-cancel").addEventListener("click", closeQuickFoodModal);
+    modal.addEventListener("click", (event) => { if (event.target === modal) closeQuickFoodModal(); });
+
+    document.getElementById("quick-food-save").addEventListener("click", async () => {
+      if (!quickFoodTarget) return;
+      const foodItems = collectFrItems("quick-food-rows");
+      const foodTotal = frTotal("quick-food-rows");
+      const timeCost = ((Number(quickFoodTarget.duration_minutes) || 0) / 60) * (Number(quickFoodTarget.rate) || 0);
+      const amount = Math.round(timeCost + foodTotal);
+
+      const btn = document.getElementById("quick-food-save");
+      btn.disabled = true;
+      const { error } = await window.sb.from("sessions").update({ food_items: foodItems, food_total: foodTotal, amount }).eq("id", quickFoodTarget.id);
+      btn.disabled = false;
+      const msgEl = document.getElementById("quick-food-message");
+      if (error) {
+        msgEl.textContent = "Could not save: " + error.message;
+        msgEl.className = "text-sm min-h-5 mt-2 text-red-300";
+      } else {
+        closeQuickFoodModal();
+        showToast("Food order updated.");
       }
     });
   }
@@ -1350,6 +1474,7 @@
     initSidebar();
     initCheckoutModal();
     initEditModal();
+    initQuickFoodModal();
     switchPage("page-overview");
 
     document.getElementById("booking-search").addEventListener("input", renderBookings);
@@ -1582,6 +1707,7 @@
     registerFoodContainer("edit-food-rows", recalcEditModal);
     registerFoodContainer("waiting-food-rows", recalcWaitingForm);
     registerFoodContainer("waiting-edit-food-rows", recalcWaitingEditModal);
+    registerFoodContainer("quick-food-rows", recalcQuickFood);
     addFrRow("food-order-list");
     addFrRow("waiting-food-rows");
     calculateAmount();

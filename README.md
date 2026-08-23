@@ -129,18 +129,30 @@ If a session runs past its end time, checkout now accounts for it automatically:
 
 Click **Edit** on any Active or Booked session card (Overview, Bookings, Billing, or Records) to open a full editor — station/table, which game(s) they're playing, customer name/phone, start time, end time, duration, hourly rate, the entire food/drinks order (change quantities or remove items, not just add more), and staff notes. Start/end/duration stay in sync the same way they do on New Session, and the date shown is the record's own original date, not necessarily today. Saving recalculates the bill from scratch and re-arms the 5-minute alert.
 
-Active sessions also get a **+ Food** button right next to Edit — it opens that same editor but jumps straight to the order section with a fresh item selector focused, for the common case of "the customer just ordered another round." Both buttons ultimately do the same save; +Food is just a shortcut to the part you actually came for.
+Active sessions also get a **+ Food** button right next to Edit — a much smaller popup with just the food/drinks order (add items, change quantities, remove things) and nothing else, for the common case of "the customer just ordered another round" without wading through station/time/notes fields to get there.
 
 This is intentionally only available for Active/Booked sessions — once a session is Completed (paid via Checkout), it's locked as a record of what was actually charged.
 
 ## Billing & revenue
 
 1. Start a session from **New Session** — station, customer, time, and any food/drinks ordered. Save it.
-2. While it's running, extend it by any number of minutes (type it into the small box next to **+ Add min** — defaults to 15, but 5, 20, 60, whatever the customer asks for works the same way) or open **Edit** to add/change food, adjust the time, or fix any other detail — see "Editing an active or booked session" below.
-3. When the customer's ready to leave, hit **Checkout** on the session card (visible on Overview, Billing, or Records) — a summary pops up with the time cost + food breakdown and the total due. If you're giving them a discount, enter a rupee amount in the **Discount** field right there — the total updates live as you type, and it can't take the bill below ₹0.
-4. Pick **Cash** or **Online** — this finalizes the session as *Completed*, stamps `paid_at`, and records which payment method was used (plus the discount, if any). That's the only way a session becomes Completed, so nothing gets marked paid without a payment method attached.
+2. While it's running:
+   - **+ Food** on the session card opens a small order-only popup — just the food/drinks list, nothing else — for the common case of "they ordered another round." **Edit** opens the full editor (station, time, game, notes, and food) for everything else.
+   - Extend it by any number of minutes: type into the small box next to **+ Add min** (defaults to 15, but 5, 20, 60 — whatever the customer asks for — works the same way).
+3. When the customer's ready to leave, hit **Checkout** — a summary pops up with the time cost + food breakdown and the total due. See "Discounts" below for how to apply one.
+4. Pick **Cash** or **Online** — this finalizes the session as *Completed*, stamps `paid_at`, and records the payment method (plus any discount and overtime). That's the only way a session becomes Completed, so nothing gets marked paid without a payment method attached.
 5. The **Billing** tab is just a live queue of every session still awaiting checkout, so a second staff member can pick up where another left off.
 6. The **Revenue** tab (admin-only) totals everything: overall, cash vs online split with bars, today's total, total discounts given, and a per-staff breakdown — useful for reconciling a shift or spotting who's driving sales.
+
+## Discounts
+
+Checkout has three ways to give a discount, picked with the icon buttons above the discount field — **they only ever apply to the play-time charge (duration × rate), never to food/drinks or the overtime charge**:
+
+- **Percent** — e.g. 10%, 15%. Capped at **20%** — typing more just clamps back down to 20 as you type.
+- **Amount (₹)** — a flat rupee amount off the play-time charge specifically (not the whole bill). Also capped at 20% *of that play-time charge* — e.g. on a ₹600 time charge, the most you can take off is ₹120, even if food pushes the total bill higher. Typing more clamps down to the cap.
+- **Minutes** — waives a number of minutes of play time outright (e.g. comp 30 minutes for a customer who played 120). No 20% cap here — the only limit is the session's actual duration, since you can't waive more time than was played.
+
+Switching between the three resets the field to 0 so a value typed for one mode doesn't carry over and get misread in another. The breakdown and total update live as you type, and whichever mode was used — plus the exact percent/amount/minutes entered — is saved on the record (`discount_type`, `discount_value`, `discount_amount`) for the books.
 
 ## Cafe content (CMS)
 

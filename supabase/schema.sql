@@ -51,6 +51,8 @@ create table if not exists public.sessions (
   amount numeric not null default 0,
   overtime_amount numeric not null default 0,
   discount_amount numeric not null default 0,
+  discount_type text check (discount_type in ('percent', 'amount', 'minutes')),
+  discount_value numeric not null default 0,
   status text not null default 'Active' check (status in ('Booked', 'Active', 'Completed', 'Cancelled')),
   notes text,
   notified_5min boolean not null default false,
@@ -77,6 +79,13 @@ alter table public.sessions add column if not exists paid_at timestamptz;
 alter table public.sessions add column if not exists game text;
 alter table public.sessions add column if not exists overtime_amount numeric not null default 0;
 alter table public.sessions add column if not exists discount_amount numeric not null default 0;
+alter table public.sessions add column if not exists discount_type text;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'sessions_discount_type_check') then
+    alter table public.sessions add constraint sessions_discount_type_check check (discount_type in ('percent', 'amount', 'minutes'));
+  end if;
+end $$;
+alter table public.sessions add column if not exists discount_value numeric not null default 0;
 
 create index if not exists sessions_status_idx on public.sessions (status);
 create index if not exists sessions_end_time_idx on public.sessions (end_time);
