@@ -383,6 +383,28 @@
     return { total, foodTotal, timeCost, duration, rate };
   }
 
+  // Per-compartment pricing: PS5 stations bill रु300/hr, PS4 रु250/hr by
+  // default — used both as the fallback when a station is added without an
+  // explicit rate, and to auto-fill New Session's rate field once the typed
+  // station name matches a configured station.
+  function defaultRateForType(type) {
+    return (type || "").trim().toUpperCase() === "PS4" ? 250 : 300;
+  }
+
+  // Looks up the typed station name against the configured stations list
+  // (exact, case-insensitive match) and, if found, fills in that station's
+  // own rate — so staff never have to remember or retype per-station
+  // pricing. Left alone once no exact match exists (e.g. still typing).
+  function autofillRateForStation(stationName) {
+    const match = stations.find((s) => s.name.trim().toLowerCase() === stationName.trim().toLowerCase());
+    if (!match || match.rate === undefined || match.rate === null) return;
+    const rateInput = document.getElementById("rate");
+    if (rateInput && Number(rateInput.value) !== Number(match.rate)) {
+      rateInput.value = match.rate;
+      calculateAmount();
+    }
+  }
+
   // Keeps the New Session form honest about station availability: hides
   // "Active" from the status dropdown (forcing Booked) whenever the typed
   // station already has a live session, and flags it as blocked if the
@@ -1294,7 +1316,7 @@
             <p class="font-semibold truncate">${station.name}</p>
             <span class="rounded-full px-2 py-0.5 text-xs font-bold whitespace-nowrap ${status.state === "occupied" ? "status-cancelled" : "status-active"}">${status.state === "occupied" ? "Occupied" : "Available"}</span>
           </div>
-          <p class="text-xs text-slate-500 mono mt-0.5">${station.type || ""}</p>
+          <p class="text-xs text-slate-500 mono mt-0.5">${station.type || ""} · ${inr(station.rate)}/hr</p>
           ${bodyHtml}
         </article>`;
       })
@@ -1312,7 +1334,7 @@
       const row = document.createElement("div");
       row.className = "rounded-lg border border-slate-700 bg-[#111722] px-3 py-2 text-sm";
       const editInputs = fields
-        .map((f) => `<input type="text" class="form-control mng-field flex-1" data-key="${f.key}" placeholder="${f.placeholder || ""}" value="${(item[f.key] || "").replace(/"/g, "&quot;")}">`)
+        .map((f) => `<input type="${f.type === "number" ? "number" : "text"}" ${f.type === "number" ? 'min="0"' : ""} class="form-control mng-field flex-1" data-key="${f.key}" placeholder="${f.placeholder || ""}" value="${String(item[f.key] ?? "").replace(/"/g, "&quot;")}">`)
         .join("");
       row.innerHTML = `
         <div class="view-mode flex items-center justify-between gap-2">
@@ -1343,7 +1365,10 @@
       });
       row.querySelector(".mng-save").addEventListener("click", async () => {
         const payload = {};
-        row.querySelectorAll(".mng-field").forEach((input) => { payload[input.dataset.key] = input.value.trim(); });
+        row.querySelectorAll(".mng-field").forEach((input) => {
+          const f = fields.find((x) => x.key === input.dataset.key);
+          payload[input.dataset.key] = f && f.type === "number" ? Math.max(0, Number(input.value) || 0) : input.value.trim();
+        });
         if (!payload.name) return showToast("Name can't be empty.");
         const { error } = await window.sb.from(dbTable).update(payload).eq("id", item.id);
         if (error) showToast(error.message.includes("duplicate") ? "That name is already taken." : "Could not save changes.");
@@ -1365,8 +1390,8 @@
       "station-manage-list",
       stations,
       "stations",
-      [{ key: "name", placeholder: "Name" }, { key: "type", placeholder: "Type" }],
-      (s) => `<span class="truncate">${s.name}</span><span class="text-xs text-slate-500 mono ml-1">${s.type || ""}</span>${!s.active ? '<span class="text-xs text-[#ff6875] ml-2">Inactive</span>' : ""}`
+      [{ key: "name", placeholder: "Name" }, { key: "type", placeholder: "Type" }, { key: "rate", placeholder: "Rate", type: "number" }],
+      (s) => `<span class="truncate">${s.name}</span><span class="text-xs text-slate-500 mono ml-1">${s.type || ""} · ${inr(s.rate)}/hr</span>${!s.active ? '<span class="text-xs text-[#ff6875] ml-2">Inactive</span>' : ""}`
     );
   }
 
@@ -1666,7 +1691,10 @@
       }
     });
 
-    document.getElementById("station-name").addEventListener("input", updateStationConflictUI);
+    document.getElementById("station-name").addEventListener("input", () => {
+      updateStationConflictUI();
+      autofillRateForStation(document.getElementById("station-name").value.trim());
+    });
     document.getElementById("start-time").addEventListener("input", () => {
       syncEndFromDuration("start-time", "duration-minutes", "end-time");
       updateStationConflictUI();
@@ -1794,17 +1822,27 @@
       }
     });
 
+    document.getElementById("station-form-type").addEventListener("input", () => {
+      const type = document.getElementById("station-form-type").value.trim();
+      if (type.toUpperCase() === "PS5" || type.toUpperCase() === "PS4") {
+        document.getElementById("station-form-rate").value = defaultRateForType(type);
+      }
+    });
+
     document.getElementById("station-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const name = document.getElementById("station-form-name").value.trim();
       const type = document.getElementById("station-form-type").value.trim() || "PS5";
+      const rateInput = document.getElementById("station-form-rate").value;
+      const rate = rateInput === "" ? defaultRateForType(type) : Math.max(0, Number(rateInput) || 0);
       if (!name) return;
       if (!sdkReady) return showToast("Supabase isn't connected yet.");
-      const { error } = await window.sb.from("stations").insert({ name, type, active: true });
+      const { error } = await window.sb.from("stations").insert({ name, type, rate, active: true });
       if (error) showToast(error.message.includes("duplicate") ? "A station with that name already exists." : "Could not add station.");
       else {
         event.target.reset();
         document.getElementById("station-form-type").value = "PS5";
+        document.getElementById("station-form-rate").value = 300;
         showToast("Station added.");
       }
     });

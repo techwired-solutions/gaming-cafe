@@ -135,9 +135,14 @@ create table if not exists public.stations (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
   type text not null default 'PS5',
+  rate numeric not null default 300,
   active boolean not null default true,
   created_at timestamptz not null default now()
 );
+
+-- Backward-compatible migration for databases created before per-station
+-- pricing existed — safe to re-run.
+alter table public.stations add column if not exists rate numeric not null default 300;
 
 -- ---------------------------------------------------------------------
 -- tables: the physical tables in the waiting room, managed from the

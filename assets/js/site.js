@@ -99,8 +99,16 @@
       fallback.classList.remove("hidden");
       return;
     }
+    // This section is Food & Drinks only — station add-ons (e.g. "Extra
+    // Joystick") are billable line items in the dashboard, not menu food,
+    // so they're priced on the Pricing section instead of listed here.
+    const foodItems = data.filter((item) => item.category !== "Add-ons");
+    if (!foodItems.length) {
+      fallback.classList.remove("hidden");
+      return;
+    }
     fallback.classList.add("hidden");
-    grid.innerHTML = data
+    grid.innerHTML = foodItems
       .map(
         (item) => `
       <div class="panel rounded-xl p-4 flex items-center justify-between gap-3">

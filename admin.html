@@ -363,11 +363,14 @@
           <div class="panel rounded-2xl p-5 admin-only">
             <p class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">SETUP</p>
             <h2 class="font-bold mt-1 text-xl mb-4">Manage stations</h2>
-            <form id="station-form" class="grid grid-cols-5 gap-2 mb-4">
-              <div class="col-span-3"><label class="block text-xs text-slate-400 mb-1" for="station-form-name">Station name</label><input id="station-form-name" type="text" class="form-control" placeholder="PS5 - Station 1"></div>
-              <div class="col-span-2"><label class="block text-xs text-slate-400 mb-1" for="station-form-type">Type</label><input id="station-form-type" type="text" class="form-control" placeholder="PS5" value="PS5"></div>
-              <button type="submit" class="col-span-5 mt-1 rounded-xl py-3 font-bold" style="background:#d8ff45;color:#10141e;"><i data-lucide="plus" width="16" height="16" class="inline mr-1"></i>Add station</button>
+            <form id="station-form" class="grid grid-cols-4 gap-2 mb-4">
+              <div class="col-span-2"><label class="block text-xs text-slate-400 mb-1" for="station-form-name">Station name</label><input id="station-form-name" type="text" class="form-control" placeholder="PS5 - Station 1"></div>
+              <div><label class="block text-xs text-slate-400 mb-1" for="station-form-type">Type</label><input id="station-form-type" type="text" class="form-control" placeholder="PS5" value="PS5" list="station-type-list"></div>
+              <div><label class="block text-xs text-slate-400 mb-1" for="station-form-rate">Rate (रु/hr)</label><input id="station-form-rate" type="number" min="0" value="300" class="form-control"></div>
+              <button type="submit" class="col-span-4 mt-1 rounded-xl py-3 font-bold" style="background:#d8ff45;color:#10141e;"><i data-lucide="plus" width="16" height="16" class="inline mr-1"></i>Add station</button>
             </form>
+            <datalist id="station-type-list"><option value="PS5"></option><option value="PS4"></option></datalist>
+            <p class="text-xs text-slate-500 mb-3">Typing "PS5" or "PS4" as the type auto-fills the usual rate for that console — still editable per station.</p>
             <div id="station-manage-list" class="space-y-2"></div>
           </div>
         </section>

@@ -106,11 +106,13 @@ For walk-ins when every station's busy:
 3. When a station frees up, hit **Start session** on their card — this carries their name, phone, and food order straight into **New Session**, already filled in. Staff just pick a station and hit Save. The waiting-list entry is automatically marked "Seated" the moment that session is actually saved (not the moment you click Start session, so nothing's lost if you change your mind on the way).
 4. **Edit** lets you fix a phone number or add/remove food while they're still waiting; **Remove** takes them off the queue (e.g. they left, or a no-show).
 
-## Station board
+## Station board & per-compartment pricing
 
-The **Stations** tab shows every station and whether it's free right now — for answering "how long's the wait?" in person or on the phone. Occupied stations show who's on them, what they're playing, and a live countdown (turning red once overdue, same as everywhere else); free stations show "Available now" plus the next booking on that station if there is one.
+Pricing is per compartment, not per player — a station's hourly rate is charged whether one or two people are playing in it. Each station has its own configurable rate, defaulting to **रु 300/hr for PS5** and **रु 250/hr for PS4** (typing "PS5" or "PS4" as a station's type auto-fills that default, still editable per station for e.g. a premium or discounted booth). Want a 2-player session? Add the **"Extra Joystick (2-Player)"** menu item (रु 50) to the order like any other food/drink line item — it's a Menu & Pricing item under the "Add-ons" category, so it bills through checkout the same way but is left out of the public website's Food & Drinks list.
 
-Admins additionally see a **Manage stations** panel on the same page to add, rename, deactivate, or delete stations — click **Edit** on any station to change its name or type inline. Station names you add here appear as autocomplete suggestions on New Session and Edit (not a hard-locked dropdown — an ad-hoc entry like "Counter" for a food-only order still works), which is what lets the board reliably match a running session to a station.
+The **Stations** tab shows every station and whether it's free right now — for answering "how long's the wait?" in person or on the phone. Occupied stations show who's on them, what they're playing, and a live countdown (turning red once overdue, same as everywhere else); free stations show "Available now" plus the next booking on that station if there is one. Each card also shows the station's type and hourly rate.
+
+Admins additionally see a **Manage stations** panel on the same page to add, rename, deactivate, or delete stations, plus set each one's rate — click **Edit** on any station to change its name, type, or rate inline. Station names you add here appear as autocomplete suggestions on New Session and Edit (not a hard-locked dropdown — an ad-hoc entry like "Counter" for a food-only order still works), which is what lets the board reliably match a running session to a station; typing a known station's exact name into New Session also auto-fills that station's configured rate.
 
 ## Waiting-room tables
 
