@@ -98,6 +98,32 @@
     @media (min-width: 900px) { .dashboard-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
     .revenue-bar-track { background: #111722; border-radius: 6px; overflow: hidden; height: 10px; }
     .revenue-bar-fill { height: 100%; background: var(--acid); }
+
+    /* ---- Thermal Receipt Print Styles (58mm / 80mm roll) ---- */
+    #thermal-receipt-area { display: none; }
+    @media print {
+      body * { visibility: hidden !important; }
+      #thermal-receipt-area, #thermal-receipt-area * { visibility: visible !important; }
+      #thermal-receipt-area {
+        display: block !important;
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 80mm !important;
+        max-width: 100% !important;
+        margin: 0 auto !important;
+        padding: 4mm 2mm !important;
+        color: #000 !important;
+        background: #fff !important;
+        font-family: "Space Mono", monospace, Courier, monospace !important;
+        font-size: 11px !important;
+        line-height: 1.35 !important;
+      }
+      @page {
+        size: 80mm auto;
+        margin: 2mm;
+      }
+    }
   </style>
 </head>
 <body class="bg-app">
@@ -144,6 +170,8 @@
         <a href="#" data-page="page-records" class="sidebar-link"><i data-lucide="archive" width="16" height="16"></i>Records</a>
         <p class="sidebar-group-label admin-only">Admin</p>
         <a href="#" data-page="page-revenue" class="sidebar-link admin-only"><i data-lucide="banknote" width="16" height="16"></i>Revenue</a>
+        <a href="#" data-page="page-expenses" class="sidebar-link admin-only"><i data-lucide="receipt" width="16" height="16"></i>Expenses &amp; Capital</a>
+        <a href="#" data-page="page-notices" class="sidebar-link admin-only"><i data-lucide="megaphone" width="16" height="16"></i>Notices &amp; Events</a>
         <a href="#" data-page="page-menu" class="sidebar-link admin-only"><i data-lucide="utensils" width="16" height="16"></i>Menu &amp; pricing</a>
         <a href="#" data-page="page-content" class="sidebar-link admin-only"><i data-lucide="pencil-line" width="16" height="16"></i>Cafe content</a>
         <a href="#" data-page="page-staff" class="sidebar-link admin-only"><i data-lucide="users" width="16" height="16"></i>Staff</a>
@@ -413,6 +441,258 @@
           </div>
         </section>
 
+        <!-- ===================== EXPENSES & CAPITAL (admin) ===================== -->
+        <section id="page-expenses" class="page-view">
+          <!-- Top Overview KPI Cards -->
+          <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <article class="panel rounded-2xl p-4 border-l-4 border-l-[#d8ff45]">
+              <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Initial Seed Capital</span>
+                <i data-lucide="shield-check" class="text-[#d8ff45]" width="18" height="18"></i>
+              </div>
+              <p id="kpi-initial-capital" class="mono text-2xl font-bold mt-2 text-white">रु 15,00,000</p>
+              <p class="text-xs text-slate-400 mt-1">Remaining fund: <span id="kpi-remaining-capital" class="mono font-bold text-[#d8ff45]">रु 15,00,000</span></p>
+            </article>
+
+            <article class="panel rounded-2xl p-4 border-l-4 border-l-amber-400">
+              <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-wider text-amber-300 font-semibold">Partner Money Owed</span>
+                <i data-lucide="hand-coins" class="text-amber-300" width="18" height="18"></i>
+              </div>
+              <p id="kpi-partner-pending" class="mono text-2xl font-bold mt-2 text-amber-300">रु 0</p>
+              <p class="text-xs text-slate-400 mt-1">Total personal spending: <span id="kpi-partner-total" class="mono">रु 0</span></p>
+            </article>
+
+            <article class="panel rounded-2xl p-4 border-l-4 border-l-sky-400">
+              <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-wider text-sky-300 font-semibold">Initial Setup &amp; Build</span>
+                <i data-lucide="hammer" class="text-sky-300" width="18" height="18"></i>
+              </div>
+              <p id="kpi-setup-expenses" class="mono text-2xl font-bold mt-2 text-sky-300">रु 0</p>
+              <p class="text-xs text-slate-400 mt-1">TVs, PS5, Sofas, Machines, Build</p>
+            </article>
+
+            <article class="panel rounded-2xl p-4 border-l-4 border-l-purple-400">
+              <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-wider text-purple-300 font-semibold">Cafe Revenue Expenses</span>
+                <i data-lucide="receipt" class="text-purple-300" width="18" height="18"></i>
+              </div>
+              <p id="kpi-revenue-expenses" class="mono text-2xl font-bold mt-2 text-purple-300">रु 0</p>
+              <p class="text-xs text-slate-400 mt-1">Reimbursed to partners: <span id="kpi-reimbursed-total" class="mono text-emerald-400">रु 0</span></p>
+            </article>
+          </div>
+
+          <!-- Partner Reimbursement Summary Bar -->
+          <div class="panel rounded-2xl p-5 mb-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div>
+                <p class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">PARTNER BALANCES</p>
+                <h3 class="font-bold text-lg mt-0.5">Partner Out-of-Pocket Reimbursements</h3>
+                <p class="text-xs text-slate-400">Keep record of partner personal spending so it can be cleanly returned from cafe revenue.</p>
+              </div>
+            </div>
+            <div id="partner-summary-list" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+            <p id="partner-summary-empty" class="text-sm text-slate-400">No partner personal expenses recorded yet.</p>
+          </div>
+
+          <!-- Add Expense Form -->
+          <div class="panel rounded-2xl p-5 mb-6">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <p class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">RECORD AN EXPENSE</p>
+                <h3 class="font-bold text-lg mt-0.5">New Expense Entry</h3>
+              </div>
+              <span class="text-xs text-slate-500">Auto-calculated</span>
+            </div>
+
+            <!-- Quick presets chips -->
+            <div class="mb-4">
+              <span class="text-xs text-slate-400 block mb-1.5 font-medium">Quick suggestions for initial build &amp; cafe items:</span>
+              <div class="flex flex-wrap gap-1.5" id="expense-quick-chips">
+                <button type="button" class="expense-chip rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45]" data-title="55-inch 4K TV" data-cat="TVs &amp; Consoles">📺 55" 4K TV</button>
+                <button type="button" class="expense-chip rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45]" data-title="PS5 Disc Console" data-cat="TVs &amp; Consoles">🎮 PS5 Console</button>
+                <button type="button" class="expense-chip rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45]" data-title="Custom Gaming Sofa" data-cat="Furniture &amp; Seating">🛋️ Gaming Sofa</button>
+                <button type="button" class="expense-chip rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45]" data-title="Commercial Espresso Machine" data-cat="Kitchen &amp; Cafe Appliances">☕ Espresso Machine</button>
+                <button type="button" class="expense-chip rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45]" data-title="Deep Freeze Refrigerator" data-cat="Kitchen &amp; Cafe Appliances">❄️ Refrigerator</button>
+                <button type="button" class="expense-chip rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45]" data-title="Microwave / Baking Oven" data-cat="Kitchen &amp; Cafe Appliances">🍳 Oven</button>
+                <button type="button" class="expense-chip rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45]" data-title="RGB Neon &amp; Lighting" data-cat="Lighting, Design &amp; Decor">💡 Lighting &amp; Decor</button>
+                <button type="button" class="expense-chip rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45]" data-title="Cabin Carpentry &amp; Partitions" data-cat="Initial Setup &amp; Build">🔨 Initial Civil Build</button>
+                <button type="button" class="expense-chip rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45]" data-title="Coffee Beans &amp; Milk Supplies" data-cat="Cafe Stock &amp; Inventory">📦 Daily Stock</button>
+              </div>
+            </div>
+
+            <form id="expense-form" class="space-y-4">
+              <div class="grid sm:grid-cols-3 gap-3">
+                <div class="sm:col-span-2">
+                  <label class="block text-xs text-slate-400 mb-1" for="expense-title">Expense item / description *</label>
+                  <input id="expense-title" type="text" class="form-control" placeholder="e.g. 55-inch 4K TV" required>
+                </div>
+                <div>
+                  <label class="block text-xs text-slate-400 mb-1" for="expense-category">Category *</label>
+                  <select id="expense-category" class="form-control" required>
+                    <option value="Initial Setup &amp; Build">Initial Setup &amp; Build</option>
+                    <option value="TVs &amp; Consoles">TVs &amp; Consoles (PS5/TV)</option>
+                    <option value="Furniture &amp; Seating">Furniture &amp; Seating (Sofa/Tables)</option>
+                    <option value="Kitchen &amp; Cafe Appliances">Kitchen &amp; Appliances (Coffee, Fridge, Oven)</option>
+                    <option value="Lighting, Design &amp; Decor">Lighting, Design &amp; Decor</option>
+                    <option value="Cafe Stock &amp; Inventory">Cafe Stock &amp; Supplies</option>
+                    <option value="Rent &amp; Utilities">Rent &amp; Utilities</option>
+                    <option value="Repairs &amp; Maintenance">Repairs &amp; Maintenance</option>
+                    <option value="Marketing &amp; Signage">Marketing &amp; Signage</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="grid sm:grid-cols-3 gap-3">
+                <div>
+                  <label class="block text-xs text-slate-400 mb-1" for="expense-amount">Amount (रु) *</label>
+                  <input id="expense-amount" type="number" min="0" step="any" class="form-control" placeholder="0" required>
+                </div>
+                <div>
+                  <label class="block text-xs text-slate-400 mb-1" for="expense-source">Paid From (Funding Source) *</label>
+                  <select id="expense-source" class="form-control" required>
+                    <option value="partner_personal">Partner Personal Money (Return from revenue)</option>
+                    <option value="initial_capital">Initial Capital Fund (15 Lakhs Seed Pool)</option>
+                    <option value="cafe_revenue">ChillPill Cafe Revenue (Operating Cost)</option>
+                  </select>
+                </div>
+                <div id="expense-partner-wrap">
+                  <label class="block text-xs text-slate-400 mb-1" for="expense-partner-name">Partner Name *</label>
+                  <input id="expense-partner-name" type="text" class="form-control" placeholder="e.g. Partner 1 or Partner Name">
+                </div>
+              </div>
+
+              <div class="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs text-slate-400 mb-1" for="expense-date">Date &amp; Time</label>
+                  <input id="expense-date" type="datetime-local" class="form-control">
+                </div>
+                <div>
+                  <label class="block text-xs text-slate-400 mb-1" for="expense-notes">Notes / Receipt reference</label>
+                  <input id="expense-notes" type="text" class="form-control" placeholder="Bill no, vendor, or notes">
+                </div>
+              </div>
+
+              <button type="submit" class="w-full rounded-xl py-3 font-bold flex items-center justify-center gap-2" style="background:#d8ff45;color:#10141e;">
+                <i data-lucide="plus-circle" width="16" height="16"></i> Record Expense
+              </button>
+            </form>
+          </div>
+
+          <!-- Expense Records Table & Filters -->
+          <div class="panel rounded-2xl p-5">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 class="font-bold text-lg">Expense Log</h3>
+                <p class="text-xs text-slate-400">All recorded expenses across initial capital, partners, and cafe revenue.</p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <select id="expense-filter-source" class="form-control text-xs py-1.5 px-3 min-h-0 w-auto">
+                  <option value="all">All Funding Sources</option>
+                  <option value="partner_personal">Partner Personal (All)</option>
+                  <option value="partner_unreimbursed">Partner (Pending Return)</option>
+                  <option value="partner_reimbursed">Partner (Reimbursed)</option>
+                  <option value="initial_capital">Initial Capital (15L)</option>
+                  <option value="cafe_revenue">Cafe Revenue</option>
+                </select>
+                <select id="expense-filter-category" class="form-control text-xs py-1.5 px-3 min-h-0 w-auto">
+                  <option value="all">All Categories</option>
+                  <option value="Initial Setup &amp; Build">Initial Setup &amp; Build</option>
+                  <option value="TVs &amp; Consoles">TVs &amp; Consoles</option>
+                  <option value="Furniture &amp; Seating">Furniture &amp; Seating</option>
+                  <option value="Kitchen &amp; Cafe Appliances">Kitchen &amp; Appliances</option>
+                  <option value="Lighting, Design &amp; Decor">Lighting &amp; Decor</option>
+                  <option value="Cafe Stock &amp; Inventory">Cafe Stock</option>
+                  <option value="Rent &amp; Utilities">Rent &amp; Utilities</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="expenses-table-wrap" class="overflow-x-auto">
+              <table class="w-full text-left text-xs">
+                <thead>
+                  <tr class="border-b border-slate-700 text-slate-400 uppercase tracking-wider text-[10px]">
+                    <th class="py-2.5 px-3">Date</th>
+                    <th class="py-2.5 px-3">Item / Description</th>
+                    <th class="py-2.5 px-3">Category</th>
+                    <th class="py-2.5 px-3">Paid From / By</th>
+                    <th class="py-2.5 px-3 text-right">Amount</th>
+                    <th class="py-2.5 px-3 text-center">Status</th>
+                    <th class="py-2.5 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="expenses-tbody" class="divide-y divide-slate-800"></tbody>
+              </table>
+              <p id="expenses-empty" class="text-sm text-slate-400 py-6 text-center">No expenses recorded yet.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== NOTICES & EVENTS (admin) ===================== -->
+        <section id="page-notices" class="page-view">
+          <div class="grid md:grid-cols-2 gap-5">
+            <!-- Add Notice Form -->
+            <div class="panel rounded-2xl p-5">
+              <p class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">WEBSITE ANNOUNCEMENTS</p>
+              <h3 class="font-bold text-lg mt-0.5 mb-1">Add Notice or Event</h3>
+              <p class="text-xs text-slate-400 mb-4">Create pop-ups or banners for upcoming tournaments, openings, and cafe events.</p>
+
+              <form id="admin-notice-form" class="space-y-3">
+                <div>
+                  <label class="block text-xs text-slate-400 mb-1" for="notice-input-title">Notice Title *</label>
+                  <input id="notice-input-title" type="text" class="form-control" placeholder="e.g. Grand Opening Sept 19!" required>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-xs text-slate-400 mb-1" for="notice-input-badge">Badge Label</label>
+                    <input id="notice-input-badge" type="text" class="form-control" placeholder="e.g. Announcement, Event">
+                  </div>
+                  <div>
+                    <label class="block text-xs text-slate-400 mb-1" for="notice-input-image">Image URL (optional)</label>
+                    <input id="notice-input-image" type="url" class="form-control" placeholder="https://...">
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs text-slate-400 mb-1" for="notice-input-message">Notice Details / Content *</label>
+                  <textarea id="notice-input-message" class="form-control min-h-[90px]" rows="3" placeholder="Details about the event, tournament, or opening..." required></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-xs text-slate-400 mb-1" for="notice-input-btn-text">Button Text (optional)</label>
+                    <input id="notice-input-btn-text" type="text" class="form-control" placeholder="e.g. Inquire on WhatsApp">
+                  </div>
+                  <div>
+                    <label class="block text-xs text-slate-400 mb-1" for="notice-input-btn-url">Button URL (optional)</label>
+                    <input id="notice-input-btn-url" type="text" class="form-control" placeholder="https://wa.me/...">
+                  </div>
+                </div>
+                <div class="flex items-center gap-5 pt-1">
+                  <label class="inline-flex items-center gap-2 text-xs font-medium text-slate-300 cursor-pointer">
+                    <input id="notice-input-popup" type="checkbox" checked class="rounded border-slate-700">
+                    Show as website pop-up
+                  </label>
+                  <label class="inline-flex items-center gap-2 text-xs font-medium text-slate-300 cursor-pointer">
+                    <input id="notice-input-active" type="checkbox" checked class="rounded border-slate-700">
+                    Active
+                  </label>
+                </div>
+                <button type="submit" class="w-full rounded-xl py-3 font-bold flex items-center justify-center gap-2" style="background:#d8ff45;color:#10141e;">
+                  <i data-lucide="megaphone" width="16" height="16"></i> Publish Notice
+                </button>
+              </form>
+            </div>
+
+            <!-- Current Notices List -->
+            <div class="panel rounded-2xl p-5">
+              <h3 class="font-bold text-lg mb-3">Published Notices</h3>
+              <div id="admin-notices-list" class="space-y-3 max-h-[550px] overflow-y-auto"></div>
+              <p id="admin-notices-empty" class="text-sm text-slate-400">No notices published yet.</p>
+            </div>
+          </div>
+        </section>
+
         <!-- ===================== MENU & PRICING (admin) ===================== -->
         <section id="page-menu" class="page-view">
           <div class="grid md:grid-cols-2 gap-5">
@@ -425,11 +705,26 @@
               <p class="text-xs text-slate-500 mt-2">This is the default rate that pre-fills New Session — it can still be overridden per session.</p>
             </div>
             <div class="panel rounded-2xl p-5">
-              <h3 class="font-semibold mb-3 text-lg">Add a menu item</h3>
-              <form id="menu-form" class="grid grid-cols-5 gap-2">
-                <div class="col-span-3"><label class="block text-xs text-slate-400 mb-1" for="menu-name">Item name</label><input id="menu-name" type="text" class="form-control"></div>
-                <div class="col-span-2"><label class="block text-xs text-slate-400 mb-1" for="menu-price">Price (रु)</label><input id="menu-price" type="number" min="0" class="form-control"></div>
-                <button type="submit" class="col-span-5 mt-1 rounded-xl py-3 font-bold" style="background:#d8ff45;color:#10141e;"><i data-lucide="plus" width="16" height="16" class="inline mr-1"></i>Add to menu</button>
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="font-semibold text-lg">Add a menu item</h3>
+                <button id="seed-menu-btn" type="button" class="text-xs font-bold text-[#d8ff45] border border-[#d8ff45]/40 rounded-lg px-2.5 py-1 hover:bg-[#d8ff45]/10">
+                  <i data-lucide="sparkles" width="12" height="12" class="inline mr-1"></i>Seed Full Cafe Menu
+                </button>
+              </div>
+              <form id="menu-form" class="grid grid-cols-6 gap-2">
+                <div class="col-span-3"><label class="block text-xs text-slate-400 mb-1" for="menu-name">Item name</label><input id="menu-name" type="text" class="form-control" placeholder="e.g. Ice Americano" required></div>
+                <div class="col-span-3">
+                  <label class="block text-xs text-slate-400 mb-1" for="menu-category">Category</label>
+                  <select id="menu-category" class="form-control">
+                    <option value="Specialty Coffee (Hot &amp; Cold)">Coffee (Hot/Cold)</option>
+                    <option value="Chilled Drinks &amp; Refreshers">Cold Drinks &amp; Beverages</option>
+                    <option value="Bakery &amp; Desserts">Bakery &amp; Desserts</option>
+                    <option value="Hot Snacks &amp; Bites">Hot Snacks &amp; Bites</option>
+                    <option value="Add-ons">Station Add-ons</option>
+                  </select>
+                </div>
+                <div class="col-span-2"><label class="block text-xs text-slate-400 mb-1" for="menu-price">Price (रु)</label><input id="menu-price" type="number" min="0" class="form-control" required></div>
+                <button type="submit" class="col-span-4 mt-auto rounded-xl py-3 font-bold" style="background:#d8ff45;color:#10141e;"><i data-lucide="plus" width="16" height="16" class="inline mr-1"></i>Add to menu</button>
               </form>
             </div>
           </div>
@@ -443,7 +738,7 @@
         <section id="page-content" class="page-view">
           <div class="panel rounded-2xl p-5">
             <p class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">CONTENT MANAGEMENT</p>
-            <h2 class="font-bold mt-1 text-xl mb-1">Cafe content</h2>
+            <h2 class="font-bold mt-1 text-xl mb-1">Cafe content &amp; settings</h2>
             <p class="text-sm text-slate-400 mb-5">Edits here update the public website live — no code changes or redeploys needed.</p>
             <form id="content-form" class="grid sm:grid-cols-2 gap-4">
               <div><label class="block text-sm font-medium mb-2" for="cms-name">Cafe name</label><input id="cms-name" class="form-control" type="text"></div>
@@ -451,7 +746,10 @@
               <div><label class="block text-sm font-medium mb-2" for="cms-location">Location (short)</label><input id="cms-location" class="form-control" type="text"></div>
               <div><label class="block text-sm font-medium mb-2" for="cms-address">Full address</label><input id="cms-address" class="form-control" type="text"></div>
               <div><label class="block text-sm font-medium mb-2" for="cms-hours">Opening hours</label><input id="cms-hours" class="form-control" type="text"></div>
-              <div><label class="block text-sm font-medium mb-2" for="cms-whatsapp">WhatsApp number</label><input id="cms-whatsapp" class="form-control" type="text" placeholder="9779800000000"></div>
+              <div><label class="block text-sm font-medium mb-2" for="cms-whatsapp">WhatsApp number</label><input id="cms-whatsapp" class="form-control" type="text" placeholder="9779765130636"></div>
+              <div><label class="block text-sm font-medium mb-2" for="cms-pan">PAN Number</label><input id="cms-pan" class="form-control" type="text" placeholder="625001462"></div>
+              <div><label class="block text-sm font-medium mb-2" for="cms-capital">Initial Setup Capital (रु)</label><input id="cms-capital" class="form-control" type="number" placeholder="1500000"></div>
+              <div class="sm:col-span-2"><label class="block text-sm font-medium mb-2" for="cms-maps">Google Maps Link</label><input id="cms-maps" class="form-control" type="url" placeholder="https://maps.app.goo.gl/uBQnASzc9W2igYmh6"></div>
               <div class="sm:col-span-2"><label class="block text-sm font-medium mb-2" for="cms-whatsapp-message">Default WhatsApp message</label><textarea id="cms-whatsapp-message" class="form-control min-h-[70px]" rows="2"></textarea></div>
               <button type="submit" class="sm:col-span-2 rounded-xl py-3 font-bold" style="background:#d8ff45;color:#10141e;"><i data-lucide="save" width="16" height="16" class="inline mr-2"></i>Save content</button>
             </form>
@@ -509,16 +807,24 @@
         <input id="checkout-discount-value" type="number" min="0" value="0" class="form-control">
         <p id="checkout-discount-cap" class="text-[11px] text-slate-500 mt-1"></p>
       </div>
-      <p class="text-sm font-medium mt-4 mb-2">How did they pay?</p>
-      <div class="grid grid-cols-2 gap-3">
+      <p class="text-sm font-medium mt-4 mb-2">Record Payment &amp; Billing</p>
+      <div class="grid grid-cols-2 gap-3 mb-2.5">
         <button type="button" class="checkout-pay-btn rounded-xl py-3 font-bold flex flex-col items-center gap-1" data-method="Cash" style="background:#1c2333;border:1px solid #405069;">
-          <i data-lucide="wallet" width="20" height="20"></i>Cash
+          <i data-lucide="wallet" width="18" height="18"></i>Cash
         </button>
         <button type="button" class="checkout-pay-btn rounded-xl py-3 font-bold flex flex-col items-center gap-1" data-method="Online" style="background:#1c2333;border:1px solid #405069;">
-          <i data-lucide="credit-card" width="20" height="20"></i>Online
+          <i data-lucide="credit-card" width="18" height="18"></i>Online
         </button>
       </div>
-      <button id="checkout-cancel" type="button" class="w-full mt-4 rounded-xl border border-slate-600 py-2.5 text-sm text-slate-300">Cancel</button>
+      <div class="space-y-2">
+        <button id="checkout-pay-print" type="button" class="w-full rounded-xl py-3 font-bold flex items-center justify-center gap-2 hover:brightness-110 transition" style="background:#d8ff45;color:#10141e;">
+          <i data-lucide="printer" width="18" height="18"></i> Pay &amp; Print PAN Bill
+        </button>
+        <button id="checkout-print-only" type="button" class="w-full rounded-xl py-2 border border-slate-600 text-xs font-semibold text-slate-300 hover:text-white flex items-center justify-center gap-1.5">
+          <i data-lucide="receipt" width="14" height="14"></i> Print Bill Preview
+        </button>
+      </div>
+      <button id="checkout-cancel" type="button" class="w-full mt-3 rounded-xl border border-slate-700 py-2.5 text-xs text-slate-400">Cancel</button>
     </div>
   </div>
 
@@ -675,6 +981,9 @@
           </div>
           <button type="button" class="open-checkout rounded-lg bg-[#d8ff45] px-2 py-1.5 text-xs font-bold text-[#10141e]">Checkout</button>
         </div>
+        <button type="button" class="print-bill-btn rounded-lg border border-slate-600 px-2 py-1.5 text-xs font-bold text-slate-300 hover:text-white hover:border-[#d8ff45] flex items-center justify-center gap-1.5">
+          <i data-lucide="printer" width="13" height="13"></i> Print PAN Bill (625001462)
+        </button>
       </div>
       <div class="mt-4 pt-3 border-t border-slate-700 flex items-center justify-between gap-2">
         <span class="record-created text-xs text-slate-500"></span>
@@ -688,6 +997,64 @@
       </div>
     </article>
   </template>
+
+  <!-- ===================== THERMAL RECEIPT (Mini Billing Machine ESC/POS 58mm/80mm) ===================== -->
+  <div id="thermal-receipt-area">
+    <div style="text-align:center; margin-bottom: 5px;">
+      <div style="font-size: 15px; font-weight: bold; letter-spacing: 0.5px;">CHILLPILL GAMING CAFE</div>
+      <div style="font-size: 10px;">Budhanilkantha, Kathmandu, Nepal</div>
+      <div style="font-size: 11px; font-weight: bold; margin-top: 2px;">PAN No: 625001462</div>
+      <div style="font-size: 10px;">Tel / WA: +977 9765130636</div>
+    </div>
+    <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 4px 0; margin: 4px 0; font-size: 10px;">
+      <div style="display:flex; justify-content:space-between;">
+        <span>Bill No: <strong id="receipt-bill-no">CP-0000</strong></span>
+        <span id="receipt-date">2026-09-09</span>
+      </div>
+      <div style="display:flex; justify-content:space-between;">
+        <span>Time: <span id="receipt-time">10:30 AM</span></span>
+        <span>Staff: <span id="receipt-staff">Admin</span></span>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-top:2px;">
+        <span>Customer: <strong id="receipt-customer">Guest</strong></span>
+        <span>Phone: <span id="receipt-phone">—</span></span>
+      </div>
+      <div>Station: <strong id="receipt-station">PS5 - Station 1</strong></div>
+    </div>
+    <table style="width:100%; font-size: 10px; border-collapse: collapse; margin: 4px 0;">
+      <thead>
+        <tr style="border-bottom: 1px solid #000; text-align: left;">
+          <th style="padding: 2px 0;">Particulars</th>
+          <th style="text-align: center; padding: 2px 0;">Qty</th>
+          <th style="text-align: right; padding: 2px 0;">Amount</th>
+        </tr>
+      </thead>
+      <tbody id="receipt-items-body"></tbody>
+    </table>
+    <div style="border-top: 1px dashed #000; padding-top: 4px; font-size: 10px;">
+      <div style="display:flex; justify-content:space-between;">
+        <span>Subtotal:</span>
+        <span id="receipt-subtotal">रु 0</span>
+      </div>
+      <div id="receipt-discount-row" style="display:flex; justify-content:space-between;">
+        <span>Discount:</span>
+        <span id="receipt-discount">- रु 0</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size: 13px; font-weight: bold; border-top: 1px solid #000; margin-top: 3px; padding-top: 3px;">
+        <span>TOTAL AMOUNT:</span>
+        <span id="receipt-total">रु 0</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-top: 2px; font-size: 10px;">
+        <span>Payment Method:</span>
+        <strong id="receipt-payment-method">Cash</strong>
+      </div>
+    </div>
+    <div style="text-align:center; margin-top: 8px; border-top: 1px dashed #000; padding-top: 5px; font-size: 9px;">
+      <div>Thank you for visiting ChillPill!</div>
+      <div>Level Up Your Downtime 🎮</div>
+      <div style="margin-top: 2px;">www.chillpill.com.np</div>
+    </div>
+  </div>
 
   <script src="assets/js/config.js"></script>
   <script src="assets/js/config.local.js" onerror="console.info('[ChillPill] No config.local.js override found — using assets/js/config.js placeholders.')"></script>

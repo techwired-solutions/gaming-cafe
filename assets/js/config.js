@@ -23,15 +23,22 @@ window.APP_CONFIG = {
   CAFE_TAGLINE: "Console gaming, snacks & good vibes.",
   CAFE_LOCATION: "Budhanilkantha, Kathmandu",
   CAFE_ADDRESS_LINE: "Budhanilkantha, Kathmandu, Nepal",
-  OPENING_HOURS: "10:00 AM – 11:00 PM · Every day",
+  OPENING_HOURS: "7:00 AM – 8:00 PM · Every day",
 
-  // --- WhatsApp booking (placeholder — overridden by config.local.js / env vars) ---
-  // Country code + number, digits only, no + or spaces (e.g. 9779812345678).
-  WHATSAPP_NUMBER: "PLACEHOLDER_WHATSAPP_NUMBER",
+  // --- WhatsApp booking ---
+  // Official number: +977 9765130636
+  WHATSAPP_NUMBER: "9779765130636",
   WHATSAPP_DEFAULT_MESSAGE: "Hi! I'd like to book a PlayStation slot at ChillPill Gaming Cafe.",
 
-  // Dashboard access is per-staff now (Staff tab in the dashboard creates
-  // individual logins) — there's no shared dashboard password anymore.
+  // --- Business & Tax Registration ---
+  PAN_NUMBER: "625001462",
+
+  // --- Financial & Capital Base ---
+  INITIAL_CAPITAL: 1500000, // NPR 15 Lakhs
+
+  // --- Location & Google Maps ---
+  GOOGLE_MAPS_URL: "https://maps.app.goo.gl/uBQnASzc9W2igYmh6",
+  GOOGLE_MAPS_IFRAME: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3530.0860682946586!2d85.35793105079674!3d27.77632208218303!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x39eb1d0cc213f965%3A0x4d68ddb7b0d35f09!2sChillPill%20Gaming%20Cafe!5e0!3m2!1sen!2snp!4v1788927158116!5m2!1sen!2snp",
 
   // --- Billing defaults ---
   DEFAULT_HOURLY_RATE: 100,
@@ -40,8 +47,6 @@ window.APP_CONFIG = {
   ALERT_MINUTES_BEFORE_END: 5,
 
   // Grace period after a session's end time before an overtime charge
-  // starts accruing at checkout. Arriving back within this window is free;
-  // past it, the customer is charged for every minute since the original
-  // end time (not just the minutes past the grace period).
+  // starts accruing at checkout.
   OVERTIME_GRACE_MINUTES: 5
 };

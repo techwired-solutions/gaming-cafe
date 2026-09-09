@@ -47,6 +47,17 @@
   </style>
 </head>
 <body class="bg-app">
+  <!-- ===================== TOP ANNOUNCEMENT BANNER ===================== -->
+  <aside id="top-announcement-banner" class="bg-gradient-to-r from-amber-500/20 via-[#d8ff45]/20 to-emerald-500/20 border-b border-[#d8ff45]/30 text-xs sm:text-sm py-2.5 px-4 text-center cursor-pointer hover:bg-slate-900/90 transition flex items-center justify-center gap-2">
+    <span class="inline-flex items-center gap-1.5 font-bold text-[#d8ff45] uppercase tracking-wider text-[11px] bg-[#d8ff45]/20 border border-[#d8ff45]/40 rounded-full px-2 py-0.5">
+      <span class="w-1.5 h-1.5 rounded-full bg-[#d8ff45] animate-pulse"></span> Opening Notice
+    </span>
+    <span id="banner-text" class="text-slate-200 font-semibold">
+      🚀 <strong>Soft Opening: Sept 17</strong> &nbsp;|&nbsp; 🏆 <strong>Grand Opening: Saturday, Sept 19</strong> (7 AM – 8 PM)
+    </span>
+    <span class="text-[#d8ff45] underline font-bold ml-1 hidden sm:inline">Click for Details →</span>
+  </aside>
+
   <!-- ===================== NAV ===================== -->
   <header class="sticky top-0 z-30 border-b border-slate-700/70 backdrop-blur bg-[#10141e]/85">
     <div class="max-w-6xl mx-auto px-5 lg:px-8 py-4 flex items-center justify-between">
@@ -83,7 +94,11 @@
   <!-- ===================== HERO ===================== -->
   <section id="top" class="max-w-6xl mx-auto px-5 lg:px-8 pt-14 pb-16 grid lg:grid-cols-2 gap-10 items-center">
     <div>
-      <p class="mono text-xs font-bold tracking-[.2em] text-[#d8ff45] mb-3">HOURLY PLAYSTATION GAMING</p>
+      <div class="inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs font-semibold text-amber-300 mb-4">
+        <i data-lucide="sparkles" width="14" height="14"></i>
+        <span>Soft Opening: Sept 17 · Grand Opening: Saturday Sept 19</span>
+      </div>
+      <p class="mono text-xs font-bold tracking-[.2em] text-[#d8ff45] mb-2">HOURLY PLAYSTATION GAMING</p>
       <h1 class="text-4xl sm:text-5xl font-extrabold leading-tight">Level up your <span class="text-[#d8ff45]">downtime</span> at ChillPill Gaming Cafe</h1>
       <p class="text-slate-300 mt-5 text-lg" id="hero-tagline">Console gaming, snacks &amp; good vibes.</p>
       <p class="text-slate-400 mt-2" id="hero-location">📍 Budhanilkantha, Kathmandu</p>
@@ -92,7 +107,7 @@
         <a href="#pricing" class="btn-outline rounded-xl px-6 py-3.5 flex items-center gap-2"><i data-lucide="banknote" width="18" height="18"></i> See pricing</a>
       </div>
       <div class="flex items-center gap-6 mt-8 text-sm text-slate-400">
-        <div class="flex items-center gap-2"><i data-lucide="clock" width="16" height="16" class="text-[#d8ff45]"></i><span id="hero-hours">10:00 AM – 11:00 PM · Every day</span></div>
+        <div class="flex items-center gap-2"><i data-lucide="clock" width="16" height="16" class="text-[#d8ff45]"></i><span id="hero-hours">7:00 AM – 8:00 PM · Every day</span></div>
       </div>
     </div>
     <div class="grid grid-cols-2 gap-4">
@@ -144,7 +159,6 @@
       <span class="mono text-xs rounded-full border border-slate-600 px-3 py-1.5 text-slate-300">Spider-Man</span>
       <span class="mono text-xs rounded-full border border-slate-600 px-3 py-1.5 text-slate-300">+ more on request</span>
     </div>
-    <p class="text-xs text-slate-500 mt-3">— Edit this game list directly in index.html to match your actual library.</p>
   </section>
 
   <!-- ===================== PRICING ===================== -->
@@ -173,12 +187,12 @@
   <section id="menu" class="max-w-6xl mx-auto px-5 lg:px-8 py-16 border-t border-slate-700/60">
     <p class="mono text-xs font-bold tracking-[.2em] text-[#d8ff45] mb-2">STAY FUELED</p>
     <h2 class="text-3xl font-bold mb-2">Food &amp; drinks</h2>
-    <p class="text-slate-400 mb-8">Order at the counter while you play — this list updates automatically from what the cafe stocks.</p>
-    <div id="menu-grid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+    <p class="text-slate-400 mb-8">Order at the counter while you play — freshly brewed hot &amp; cold coffees, chilled beverages, pastries and hot snacks.</p>
+    <div id="menu-grid" class="space-y-8"></div>
     <p id="menu-fallback" class="hidden text-sm text-slate-400 mt-2">Menu will appear here once connected — ask our staff for today's food &amp; drinks list.</p>
   </section>
 
-  <!-- ===================== CONTACT ===================== -->
+  <!-- ===================== CONTACT & LOCATION ===================== -->
   <section id="contact" class="max-w-6xl mx-auto px-5 lg:px-8 py-16 border-t border-slate-700/60">
     <p class="mono text-xs font-bold tracking-[.2em] text-[#d8ff45] mb-2">FIND US</p>
     <h2 class="text-3xl font-bold mb-8">Visit or book ahead</h2>
@@ -186,36 +200,106 @@
       <div class="space-y-5">
         <div class="panel rounded-2xl p-5 flex items-start gap-4">
           <i data-lucide="map-pin" class="text-[#d8ff45] shrink-0 mt-1" width="20" height="20"></i>
-          <div><p class="font-semibold">Location</p><p id="contact-address" class="text-slate-400 text-sm mt-1">Budhanilkantha, Kathmandu, Nepal</p></div>
+          <div>
+            <p class="font-semibold">Location</p>
+            <p id="contact-address" class="text-slate-400 text-sm mt-1">Budhanilkantha, Kathmandu, Nepal</p>
+            <a href="https://maps.app.goo.gl/uBQnASzc9W2igYmh6" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 text-xs font-bold text-[#d8ff45] hover:underline mt-2">
+              <i data-lucide="external-link" width="13" height="13"></i> Open in Google Maps
+            </a>
+          </div>
         </div>
         <div class="panel rounded-2xl p-5 flex items-start gap-4">
           <i data-lucide="clock" class="text-[#d8ff45] shrink-0 mt-1" width="20" height="20"></i>
-          <div><p class="font-semibold">Opening hours</p><p id="contact-hours" class="text-slate-400 text-sm mt-1">10:00 AM – 11:00 PM · Every day</p></div>
+          <div>
+            <p class="font-semibold">Opening hours</p>
+            <p id="contact-hours" class="text-slate-400 text-sm mt-1">7:00 AM – 8:00 PM · Every day</p>
+          </div>
         </div>
         <div class="panel rounded-2xl p-5 flex items-start gap-4">
           <i data-lucide="message-circle" class="text-[#d8ff45] shrink-0 mt-1" width="20" height="20"></i>
           <div>
-            <p class="font-semibold">WhatsApp booking</p>
-            <p class="text-slate-400 text-sm mt-1">We don't take bookings online — message us on WhatsApp with your preferred time and station, and we'll confirm it for you.</p>
-            <a id="contact-whatsapp" href="#" target="_blank" rel="noopener" class="btn-acid rounded-xl px-4 py-2.5 inline-flex items-center gap-2 mt-3 text-sm"><i data-lucide="message-circle" width="16" height="16"></i> Message us</a>
+            <p class="font-semibold">WhatsApp booking &amp; inquiries</p>
+            <p class="text-slate-400 text-sm mt-1">Message us on official WhatsApp <strong class="text-slate-200">+977 9765130636</strong> with your preferred station and time.</p>
+            <a id="contact-whatsapp" href="#" target="_blank" rel="noopener" class="btn-acid rounded-xl px-4 py-2.5 inline-flex items-center gap-2 mt-3 text-sm"><i data-lucide="message-circle" width="16" height="16"></i> Message +977 9765130636</a>
           </div>
         </div>
       </div>
-      <div class="rounded-2xl overflow-hidden border border-slate-700 min-h-[260px]">
-        <iframe title="ChillPill Gaming Cafe location map" width="100%" height="100%" style="min-height:260px;border:0;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"
-          src="https://maps.google.com/maps?q=Budhanilkantha%2C%20Kathmandu&t=&z=14&ie=UTF8&iwloc=&output=embed"></iframe>
+      <div class="rounded-2xl overflow-hidden border border-slate-700 min-h-[320px] flex flex-col bg-[#181e2b]">
+        <iframe title="ChillPill Gaming Cafe exact Google Maps location" width="100%" height="100%" style="min-height:300px;border:0;flex:1;" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"
+          src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3530.0860682946586!2d85.35793105079674!3d27.77632208218303!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x39eb1d0cc213f965%3A0x4d68ddb7b0d35f09!2sChillPill%20Gaming%20Cafe!5e0!3m2!1sen!2snp!4v1788927158116!5m2!1sen!2snp" allowfullscreen=""></iframe>
+        <div class="p-3 bg-[#111622] border-t border-slate-700/80 flex items-center justify-between">
+          <span class="text-xs text-slate-400">Budhanilkantha, Kathmandu</span>
+          <a href="https://maps.app.goo.gl/uBQnASzc9W2igYmh6" target="_blank" rel="noopener" class="text-xs font-bold text-[#d8ff45] hover:underline flex items-center gap-1">
+            <i data-lucide="map" width="13" height="13"></i> Get Directions
+          </a>
+        </div>
       </div>
     </div>
   </section>
 
   <footer class="border-t border-slate-700/60">
     <div class="max-w-6xl mx-auto px-5 lg:px-8 py-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-slate-500">
-      <p>© <span id="footer-year"></span> <span id="footer-cafe-name">ChillPill Gaming Cafe</span>. All rights reserved.</p>
+      <p>© <span id="footer-year"></span> <span id="footer-cafe-name">ChillPill Gaming Cafe</span>. PAN: 625001462. All rights reserved.</p>
       <p>Built with 🎮 in Kathmandu.</p>
     </div>
   </footer>
 
   <a id="fab-whatsapp" href="#" target="_blank" rel="noopener" class="whatsapp-fab" aria-label="Book on WhatsApp"><i data-lucide="message-circle" width="26" height="26"></i></a>
+
+  <!-- ===================== NOTICE POPUP MODAL ===================== -->
+  <div id="notice-modal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden items-center justify-center p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="notice-modal-title">
+    <div class="relative w-full max-w-lg rounded-3xl border border-[#d8ff45]/40 bg-[#151b27] p-6 sm:p-8 shadow-2xl text-left transform transition-all my-auto">
+      <button id="notice-close-x" type="button" class="absolute top-4 right-4 rounded-xl border border-slate-600 p-2 text-slate-400 hover:text-white hover:border-[#d8ff45] transition" aria-label="Close notice">
+        <i data-lucide="x" width="18" height="18"></i>
+      </button>
+
+      <div class="inline-flex items-center gap-1.5 rounded-full border border-[#d8ff45]/40 bg-[#d8ff45]/15 px-3 py-1 text-xs font-bold text-[#d8ff45] mb-3">
+        <span class="w-2 h-2 rounded-full bg-[#d8ff45] animate-pulse"></span>
+        <span id="notice-badge">Announcement</span>
+      </div>
+
+      <div id="notice-image-wrap" class="hidden mb-4 rounded-2xl overflow-hidden border border-slate-700 max-h-52">
+        <img id="notice-image" src="" alt="Notice image" class="w-full h-full object-cover">
+      </div>
+
+      <h2 id="notice-modal-title" class="text-2xl sm:text-3xl font-extrabold text-white leading-tight">
+        ChillPill Gaming Cafe is Opening Soon! 🎮
+      </h2>
+
+      <div class="mt-4 space-y-3">
+        <div class="grid grid-cols-2 gap-2.5">
+          <div class="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3">
+            <p class="text-[11px] uppercase tracking-wider text-amber-300 font-bold">Soft Opening</p>
+            <p class="text-lg font-extrabold text-white mt-0.5">Sept 17</p>
+            <p class="text-xs text-amber-200/80">Wednesday</p>
+          </div>
+          <div class="rounded-xl border border-[#d8ff45]/40 bg-[#d8ff45]/10 p-3">
+            <p class="text-[11px] uppercase tracking-wider text-[#d8ff45] font-bold">Grand Opening</p>
+            <p class="text-lg font-extrabold text-[#d8ff45] mt-0.5">Sept 19</p>
+            <p class="text-xs text-slate-300">Saturday</p>
+          </div>
+        </div>
+
+        <div id="notice-body-text" class="text-sm text-slate-300 leading-relaxed bg-[#0f141f] rounded-xl p-3.5 border border-slate-800">
+          Get ready for immersive PS5 &amp; PS4 compartments, big 4K displays, specialty coffees, mocktails, fresh bakery items, and non-stop gaming excitement!
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 text-xs text-slate-400">
+          <div class="flex items-center gap-1.5"><i data-lucide="clock" width="14" height="14" class="text-[#d8ff45]"></i> 7:00 AM – 8:00 PM</div>
+          <div class="flex items-center gap-1.5"><i data-lucide="map-pin" width="14" height="14" class="text-[#d8ff45]"></i> Budhanilkantha</div>
+        </div>
+      </div>
+
+      <div class="mt-6 flex flex-col sm:flex-row gap-3">
+        <a id="notice-action-btn" href="https://wa.me/9779765130636?text=Hi!%20I%20saw%20the%20opening%20notice%20for%20ChillPill%20Gaming%20Cafe" target="_blank" rel="noopener" class="btn-acid flex-1 rounded-xl py-3 px-4 font-bold text-center text-sm flex items-center justify-center gap-2">
+          <i data-lucide="message-circle" width="16" height="16"></i> Inquire on WhatsApp
+        </a>
+        <button id="notice-dismiss-btn" type="button" class="btn-outline rounded-xl py-3 px-5 font-bold text-sm text-slate-300 hover:text-white">
+          Got it!
+        </button>
+      </div>
+    </div>
+  </div>
 
   <script src="assets/js/config.js"></script>
   <script src="assets/js/config.local.js" onerror="console.info('[ChillPill] No config.local.js override found — using assets/js/config.js placeholders.')"></script>
