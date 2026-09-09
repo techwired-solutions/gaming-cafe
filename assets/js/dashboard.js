@@ -8,11 +8,15 @@
   const CFG = window.APP_CONFIG || {};
   const ALERT_MS = (CFG.ALERT_MINUTES_BEFORE_END || 5) * 60 * 1000;
   const OVERTIME_GRACE_MINUTES = CFG.OVERTIME_GRACE_MINUTES != null ? Number(CFG.OVERTIME_GRACE_MINUTES) : 5;
-  const ADMIN_ONLY_PAGES = new Set(["page-revenue", "page-menu", "page-content", "page-staff"]);
+  const ADMIN_ONLY_PAGES = new Set(["page-revenue", "page-expenses", "page-notices", "page-menu", "page-content", "page-staff"]);
 
   let menuItems = [];
   let records = [];
   let staffList = [];
+  let expenses = [];
+  let adminNotices = [];
+  let initialCapitalAmount = CFG.INITIAL_CAPITAL || 1500000;
+  let panNumber = CFG.PAN_NUMBER || "625001462";
   let currentStaff = null; // { id, name, username, role }
   let sdkReady = false;
   let realtimeChannel = null;
@@ -728,6 +732,14 @@
       if (item) openQuickFoodModal(item);
     });
 
+    const printBtn = card.querySelector(".print-bill-btn");
+    if (printBtn) {
+      printBtn.addEventListener("click", () => {
+        const item = records.find((row) => row.id === card.dataset.recordId);
+        if (item) printPanBill(item);
+      });
+    }
+
     return card;
   }
 
@@ -898,6 +910,141 @@
         }
       })
     );
+
+    const payAndPrintBtn = document.getElementById("checkout-pay-print");
+    if (payAndPrintBtn) {
+      payAndPrintBtn.addEventListener("click", async () => {
+        const recordId = modal.dataset.recordId;
+        const record = records.find((r) => r.id === recordId);
+        if (!record) return;
+        const { overtime, discount, grandTotal } = renderCheckoutBreakdown(record);
+        payAndPrintBtn.disabled = true;
+        const method = "Cash";
+        const { error } = await window.sb
+          .from("sessions")
+          .update({
+            status: "Completed",
+            paid: true,
+            payment_method: method,
+            paid_at: new Date().toISOString(),
+            amount: grandTotal,
+            overtime_amount: overtime.amount,
+            discount_amount: discount.amount,
+            discount_type: discount.amount > 0 ? discount.mode : null,
+            discount_value: discount.amount > 0 ? discount.value : 0
+          })
+          .eq("id", recordId);
+        payAndPrintBtn.disabled = false;
+        if (error) showToast("Could not record payment: " + error.message);
+        else {
+          const updated = { ...record, status: "Completed", paid: true, payment_method: method, amount: grandTotal, overtime_amount: overtime.amount, discount_amount: discount.amount };
+          closeCheckoutModal();
+          showToast(`Payment recorded — Cash. Printing PAN bill...`);
+          printPanBill(updated, "Cash");
+        }
+      });
+    }
+
+    const printOnlyBtn = document.getElementById("checkout-print-only");
+    if (printOnlyBtn) {
+      printOnlyBtn.addEventListener("click", () => {
+        const recordId = modal.dataset.recordId;
+        const record = records.find((r) => r.id === recordId);
+        if (record) {
+          const { overtime, discount, grandTotal } = renderCheckoutBreakdown(record);
+          const previewRecord = { ...record, amount: grandTotal, overtime_amount: overtime.amount, discount_amount: discount.amount };
+          printPanBill(previewRecord, record.payment_method || "Due");
+        }
+      });
+    }
+  }
+
+  // ---------- PAN THERMAL RECEIPT BILLING (Mini Billing Machine 58mm/80mm) ----------
+  function printPanBill(record, overridePaymentMethod) {
+    if (!record) return;
+    const timeCost = ((Number(record.duration_minutes) || 0) / 60) * (Number(record.rate) || 0);
+    const overtime = computeOvertimeCharge(record);
+    const discountAmount = Number(record.discount_amount) || 0;
+    const grandTotal = record.paid && record.amount != null ? Number(record.amount) : Math.max(0, Math.round(timeCost + (record.food_total || 0) + overtime.amount - discountAmount));
+
+    const billNo = "CP-" + (record.id ? record.id.slice(0, 8).toUpperCase() : Math.floor(1000 + Math.random() * 9000));
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "2-digit" });
+    const timeStr = now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+
+    const billNoEl = document.getElementById("receipt-bill-no");
+    const dateEl = document.getElementById("receipt-date");
+    const timeEl = document.getElementById("receipt-time");
+    const staffEl = document.getElementById("receipt-staff");
+    const custEl = document.getElementById("receipt-customer");
+    const phoneEl = document.getElementById("receipt-phone");
+    const stEl = document.getElementById("receipt-station");
+    const tbody = document.getElementById("receipt-items-body");
+    const subtotalEl = document.getElementById("receipt-subtotal");
+    const discRow = document.getElementById("receipt-discount-row");
+    const discEl = document.getElementById("receipt-discount");
+    const totalEl = document.getElementById("receipt-total");
+    const payMethodEl = document.getElementById("receipt-payment-method");
+
+    if (billNoEl) billNoEl.textContent = billNo;
+    if (dateEl) dateEl.textContent = dateStr;
+    if (timeEl) timeEl.textContent = timeStr;
+    if (staffEl) staffEl.textContent = currentStaff ? currentStaff.name : (record.staff_name || "Admin");
+    if (custEl) custEl.textContent = record.customer_name || "Walk-in Guest";
+    if (phoneEl) phoneEl.textContent = record.customer_phone || "—";
+    if (stEl) stEl.textContent = record.station_name || "Lounge";
+
+    if (tbody) {
+      let itemsHtml = "";
+      itemsHtml += `
+        <tr>
+          <td style="padding: 2px 0;">PlayStation (${record.duration_minutes || 60}m @ ${inr(record.rate)}/h)</td>
+          <td style="text-align: center; padding: 2px 0;">1</td>
+          <td style="text-align: right; padding: 2px 0;">${inr(timeCost)}</td>
+        </tr>
+      `;
+
+      if (overtime.amount > 0) {
+        itemsHtml += `
+          <tr>
+            <td style="padding: 2px 0;">Overtime (${overtime.minutes}m)</td>
+            <td style="text-align: center; padding: 2px 0;">1</td>
+            <td style="text-align: right; padding: 2px 0;">${inr(overtime.amount)}</td>
+          </tr>
+        `;
+      }
+
+      (record.food_items || []).forEach((f) => {
+        itemsHtml += `
+          <tr>
+            <td style="padding: 2px 0;">${f.name}</td>
+            <td style="text-align: center; padding: 2px 0;">${f.qty}</td>
+            <td style="text-align: right; padding: 2px 0;">${inr(f.price * f.qty)}</td>
+          </tr>
+        `;
+      });
+
+      tbody.innerHTML = itemsHtml;
+    }
+
+    const subtotal = Math.round(timeCost + (record.food_total || 0) + overtime.amount);
+    if (subtotalEl) subtotalEl.textContent = inr(subtotal);
+
+    if (discRow && discEl) {
+      if (discountAmount > 0) {
+        discRow.style.display = "flex";
+        discEl.textContent = `− ${inr(discountAmount)}`;
+      } else {
+        discRow.style.display = "none";
+      }
+    }
+
+    if (totalEl) totalEl.textContent = inr(grandTotal);
+    if (payMethodEl) payMethodEl.textContent = overridePaymentMethod || record.payment_method || (record.paid ? "Paid" : "Due");
+
+    setTimeout(() => {
+      window.print();
+    }, 150);
   }
 
   // ---------- edit an active or booked session (timing, order, table, game) ----------
@@ -1502,6 +1649,198 @@
     document.getElementById("sidebar-cafe-name").textContent = settings.cafe_name || "ChillPill Gaming Cafe";
   }
 
+  // ---------- expenses & capital ----------
+  function renderExpenseKPIs() {
+    const capitalSpent = expenses.filter(e => e.payment_source === "initial_capital").reduce((s, e) => s + Number(e.amount), 0);
+    const setupSpent = expenses.filter(e => e.category === "Initial Setup & Build" || e.payment_source === "initial_capital").reduce((s, e) => s + Number(e.amount), 0);
+    const partnerTotal = expenses.filter(e => e.payment_source === "partner_personal").reduce((s, e) => s + Number(e.amount), 0);
+    const partnerReimbursed = expenses.filter(e => e.payment_source === "partner_personal" && e.reimbursement_status === "reimbursed").reduce((s, e) => s + Number(e.amount), 0);
+    const partnerPending = partnerTotal - partnerReimbursed;
+    const cafeRevExpenses = expenses.filter(e => e.payment_source === "cafe_revenue").reduce((s, e) => s + Number(e.amount), 0);
+    const remaining = Math.max(0, initialCapitalAmount - capitalSpent);
+
+    const el = (id) => document.getElementById(id);
+    el("kpi-initial-capital").textContent = inr(initialCapitalAmount);
+    el("kpi-remaining-capital").textContent = inr(remaining);
+    el("kpi-partner-pending").textContent = inr(partnerPending);
+    el("kpi-partner-total").textContent = inr(partnerTotal);
+    el("kpi-setup-expenses").textContent = inr(setupSpent);
+    el("kpi-revenue-expenses").textContent = inr(cafeRevExpenses);
+    el("kpi-reimbursed-total").textContent = inr(partnerReimbursed);
+  }
+
+  function renderPartnerSummary() {
+    const list = document.getElementById("partner-summary-list");
+    const empty = document.getElementById("partner-summary-empty");
+    const partnerExpenses = expenses.filter(e => e.payment_source === "partner_personal" && e.paid_by_partner_name);
+    const partnerMap = {};
+    partnerExpenses.forEach(e => {
+      const name = e.paid_by_partner_name;
+      if (!partnerMap[name]) partnerMap[name] = { total: 0, reimbursed: 0, pending: 0 };
+      const amt = Number(e.amount);
+      partnerMap[name].total += amt;
+      if (e.reimbursement_status === "reimbursed") partnerMap[name].reimbursed += amt;
+      else partnerMap[name].pending += amt;
+    });
+    const partners = Object.entries(partnerMap);
+    empty.classList.toggle("hidden", partners.length > 0);
+    list.innerHTML = "";
+    partners.forEach(([name, bal]) => {
+      const pct = bal.total > 0 ? Math.round((bal.reimbursed / bal.total) * 100) : 0;
+      const card = document.createElement("div");
+      card.className = "rounded-xl border border-slate-700 bg-[#111722] p-3.5";
+      card.innerHTML = `
+        <p class="font-semibold text-sm mb-1">${name}</p>
+        <p class="text-xs text-slate-400">Spent: <span class="mono font-bold text-white">${inr(bal.total)}</span></p>
+        <p class="text-xs text-slate-400 mt-0.5">Returned: <span class="mono text-emerald-400">${inr(bal.reimbursed)}</span> · Pending: <span class="mono text-amber-300">${inr(bal.pending)}</span></p>
+        <div class="mt-2 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+          <div class="h-full rounded-full bg-emerald-500" style="width:${pct}%"></div>
+        </div>
+        <p class="text-[10px] text-slate-500 mt-0.5">${pct}% reimbursed</p>`;
+      list.appendChild(card);
+    });
+  }
+
+  function renderExpensesTable() {
+    const srcFilter = document.getElementById("expense-filter-source").value;
+    const catFilter = document.getElementById("expense-filter-category").value;
+    let filtered = [...expenses];
+    if (srcFilter !== "all") {
+      if (srcFilter === "partner_unreimbursed") filtered = filtered.filter(e => e.payment_source === "partner_personal" && e.reimbursement_status !== "reimbursed");
+      else if (srcFilter === "partner_reimbursed") filtered = filtered.filter(e => e.payment_source === "partner_personal" && e.reimbursement_status === "reimbursed");
+      else filtered = filtered.filter(e => e.payment_source === srcFilter);
+    }
+    if (catFilter !== "all") filtered = filtered.filter(e => e.category === catFilter);
+
+    const tbody = document.getElementById("expenses-tbody");
+    const empty = document.getElementById("expenses-empty");
+    empty.classList.toggle("hidden", filtered.length > 0);
+    tbody.innerHTML = "";
+
+    filtered.forEach(exp => {
+      const date = exp.expense_date ? fmtDateTime(exp.expense_date) : "—";
+      const sourceLabel = exp.payment_source === "partner_personal"
+        ? `Partner: ${exp.paid_by_partner_name || "—"}`
+        : exp.payment_source === "initial_capital" ? "Initial Capital" : "Cafe Revenue";
+      const isPartner = exp.payment_source === "partner_personal";
+      const statusHtml = isPartner
+        ? (exp.reimbursement_status === "reimbursed"
+          ? `<span class="px-2 py-0.5 rounded-full bg-emerald-900/40 text-emerald-400 text-[10px] font-semibold">Returned</span>`
+          : `<span class="px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-300 text-[10px] font-semibold">Pending</span>`)
+        : `<span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[10px] font-semibold">—</span>`;
+      const reimburseBtnHtml = isPartner
+        ? `<button type="button" class="reimburse-btn text-[10px] px-2 py-1 rounded border border-slate-700 hover:border-emerald-500 hover:text-emerald-400">${exp.reimbursement_status === "reimbursed" ? "Undo" : "Mark Returned"}</button>`
+        : "";
+
+      const tr = document.createElement("tr");
+      tr.className = "text-xs text-slate-300 hover:bg-slate-800/50";
+      tr.innerHTML = `
+        <td class="py-2.5 px-3 whitespace-nowrap">${date}</td>
+        <td class="py-2.5 px-3">${exp.title}${exp.notes ? ` <span class="text-slate-500">· ${exp.notes}</span>` : ""}</td>
+        <td class="py-2.5 px-3 whitespace-nowrap">${exp.category}</td>
+        <td class="py-2.5 px-3 whitespace-nowrap">${sourceLabel}</td>
+        <td class="py-2.5 px-3 text-right mono font-bold">${inr(exp.amount)}</td>
+        <td class="py-2.5 px-3 text-center">${statusHtml}</td>
+        <td class="py-2.5 px-3 text-right whitespace-nowrap">
+          <div class="flex items-center justify-end gap-1">
+            ${reimburseBtnHtml}
+            <button type="button" class="delete-exp-btn text-[10px] px-2 py-1 rounded border border-slate-700 text-red-400 hover:border-red-500">Delete</button>
+          </div>
+        </td>`;
+
+      const reimburseBtn = tr.querySelector(".reimburse-btn");
+      if (reimburseBtn) {
+        reimburseBtn.addEventListener("click", async () => {
+          const newStatus = exp.reimbursement_status === "reimbursed" ? "unreimbursed" : "reimbursed";
+          const update = { reimbursement_status: newStatus };
+          if (newStatus === "reimbursed") {
+            update.reimbursed_at = new Date().toISOString();
+            update.reimbursed_by = currentStaff ? currentStaff.name : "Admin";
+          } else {
+            update.reimbursed_at = null;
+            update.reimbursed_by = null;
+          }
+          const { error } = await window.sb.from("expenses").update(update).eq("id", exp.id);
+          if (error) showToast("Could not update reimbursement status.");
+          else showToast(newStatus === "reimbursed" ? "Marked as returned." : "Reverted to pending.");
+        });
+      }
+
+      tr.querySelector(".delete-exp-btn").addEventListener("click", async () => {
+        if (!confirm(`Delete expense "${exp.title}" (${inr(exp.amount)})?`)) return;
+        const { error } = await window.sb.from("expenses").delete().eq("id", exp.id);
+        if (error) showToast("Could not delete this expense.");
+        else showToast("Expense deleted.");
+      });
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function fetchExpenses() {
+    const { data, error } = await window.sb.from("expenses").select("*").order("expense_date", { ascending: false });
+    if (error) { showToast("Could not load expenses."); return; }
+    expenses = data || [];
+    renderExpenseKPIs();
+    renderPartnerSummary();
+    renderExpensesTable();
+  }
+
+  // ---------- notices (admin) ----------
+  function renderAdminNotices() {
+    const list = document.getElementById("admin-notices-list");
+    const empty = document.getElementById("admin-notices-empty");
+    empty.classList.toggle("hidden", adminNotices.length > 0);
+    list.innerHTML = "";
+
+    adminNotices.forEach(notice => {
+      const card = document.createElement("div");
+      card.className = "rounded-xl border border-slate-700 bg-[#111722] p-4";
+      const badgeColor = notice.active ? "bg-emerald-900/40 text-emerald-400" : "bg-slate-800 text-slate-500";
+      card.innerHTML = `
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 flex-wrap mb-1">
+              <span class="px-2 py-0.5 rounded-full ${badgeColor} text-[10px] font-bold uppercase">${notice.active ? "Live" : "Inactive"}</span>
+              ${notice.badge ? `<span class="px-2 py-0.5 rounded-full bg-sky-900/40 text-sky-300 text-[10px] font-semibold">${notice.badge}</span>` : ""}
+              ${notice.popup ? `<span class="px-2 py-0.5 rounded-full bg-purple-900/40 text-purple-300 text-[10px] font-semibold">Pop-up</span>` : ""}
+            </div>
+            <p class="font-semibold text-sm">${notice.title}</p>
+            <p class="text-xs text-slate-400 mt-1 line-clamp-2">${notice.message}</p>
+            ${notice.image_url ? `<img src="${notice.image_url}" class="mt-2 rounded-lg max-h-28 object-cover border border-slate-700" alt="Notice image">` : ""}
+            ${notice.button_text ? `<p class="text-[10px] text-slate-500 mt-1.5">CTA: ${notice.button_text} → ${notice.button_url || "#"}</p>` : ""}
+            <p class="text-[10px] text-slate-600 mt-1">${notice.created_at ? fmtDateTime(notice.created_at) : ""}</p>
+          </div>
+          <div class="flex flex-col gap-1 shrink-0">
+            <button type="button" class="toggle-notice-btn rounded-lg border border-slate-600 px-2 py-1.5 text-[10px] text-slate-300 hover:text-[#d8ff45] hover:border-[#d8ff45]">${notice.active ? "Deactivate" : "Activate"}</button>
+            <button type="button" class="delete-notice-btn rounded-lg border border-slate-600 px-2 py-1.5 text-[10px] text-red-400 hover:border-red-500">Delete</button>
+          </div>
+        </div>`;
+
+      card.querySelector(".toggle-notice-btn").addEventListener("click", async () => {
+        const { error } = await window.sb.from("notices").update({ active: !notice.active }).eq("id", notice.id);
+        if (error) showToast("Could not update notice.");
+        else showToast(notice.active ? "Notice deactivated." : "Notice activated.");
+      });
+
+      card.querySelector(".delete-notice-btn").addEventListener("click", async () => {
+        if (!confirm(`Delete notice "${notice.title}"?`)) return;
+        const { error } = await window.sb.from("notices").delete().eq("id", notice.id);
+        if (error) showToast("Could not delete notice.");
+        else showToast("Notice deleted.");
+      });
+
+      list.appendChild(card);
+    });
+  }
+
+  async function fetchNotices() {
+    const { data, error } = await window.sb.from("notices").select("*").order("created_at", { ascending: false });
+    if (error) { showToast("Could not load notices."); return; }
+    adminNotices = data || [];
+    renderAdminNotices();
+  }
+
   // ---------- time-based alerts ----------
   function checkTimeAlerts() {
     renderAllLists();
@@ -1587,7 +1926,7 @@
   }
 
   async function loadAll() {
-    await Promise.all([fetchSessions(), fetchMenu(), fetchSettings(), fetchStaff(), fetchWaitingList(), fetchStations(), fetchTables()]);
+    await Promise.all([fetchSessions(), fetchMenu(), fetchSettings(), fetchStaff(), fetchWaitingList(), fetchStations(), fetchTables(), fetchExpenses(), fetchNotices()]);
   }
 
   function subscribeRealtime() {
@@ -1600,6 +1939,8 @@
       .on("postgres_changes", { event: "*", schema: "public", table: "waiting_list" }, fetchWaitingList)
       .on("postgres_changes", { event: "*", schema: "public", table: "stations" }, fetchStations)
       .on("postgres_changes", { event: "*", schema: "public", table: "tables" }, fetchTables)
+      .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, fetchExpenses)
+      .on("postgres_changes", { event: "*", schema: "public", table: "notices" }, fetchNotices)
       .subscribe((status) => {
         if (status === "SUBSCRIBED") setConnectionStatus(true, "Live");
       });
@@ -1613,6 +1954,90 @@
     initEditModal();
     initQuickFoodModal();
     switchPage("page-overview");
+
+    // --- Expense quick-chips, source toggle, form, and filters ---
+    document.querySelectorAll(".expense-chip").forEach((chip) =>
+      chip.addEventListener("click", () => {
+        document.getElementById("expense-title").value = chip.dataset.title || "";
+        const catSelect = document.getElementById("expense-category");
+        for (const opt of catSelect.options) {
+          if (opt.value === chip.dataset.cat) { catSelect.value = opt.value; break; }
+        }
+      })
+    );
+
+    const expSourceSelect = document.getElementById("expense-source");
+    const expPartnerWrap = document.getElementById("expense-partner-wrap");
+    function togglePartnerField() {
+      const show = expSourceSelect.value === "partner_personal";
+      expPartnerWrap.style.display = show ? "" : "none";
+      document.getElementById("expense-partner-name").required = show;
+    }
+    expSourceSelect.addEventListener("change", togglePartnerField);
+    togglePartnerField();
+
+    document.getElementById("expense-filter-source").addEventListener("change", renderExpensesTable);
+    document.getElementById("expense-filter-category").addEventListener("change", renderExpensesTable);
+
+    document.getElementById("expense-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!sdkReady) return showToast("Supabase isn't connected yet.");
+      const title = document.getElementById("expense-title").value.trim();
+      const category = document.getElementById("expense-category").value;
+      const amount = Math.max(0, Number(document.getElementById("expense-amount").value) || 0);
+      const paymentSource = expSourceSelect.value;
+      const partnerName = document.getElementById("expense-partner-name").value.trim();
+      const dateVal = document.getElementById("expense-date").value;
+      const notes = document.getElementById("expense-notes").value.trim();
+      if (!title || !amount) return showToast("Title and amount are required.");
+      if (paymentSource === "partner_personal" && !partnerName) return showToast("Please enter the partner name.");
+
+      const payload = {
+        title,
+        category,
+        amount,
+        payment_source: paymentSource,
+        paid_by_partner_name: paymentSource === "partner_personal" ? partnerName : null,
+        reimbursement_status: paymentSource === "partner_personal" ? "unreimbursed" : "not_applicable",
+        expense_date: dateVal ? new Date(dateVal).toISOString() : new Date().toISOString(),
+        notes: notes || null,
+        created_by: currentStaff ? currentStaff.name : "Admin"
+      };
+      const { error } = await window.sb.from("expenses").insert(payload);
+      if (error) showToast("Could not record expense: " + error.message);
+      else {
+        event.target.reset();
+        togglePartnerField();
+        showToast("Expense recorded.");
+      }
+    });
+
+    // --- Admin notice form ---
+    document.getElementById("admin-notice-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!sdkReady) return showToast("Supabase isn't connected yet.");
+      const title = document.getElementById("notice-input-title").value.trim();
+      const message = document.getElementById("notice-input-message").value.trim();
+      if (!title || !message) return showToast("Title and message are required.");
+      const payload = {
+        title,
+        message,
+        badge: document.getElementById("notice-input-badge").value.trim() || "Announcement",
+        image_url: document.getElementById("notice-input-image").value.trim() || null,
+        button_text: document.getElementById("notice-input-btn-text").value.trim() || null,
+        button_url: document.getElementById("notice-input-btn-url").value.trim() || null,
+        popup: document.getElementById("notice-input-popup").checked,
+        active: document.getElementById("notice-input-active").checked
+      };
+      const { error } = await window.sb.from("notices").insert(payload);
+      if (error) showToast("Could not publish notice: " + error.message);
+      else {
+        event.target.reset();
+        document.getElementById("notice-input-popup").checked = true;
+        document.getElementById("notice-input-active").checked = true;
+        showToast("Notice published — it's now live on the website.");
+      }
+    });
 
     document.getElementById("booking-search").addEventListener("input", renderBookings);
     document.getElementById("notification-button").addEventListener("click", () => {
