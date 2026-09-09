@@ -470,7 +470,15 @@
     menuItems.forEach((item) => {
       const line = document.createElement("div");
       line.className = "flex items-center justify-between rounded-lg border border-slate-700 bg-[#111722] px-3 py-2 text-sm";
-      line.innerHTML = `<span>${item.name}</span><div class="flex items-center gap-3"><span class="mono text-[#d8ff45]">${inr(item.price)}</span><button type="button" aria-label="Remove ${item.name}" class="text-slate-400 hover:text-red-300">×</button></div>`;
+      line.innerHTML = `
+        <div class="flex items-center gap-2">
+          <span class="font-medium">${item.name}</span>
+          ${item.category ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">${item.category}</span>` : ""}
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="mono text-[#d8ff45] font-semibold">${inr(item.price)}</span>
+          <button type="button" aria-label="Remove ${item.name}" class="text-slate-400 hover:text-red-300">×</button>
+        </div>`;
       line.querySelector("button").addEventListener("click", async () => {
         const { error } = await window.sb.from("menu_items").delete().eq("id", item.id);
         if (error) showToast("Could not remove this menu item.");
@@ -1779,7 +1787,11 @@
 
   async function fetchExpenses() {
     const { data, error } = await window.sb.from("expenses").select("*").order("expense_date", { ascending: false });
-    if (error) { showToast("Could not load expenses."); return; }
+    if (error) {
+      console.error("[ChillPill] Error loading expenses:", error);
+      showToast("Could not load expenses: " + (error.message || "check database"));
+      return;
+    }
     expenses = data || [];
     renderExpenseKPIs();
     renderPartnerSummary();
@@ -1836,7 +1848,11 @@
 
   async function fetchNotices() {
     const { data, error } = await window.sb.from("notices").select("*").order("created_at", { ascending: false });
-    if (error) { showToast("Could not load notices."); return; }
+    if (error) {
+      console.error("[ChillPill] Error loading notices:", error);
+      showToast("Could not load notices: " + (error.message || "check database"));
+      return;
+    }
     adminNotices = data || [];
     renderAdminNotices();
   }
@@ -2065,13 +2081,57 @@
     document.getElementById("menu-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const name = document.getElementById("menu-name").value.trim();
+      const category = document.getElementById("menu-category").value || "Specialty Coffee (Hot & Cold)";
       const price = Math.max(0, Number(document.getElementById("menu-price").value) || 0);
       if (!name) return;
       if (!sdkReady) return showToast("Supabase isn't connected yet.");
-      const { error } = await window.sb.from("menu_items").insert({ name, price });
-      if (error) showToast("Could not add menu item.");
+      const { error } = await window.sb.from("menu_items").insert({ name, price, category });
+      if (error) showToast("Could not add menu item: " + error.message);
       else { event.target.reset(); showToast("Menu item added."); }
     });
+
+    const seedMenuBtn = document.getElementById("seed-menu-btn");
+    if (seedMenuBtn) {
+      seedMenuBtn.addEventListener("click", async () => {
+        if (!sdkReady) return showToast("Supabase isn't connected yet.");
+        if (!confirm("Add all standard cafe drinks, coffees, snacks & pastries to your menu?")) return;
+        
+        const standardItems = [
+          { name: "Ice Americano", price: 170, category: "Specialty Coffee (Hot & Cold)" },
+          { name: "Americano (Hot/Cold)", price: 150, category: "Specialty Coffee (Hot & Cold)" },
+          { name: "Cappuccino (Hot/Cold)", price: 180, category: "Specialty Coffee (Hot & Cold)" },
+          { name: "Espresso (Single/Double)", price: 120, category: "Specialty Coffee (Hot & Cold)" },
+          { name: "Fresh Mint Mojito", price: 150, category: "Chilled Drinks & Refreshers" },
+          { name: "Sweet Lassi", price: 120, category: "Chilled Drinks & Refreshers" },
+          { name: "Banana Lassi", price: 140, category: "Chilled Drinks & Refreshers" },
+          { name: "Coke", price: 60, category: "Chilled Drinks & Refreshers" },
+          { name: "Sprite", price: 60, category: "Chilled Drinks & Refreshers" },
+          { name: "Fanta", price: 60, category: "Chilled Drinks & Refreshers" },
+          { name: "Chilled Beer", price: 350, category: "Chilled Drinks & Refreshers" },
+          { name: "Butter Croissant", price: 120, category: "Bakery & Desserts" },
+          { name: "Fresh Muffins", price: 80, category: "Bakery & Desserts" },
+          { name: "Glazed Donuts", price: 90, category: "Bakery & Desserts" },
+          { name: "Chocochip Cookies", price: 60, category: "Bakery & Desserts" },
+          { name: "Chocolate Brownies", price: 120, category: "Bakery & Desserts" },
+          { name: "Assorted Pastries", price: 130, category: "Bakery & Desserts" },
+          { name: "Sekuwa (Chicken/Buff)", price: 250, category: "Hot Snacks & Bites" },
+          { name: "Grilled Club Sandwich", price: 180, category: "Hot Snacks & Bites" },
+          { name: "Fresh Patties (Veg/Chicken)", price: 70, category: "Hot Snacks & Bites" },
+          { name: "Extra Joystick (2nd Player)", price: 50, category: "Add-ons" }
+        ];
+
+        let count = 0;
+        for (const item of standardItems) {
+          const exists = menuItems.some(m => m.name.toLowerCase() === item.name.toLowerCase());
+          if (!exists) {
+            await window.sb.from("menu_items").insert(item);
+            count++;
+          }
+        }
+        showToast(count > 0 ? `Added ${count} items to the menu!` : "All standard menu items are already present.");
+        fetchMenu();
+      });
+    }
 
     document.getElementById("content-form").addEventListener("submit", async (event) => {
       event.preventDefault();

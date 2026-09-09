@@ -151,7 +151,7 @@ insert into public.notices (title, badge, message, button_text, button_url, popu
 select
   'Grand Opening & Soft Opening Celebration!',
   'Upcoming Opening',
-  'ChillPill Gaming Cafe is opening soon! 🎮 Join us for our Soft Opening on September 17, and celebrate our Grand Opening on Saturday, September 19. Experience private PS5 & PS4 cabins, top-tier games, specialty coffee, and mouth-watering snacks. Opening daily from 7:00 AM to 8:00 PM!',
+  'ChillPill Gaming Cafe is opening soon! 🎮 Join us for our Soft Opening on Thursday, September 17, and celebrate our Grand Opening on Saturday, September 19. Experience private PS5 & PS4 cabins, top-tier games, specialty coffee, and mouth-watering snacks. Opening daily from 7:00 AM to 8:00 PM!',
   'Book / Inquire on WhatsApp',
   'https://wa.me/9779765130636?text=Hi!%20I%27d%20like%20to%20know%20more%20about%20the%20Grand%20Opening',
   true,
