@@ -10,12 +10,17 @@
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,700;1,9..144,900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
   <style>
     :root { --ink:#10141e; --panel:#181e2b; --line:#334056; --acid:#d8ff45; --muted:#95a0b8; }
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
-    body { margin:0; font-family:Georgia,serif; color:#f7f8fb; background:var(--ink); }
+    body { margin:0; font-family:'Fraunces',Georgia,serif; color:#f7f8fb; background:var(--ink); }
+    .display { font-family:'Fraunces',Georgia,serif; }
+    .hero-h1 { font-family:'Fraunces',Georgia,serif; font-size:clamp(3rem,8vw,6rem); font-weight:900; line-height:0.93; letter-spacing:-0.03em; }
+    .hero-h1 em { font-style:italic; color:var(--acid); display:block; }
+    .hero-h1 .outline { -webkit-text-stroke:2px #f7f8fb; color:transparent; display:block; }
+    .brand-pill { background:linear-gradient(135deg,#818cf8,#a855f7); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
     .mono { font-family:"Space Mono",monospace; }
     .bg-app {
       background-color: var(--ink);
@@ -66,7 +71,7 @@
         <div class="w-10 h-10 rounded-xl bg-[#d8ff45] p-1 shadow-md grid place-items-center shrink-0 border border-[#d8ff45]/60">
           <img src="assets/images/logo.png" alt="ChillPill Logo" class="w-full h-full object-contain">
         </div>
-        <span class="font-extrabold tracking-tight text-lg">CHILLPILL</span>
+        <span class="display font-extrabold tracking-tight text-lg"><span class="text-white">CHILL</span><span class="brand-pill">PILL</span></span>
       </a>
       <nav class="hidden md:flex items-center gap-7 text-sm font-semibold">
         <a href="#about" class="nav-link">About</a>
@@ -101,8 +106,12 @@
         <i data-lucide="sparkles" width="14" height="14"></i>
         <span>Soft Opening: Thursday Sept 17 · Grand Opening: Saturday Sept 19</span>
       </div>
-      <p class="mono text-xs font-bold tracking-[.2em] text-[#d8ff45] mb-2">HOURLY PLAYSTATION GAMING</p>
-      <h1 class="text-4xl sm:text-5xl font-extrabold leading-tight">Level up your <span class="text-[#d8ff45]">downtime</span> at ChillPill Gaming Cafe</h1>
+      <p class="mono text-xs font-bold tracking-[.2em] text-[#d8ff45] mb-4">HOURLY PLAYSTATION GAMING</p>
+      <h1 class="hero-h1 mb-2">
+        Level up your
+        <em>downtime.</em>
+        <span class="outline">ChillPill.</span>
+      </h1>
       <p class="text-slate-300 mt-5 text-lg" id="hero-tagline">Console gaming, snacks &amp; good vibes.</p>
       <p class="text-slate-400 mt-2" id="hero-location">📍 Budhanilkantha, Kathmandu</p>
       <div class="flex flex-wrap gap-3 mt-7">
