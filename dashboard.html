@@ -4,7 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ChillPill Gaming Cafe — Owner Console</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎮</text></svg>">
+  <link rel="icon" type="image/png" href="assets/images/logo.png">
+  <link rel="icon" type="image/jpeg" href="assets/images/logo.jfif">
+  <link rel="shortcut icon" href="favicon.png">
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -130,8 +132,8 @@
   <!-- ===================== LOGIN SCREEN ===================== -->
   <div id="lock-screen">
     <form id="lock-form" class="panel rounded-2xl p-8 w-full max-w-sm mx-4">
-      <div class="w-12 h-12 rounded-xl bg-[#d8ff45] text-[#10141e] grid place-items-center mb-4">
-        <i data-lucide="gamepad-2" width="22" height="22"></i>
+      <div class="w-14 h-14 rounded-2xl bg-white/95 p-1.5 shadow-md grid place-items-center mb-4 border border-[#d8ff45]/40">
+        <img src="assets/images/logo.png" alt="ChillPill Logo" class="w-full h-full object-contain">
       </div>
       <h1 id="lock-heading" class="text-xl font-bold">Staff login</h1>
       <p id="lock-subheading" class="text-sm text-slate-400 mt-1 mb-5">Sign in with your ChillPill staff account.</p>
@@ -152,8 +154,10 @@
     <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
     <!-- ===================== SIDEBAR ===================== -->
     <aside class="sidebar" id="sidebar">
-      <div class="flex items-center gap-2.5 px-4 py-5 border-b border-slate-700/70">
-        <div class="w-9 h-9 rounded-lg bg-[#d8ff45] text-[#10141e] grid place-items-center shrink-0"><i data-lucide="gamepad-2" width="19" height="19"></i></div>
+      <div class="flex items-center gap-3 px-4 py-4 border-b border-slate-700/70">
+        <div class="w-9 h-9 rounded-xl bg-white/95 p-1 shadow-md grid place-items-center shrink-0 border border-[#d8ff45]/30">
+          <img src="assets/images/logo.png" alt="ChillPill Logo" class="w-full h-full object-contain">
+        </div>
         <div class="min-w-0">
           <p id="sidebar-cafe-name" class="font-bold text-sm truncate">ChillPill Gaming Cafe</p>
           <p class="text-[11px] text-slate-500">Owner console</p>
