@@ -17,9 +17,11 @@
     html { scroll-behavior: smooth; }
     body { margin:0; font-family:'Fraunces',Georgia,serif; color:#f7f8fb; background:var(--ink); }
     .display { font-family:'Fraunces',Georgia,serif; }
-    .hero-h1 { font-family:'Fraunces',Georgia,serif; font-size:clamp(3rem,8vw,6rem); font-weight:900; line-height:0.93; letter-spacing:-0.03em; }
+    .hero-h1 { font-family:'Fraunces',Georgia,serif; font-size:clamp(2.1rem,4.2vw,3.6rem); font-weight:900; line-height:0.93; letter-spacing:-0.03em; }
     .hero-h1 em { font-style:italic; color:var(--acid); display:block; }
-    .hero-h1 .outline { -webkit-text-stroke:2px #f7f8fb; color:transparent; display:block; }
+    .hero-line3 { display:block; }
+    .outline-white { -webkit-text-stroke:2px rgba(247,248,251,0.85); color:transparent; }
+    .outline-pill { -webkit-text-stroke:2px #818cf8; color:transparent; }
     .brand-pill { background:linear-gradient(135deg,#818cf8,#a855f7); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
     .mono { font-family:"Space Mono",monospace; }
     .bg-app {
@@ -100,33 +102,33 @@
   </header>
 
   <!-- ===================== HERO ===================== -->
-  <section id="top" class="max-w-6xl mx-auto px-5 lg:px-8 pt-14 pb-16 grid lg:grid-cols-2 gap-10 items-center">
+  <section id="top" class="w-full px-8 lg:px-14 xl:px-20 pt-6 pb-4 min-h-[calc(100dvh-6.5rem)] grid lg:grid-cols-2 gap-8 items-center">
     <div>
-      <div class="inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs font-semibold text-amber-300 mb-4">
+      <div class="inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs font-semibold text-amber-300 mb-3">
         <i data-lucide="sparkles" width="14" height="14"></i>
         <span>Soft Opening: Thursday Sept 17 · Grand Opening: Saturday Sept 19</span>
       </div>
-      <p class="mono text-xs font-bold tracking-[.2em] text-[#d8ff45] mb-4">HOURLY PLAYSTATION GAMING</p>
-      <h1 class="hero-h1 mb-2">
+      <p class="mono text-xs font-bold tracking-[.2em] text-[#d8ff45] mb-3">HOURLY PLAYSTATION GAMING</p>
+      <h1 class="hero-h1 mb-0">
         Level up your
         <em>downtime.</em>
-        <span class="outline">ChillPill.</span>
+        <span class="hero-line3"><span class="outline-white">Take a Chill</span><span class="outline-pill">Pill.</span></span>
       </h1>
-      <p class="text-slate-300 mt-5 text-lg" id="hero-tagline">Console gaming, snacks &amp; good vibes.</p>
-      <p class="text-slate-400 mt-2" id="hero-location">📍 Budhanilkantha, Kathmandu</p>
-      <div class="flex flex-wrap gap-3 mt-7">
-        <a id="hero-whatsapp" href="#" target="_blank" rel="noopener" class="btn-acid rounded-xl px-6 py-3.5 flex items-center gap-2"><i data-lucide="message-circle" width="18" height="18"></i> Book a slot on WhatsApp</a>
-        <a href="#pricing" class="btn-outline rounded-xl px-6 py-3.5 flex items-center gap-2"><i data-lucide="banknote" width="18" height="18"></i> See pricing</a>
+      <p class="text-slate-300 mt-3 text-base lg:text-lg" id="hero-tagline">Good food. Great games. Better company.</p>
+      <p class="text-slate-400 mt-1.5 text-sm" id="hero-location">📍 Budhanilkantha, Kathmandu</p>
+      <div class="flex flex-wrap gap-3 mt-5">
+        <a id="hero-whatsapp" href="#" target="_blank" rel="noopener" class="btn-acid rounded-xl px-6 py-3 flex items-center gap-2"><i data-lucide="message-circle" width="18" height="18"></i> Book a slot on WhatsApp</a>
+        <a href="#pricing" class="btn-outline rounded-xl px-6 py-3 flex items-center gap-2"><i data-lucide="banknote" width="18" height="18"></i> See pricing</a>
       </div>
-      <div class="flex items-center gap-6 mt-8 text-sm text-slate-400">
+      <div class="flex items-center gap-6 mt-4 text-sm text-slate-400">
         <div class="flex items-center gap-2"><i data-lucide="clock" width="16" height="16" class="text-[#d8ff45]"></i><span id="hero-hours">7:00 AM – 8:00 PM · Every day</span></div>
       </div>
     </div>
-    <div class="grid grid-cols-2 gap-4">
+    <div class="grid grid-cols-2 gap-3">
       <img src="assets/images/cabin-corridor.jpg" alt="Gaming cabin corridor at ChillPill Gaming Cafe" class="rounded-2xl aspect-square object-cover w-full" loading="lazy">
-      <img src="assets/images/cabin-single.jpg" alt="A private gaming cabin with a PlayStation, big screen, and bean bags" class="rounded-2xl aspect-square object-cover w-full mt-8" loading="lazy">
+      <img src="assets/images/cabin-single.jpg" alt="A private gaming cabin with a PlayStation, big screen, and bean bags" class="rounded-2xl aspect-square object-cover w-full mt-6" loading="lazy">
       <img src="assets/images/walking-area.jpg" alt="Walkway between gaming cabins" class="rounded-2xl aspect-square object-cover w-full" loading="lazy">
-      <img src="assets/images/reception-counter.jpg" alt="ChillPill Gaming Cafe reception counter" class="rounded-2xl aspect-square object-cover w-full mt-8" loading="lazy">
+      <img src="assets/images/reception-counter.jpg" alt="ChillPill Gaming Cafe reception counter" class="rounded-2xl aspect-square object-cover w-full mt-6" loading="lazy">
     </div>
   </section>
 
