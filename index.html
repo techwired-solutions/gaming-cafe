@@ -17,11 +17,11 @@
     html { scroll-behavior: smooth; }
     body { margin:0; font-family:'Fraunces',Georgia,serif; color:#f7f8fb; background:var(--ink); }
     .display { font-family:'Fraunces',Georgia,serif; }
-    .hero-h1 { font-family:'Fraunces',Georgia,serif; font-size:clamp(2.1rem,4.2vw,3.6rem); font-weight:900; line-height:0.93; letter-spacing:-0.03em; }
+    .hero-h1 { font-family:'Fraunces',Georgia,serif; font-size:clamp(2.4rem,4.8vw,4rem); font-weight:900; line-height:0.95; letter-spacing:-0.03em; }
     .hero-h1 em { font-style:italic; color:var(--acid); display:block; }
-    .hero-line3 { display:block; }
-    .outline-white { -webkit-text-stroke:2px rgba(247,248,251,0.85); color:transparent; }
-    .outline-pill { -webkit-text-stroke:2px #818cf8; color:transparent; }
+    .hero-plain { display:block; }
+    .hero-chill { -webkit-text-stroke:2.5px rgba(247,248,251,0.88); color:transparent; }
+    .pill-grad { background:linear-gradient(135deg,#60a5fa 0%,#a855f7 40%,#c084fc 65%,#ec4899 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
     .brand-pill { background:linear-gradient(135deg,#818cf8,#a855f7); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
     .mono { font-family:"Space Mono",monospace; }
     .bg-app {
@@ -102,7 +102,7 @@
   </header>
 
   <!-- ===================== HERO ===================== -->
-  <section id="top" class="w-full px-8 lg:px-14 xl:px-20 pt-6 pb-4 min-h-[calc(100dvh-6.5rem)] grid lg:grid-cols-2 gap-8 items-center">
+  <section id="top" class="w-full px-8 lg:px-14 xl:px-20 pt-8 pb-4 min-h-[calc(100dvh-6.5rem)] grid lg:grid-cols-2 gap-8 items-start">
     <div>
       <div class="inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs font-semibold text-amber-300 mb-3">
         <i data-lucide="sparkles" width="14" height="14"></i>
@@ -110,9 +110,10 @@
       </div>
       <p class="mono text-xs font-bold tracking-[.2em] text-[#d8ff45] mb-3">HOURLY PLAYSTATION GAMING</p>
       <h1 class="hero-h1 mb-0">
-        Level up your
+        <span class="hero-plain">Level up your</span>
         <em>downtime.</em>
-        <span class="hero-line3"><span class="outline-white">Take a Chill</span><span class="outline-pill">Pill.</span></span>
+        <span class="hero-plain">Take a</span>
+        <span class="hero-plain"><span class="hero-chill">Chill</span><span class="pill-grad">Pill.</span></span>
       </h1>
       <p class="text-slate-300 mt-3 text-base lg:text-lg" id="hero-tagline">Good food. Great games. Better company.</p>
       <p class="text-slate-400 mt-1.5 text-sm" id="hero-location">📍 Budhanilkantha, Kathmandu</p>
