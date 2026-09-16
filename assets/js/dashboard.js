@@ -14,6 +14,7 @@
   let records = [];
   let staffList = [];
   let expenses = [];
+  let capitalContributions = [];
   let adminNotices = [];
   let initialCapitalAmount = CFG.INITIAL_CAPITAL || 1500000;
   let panNumber = CFG.PAN_NUMBER || "625001462";
@@ -1653,6 +1654,12 @@
     document.getElementById("cms-address").value = settings.cafe_address || "";
     document.getElementById("cms-hours").value = settings.opening_hours || "";
     document.getElementById("cms-whatsapp").value = settings.whatsapp_number || "";
+    const panEl = document.getElementById("cms-pan");
+    if (panEl) panEl.value = settings.pan_number || "";
+    const capEl = document.getElementById("cms-capital");
+    if (capEl) capEl.value = settings.initial_capital != null ? settings.initial_capital : "";
+    const mapsEl = document.getElementById("cms-maps");
+    if (mapsEl) mapsEl.value = settings.google_maps_url || "";
     document.getElementById("cms-whatsapp-message").value = settings.whatsapp_message || "";
     document.getElementById("sidebar-cafe-name").textContent = settings.cafe_name || "ChillPill Gaming Cafe";
   }
@@ -1665,16 +1672,129 @@
     const partnerReimbursed = expenses.filter(e => e.payment_source === "partner_personal" && e.reimbursement_status === "reimbursed").reduce((s, e) => s + Number(e.amount), 0);
     const partnerPending = partnerTotal - partnerReimbursed;
     const cafeRevExpenses = expenses.filter(e => e.payment_source === "cafe_revenue").reduce((s, e) => s + Number(e.amount), 0);
-    const remaining = Math.max(0, initialCapitalAmount - capitalSpent);
+
+    const totalContributedCapital = capitalContributions.reduce((s, c) => s + Number(c.amount || 0), 0);
+    const effectiveCapital = totalContributedCapital > 0 ? totalContributedCapital : initialCapitalAmount;
+    const remaining = Math.max(0, effectiveCapital - capitalSpent);
 
     const el = (id) => document.getElementById(id);
-    el("kpi-initial-capital").textContent = inr(initialCapitalAmount);
+    el("kpi-initial-capital").textContent = inr(effectiveCapital);
     el("kpi-remaining-capital").textContent = inr(remaining);
     el("kpi-partner-pending").textContent = inr(partnerPending);
     el("kpi-partner-total").textContent = inr(partnerTotal);
     el("kpi-setup-expenses").textContent = inr(setupSpent);
     el("kpi-revenue-expenses").textContent = inr(cafeRevExpenses);
     el("kpi-reimbursed-total").textContent = inr(partnerReimbursed);
+  }
+
+  function renderPartnerNameDatalist() {
+    const datalist = document.getElementById("partner-names-list");
+    if (!datalist) return;
+    const names = new Set();
+    capitalContributions.forEach(c => { if (c.partner_name) names.add(c.partner_name.trim()); });
+    expenses.forEach(e => { if (e.paid_by_partner_name) names.add(e.paid_by_partner_name.trim()); });
+    datalist.innerHTML = Array.from(names).sort().map(n => `<option value="${n}">`).join("");
+  }
+
+  function renderCapitalContributions() {
+    const list = document.getElementById("capital-partners-list");
+    const empty = document.getElementById("capital-partners-empty");
+    const countBadge = document.getElementById("capital-partner-count-badge");
+    const tableWrap = document.getElementById("capital-table-wrap");
+    const tbody = document.getElementById("capital-tbody");
+    const totalLabel = document.getElementById("capital-total-label");
+
+    const totalCapital = capitalContributions.reduce((s, c) => s + Number(c.amount || 0), 0);
+    const partnerMap = {};
+
+    capitalContributions.forEach(c => {
+      const name = c.partner_name || "Anonymous";
+      if (!partnerMap[name]) partnerMap[name] = { total: 0, count: 0, latestDate: c.contribution_date };
+      partnerMap[name].total += Number(c.amount || 0);
+      partnerMap[name].count += 1;
+    });
+
+    const partners = Object.entries(partnerMap);
+    if (countBadge) {
+      countBadge.textContent = `${partners.length} Partner${partners.length === 1 ? "" : "s"}`;
+    }
+
+    if (empty) empty.classList.toggle("hidden", partners.length > 0);
+    if (tableWrap) tableWrap.classList.toggle("hidden", capitalContributions.length === 0);
+    if (totalLabel) totalLabel.textContent = `Total Seed Pool: ${inr(totalCapital)}`;
+
+    if (list) {
+      list.innerHTML = "";
+      partners.forEach(([name, data]) => {
+        const pct = totalCapital > 0 ? ((data.total / totalCapital) * 100).toFixed(1) : "0.0";
+        const card = document.createElement("div");
+        card.className = "rounded-xl border border-slate-700 bg-[#111722] p-3.5 flex flex-col justify-between";
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center justify-between gap-1 mb-1">
+              <p class="font-semibold text-sm text-white truncate" title="${name}">${name}</p>
+              <span class="mono text-xs font-bold text-[#d8ff45] bg-[#d8ff45]/10 border border-[#d8ff45]/30 px-1.5 py-0.5 rounded shrink-0">${pct}%</span>
+            </div>
+            <p class="text-xs text-slate-400">Invested: <span class="mono font-bold text-white">${inr(data.total)}</span></p>
+          </div>
+          <div class="mt-2.5">
+            <div class="h-1.5 rounded-full bg-slate-800 overflow-hidden">
+              <div class="h-full rounded-full bg-[#d8ff45]" style="width:${pct}%"></div>
+            </div>
+            <p class="text-[10px] text-slate-500 mt-1">${data.count} contribution${data.count > 1 ? "s" : ""}</p>
+          </div>`;
+        list.appendChild(card);
+      });
+    }
+
+    if (tbody) {
+      tbody.innerHTML = "";
+      capitalContributions.forEach(c => {
+        const tr = document.createElement("tr");
+        tr.className = "text-xs text-slate-300 hover:bg-slate-800/50";
+        const dateStr = c.contribution_date ? new Date(c.contribution_date).toLocaleDateString() : "—";
+        tr.innerHTML = `
+          <td class="py-2.5 px-3 whitespace-nowrap">${dateStr}</td>
+          <td class="py-2.5 px-3 font-semibold text-white">${c.partner_name}</td>
+          <td class="py-2.5 px-3 text-slate-400">${c.notes || "—"}</td>
+          <td class="py-2.5 px-3 text-right mono font-bold text-emerald-400">${inr(c.amount)}</td>
+          <td class="py-2.5 px-3 text-right whitespace-nowrap">
+            <button type="button" class="delete-cap-btn text-[10px] px-2 py-1 rounded border border-slate-700 text-red-400 hover:border-red-500">Delete</button>
+          </td>`;
+        tr.querySelector(".delete-cap-btn").addEventListener("click", async () => {
+          if (!confirm(`Delete capital contribution from "${c.partner_name}" (${inr(c.amount)})?`)) return;
+          const { error } = await window.sb.from("capital_contributions").delete().eq("id", c.id);
+          if (error) showToast("Could not delete capital contribution: " + error.message);
+          else {
+            showToast("Contribution deleted.");
+            fetchCapitalContributions();
+          }
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    renderPartnerNameDatalist();
+  }
+
+  async function fetchCapitalContributions() {
+    const alertEl = document.getElementById("capital-sql-alert");
+    try {
+      const { data, error } = await window.sb.from("capital_contributions").select("*").order("contribution_date", { ascending: false });
+      if (error) {
+        console.warn("[ChillPill] Could not load capital_contributions:", error);
+        if (alertEl && (error.code === "42P01" || (error.message && error.message.toLowerCase().includes("does not exist")))) {
+          alertEl.classList.remove("hidden");
+        }
+        return;
+      }
+      if (alertEl) alertEl.classList.add("hidden");
+      capitalContributions = data || [];
+      renderCapitalContributions();
+      renderExpenseKPIs();
+    } catch (err) {
+      console.warn("[ChillPill] Exception loading capital_contributions:", err);
+    }
   }
 
   function renderPartnerSummary() {
@@ -1796,6 +1916,7 @@
     renderExpenseKPIs();
     renderPartnerSummary();
     renderExpensesTable();
+    renderPartnerNameDatalist();
   }
 
   // ---------- notices (admin) ----------
@@ -1942,7 +2063,7 @@
   }
 
   async function loadAll() {
-    await Promise.all([fetchSessions(), fetchMenu(), fetchSettings(), fetchStaff(), fetchWaitingList(), fetchStations(), fetchTables(), fetchExpenses(), fetchNotices()]);
+    await Promise.all([fetchSessions(), fetchMenu(), fetchSettings(), fetchStaff(), fetchWaitingList(), fetchStations(), fetchTables(), fetchExpenses(), fetchNotices(), fetchCapitalContributions()]);
   }
 
   function subscribeRealtime() {
@@ -1957,6 +2078,7 @@
       .on("postgres_changes", { event: "*", schema: "public", table: "tables" }, fetchTables)
       .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, fetchExpenses)
       .on("postgres_changes", { event: "*", schema: "public", table: "notices" }, fetchNotices)
+      .on("postgres_changes", { event: "*", schema: "public", table: "capital_contributions" }, fetchCapitalContributions)
       .subscribe((status) => {
         if (status === "SUBSCRIBED") setConnectionStatus(true, "Live");
       });
@@ -2027,6 +2149,84 @@
         showToast("Expense recorded.");
       }
     });
+
+    // --- Partner Seed Capital Form & Actions ---
+    const capForm = document.getElementById("capital-form");
+    const toggleCapBtn = document.getElementById("btn-toggle-capital-form");
+    const closeCapBtn = document.getElementById("btn-close-capital-form");
+    const cancelCapBtn = document.getElementById("btn-cancel-capital");
+    const copyCapSqlBtn = document.getElementById("btn-copy-capital-sql");
+
+    if (toggleCapBtn && capForm) {
+      toggleCapBtn.addEventListener("click", () => {
+        capForm.classList.toggle("hidden");
+        if (!capForm.classList.contains("hidden")) {
+          const nameInput = document.getElementById("capital-partner-name");
+          if (nameInput) nameInput.focus();
+        }
+      });
+    }
+
+    if (closeCapBtn && capForm) {
+      closeCapBtn.addEventListener("click", () => capForm.classList.add("hidden"));
+    }
+    if (cancelCapBtn && capForm) {
+      cancelCapBtn.addEventListener("click", () => capForm.classList.add("hidden"));
+    }
+
+    if (copyCapSqlBtn) {
+      copyCapSqlBtn.addEventListener("click", async () => {
+        const sql = `create table if not exists public.capital_contributions (
+  id uuid primary key default gen_random_uuid(),
+  partner_name text not null,
+  amount numeric not null check (amount >= 0),
+  contribution_date date not null default current_date,
+  notes text,
+  created_at timestamptz not null default now()
+);
+alter table public.capital_contributions enable row level security;
+drop policy if exists "capital_all_anon" on public.capital_contributions;
+create policy "capital_all_anon" on public.capital_contributions for all using (true) with check (true);`;
+        try {
+          await navigator.clipboard.writeText(sql);
+          showToast("SQL script copied! Paste and run it in Supabase SQL Editor.");
+        } catch {
+          showToast("Could not copy automatically. Check supabase/schema.sql.");
+        }
+      });
+    }
+
+    if (capForm) {
+      capForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!sdkReady) return showToast("Supabase isn't connected yet.");
+        const partnerName = document.getElementById("capital-partner-name").value.trim();
+        const amount = Math.max(0, Number(document.getElementById("capital-amount").value) || 0);
+        const dateVal = document.getElementById("capital-date").value;
+        const notes = document.getElementById("capital-notes").value.trim();
+
+        if (!partnerName || !amount) {
+          return showToast("Please enter both a partner name and an amount.");
+        }
+
+        const payload = {
+          partner_name: partnerName,
+          amount: amount,
+          contribution_date: dateVal ? dateVal : new Date().toISOString().slice(0, 10),
+          notes: notes || null
+        };
+
+        const { error } = await window.sb.from("capital_contributions").insert(payload);
+        if (error) {
+          showToast("Could not record capital contribution: " + error.message);
+        } else {
+          capForm.reset();
+          capForm.classList.add("hidden");
+          showToast(`Recorded NPR ${amount.toLocaleString()} from ${partnerName}.`);
+          fetchCapitalContributions();
+        }
+      });
+    }
 
     // --- Admin notice form ---
     document.getElementById("admin-notice-form").addEventListener("submit", async (event) => {

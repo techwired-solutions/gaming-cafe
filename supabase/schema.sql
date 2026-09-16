@@ -128,6 +128,7 @@ alter table public.settings add column if not exists whatsapp_message text not n
 alter table public.settings add column if not exists pan_number text not null default '625001462';
 alter table public.settings add column if not exists initial_capital numeric not null default 1500000;
 alter table public.settings add column if not exists google_maps_url text not null default 'https://maps.app.goo.gl/uBQnASzc9W2igYmh6';
+alter table public.expenses add column if not exists created_by text;
 
 -- ---------------------------------------------------------------------
 -- notices: event announcements, popups, and updates managed by admin,
@@ -390,6 +391,10 @@ begin
   end;
   begin
     alter publication supabase_realtime add table public.expenses;
+  exception when duplicate_object then null;
+  end;
+  begin
+    alter publication supabase_realtime add table public.capital_contributions;
   exception when duplicate_object then null;
   end;
 end $$;
