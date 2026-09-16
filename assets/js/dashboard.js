@@ -8,7 +8,7 @@
   const CFG = window.APP_CONFIG || {};
   const ALERT_MS = (CFG.ALERT_MINUTES_BEFORE_END || 5) * 60 * 1000;
   const OVERTIME_GRACE_MINUTES = CFG.OVERTIME_GRACE_MINUTES != null ? Number(CFG.OVERTIME_GRACE_MINUTES) : 5;
-  const ADMIN_ONLY_PAGES = new Set(["page-revenue", "page-expenses", "page-notices", "page-menu", "page-content", "page-staff"]);
+  const ADMIN_ONLY_PAGES = new Set(["page-revenue", "page-expenses", "page-notices", "page-menu", "page-content", "page-linkypot", "page-staff"]);
 
   let menuItems = [];
   let records = [];
@@ -2640,6 +2640,33 @@ notify pgrst, 'reload schema';`;
     });
 
     initWaitingEditModal();
+
+    // --- LinkyPot Actions ---
+    const copyLinkyBtn = document.getElementById("btn-copy-linkypot");
+    if (copyLinkyBtn) {
+      copyLinkyBtn.addEventListener("click", () => {
+        const url = "https://linkypot.com/chillpill";
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(() => showToast("LinkyPot URL copied to clipboard!"))
+            .catch(() => showToast("Public URL: " + url));
+        } else {
+          showToast("Public URL: " + url);
+        }
+      });
+    }
+
+    const refreshLinkyBtn = document.getElementById("btn-refresh-linkypot");
+    if (refreshLinkyBtn) {
+      refreshLinkyBtn.addEventListener("click", () => {
+        const iframe = document.getElementById("linkypot-frame");
+        if (iframe) {
+          const src = iframe.src;
+          iframe.src = "";
+          setTimeout(() => { iframe.src = src; }, 50);
+          showToast("LinkyPot embed refreshed.");
+        }
+      });
+    }
 
     // initial state
     sessionStatusActiveOption = document.getElementById("session-status-active-option");
