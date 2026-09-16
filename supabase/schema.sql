@@ -114,11 +114,9 @@ create table if not exists public.settings (
   constraint settings_singleton check (id = 1)
 );
 
-insert into public.settings (id, default_rate, cafe_name, opening_hours, whatsapp_number, pan_number, initial_capital)
-values (1, 100, 'ChillPill Gaming Cafe', '7:00 AM – 8:00 PM · Every day', '9779765130636', '625001462', 1500000)
-on conflict (id) do nothing;
-
--- Backward-compatible migration for databases created before the CMS columns existed.
+-- Backward-compatible migration for databases created before new columns existed.
+alter table public.settings add column if not exists default_rate numeric not null default 100;
+alter table public.settings add column if not exists cafe_name text not null default 'ChillPill Gaming Cafe';
 alter table public.settings add column if not exists cafe_tagline text not null default 'Console gaming, snacks & good vibes.';
 alter table public.settings add column if not exists cafe_location text not null default 'Budhanilkantha, Kathmandu';
 alter table public.settings add column if not exists cafe_address text not null default 'Budhanilkantha, Kathmandu, Nepal';
@@ -128,7 +126,10 @@ alter table public.settings add column if not exists whatsapp_message text not n
 alter table public.settings add column if not exists pan_number text not null default '625001462';
 alter table public.settings add column if not exists initial_capital numeric not null default 1500000;
 alter table public.settings add column if not exists google_maps_url text not null default 'https://maps.app.goo.gl/uBQnASzc9W2igYmh6';
-alter table public.expenses add column if not exists created_by text;
+
+insert into public.settings (id)
+values (1)
+on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------
 -- notices: event announcements, popups, and updates managed by admin,
@@ -146,6 +147,14 @@ create table if not exists public.notices (
   active boolean not null default true,
   created_at timestamptz not null default now()
 );
+
+-- Backward-compatible migration for existing notices tables
+alter table public.notices add column if not exists badge text not null default 'Announcement';
+alter table public.notices add column if not exists image_url text;
+alter table public.notices add column if not exists button_text text;
+alter table public.notices add column if not exists button_url text;
+alter table public.notices add column if not exists popup boolean not null default true;
+alter table public.notices add column if not exists active boolean not null default true;
 
 -- Seed soft and grand opening notice if table is empty
 insert into public.notices (title, badge, message, button_text, button_url, popup, active)
@@ -183,6 +192,21 @@ create table if not exists public.expenses (
   created_at timestamptz not null default now()
 );
 
+-- Backward-compatible migration for existing expenses tables
+alter table public.expenses add column if not exists title text not null default 'Expense';
+alter table public.expenses add column if not exists category text not null default 'Initial Setup & Build';
+alter table public.expenses add column if not exists amount numeric not null default 0;
+alter table public.expenses add column if not exists payment_source text not null default 'initial_capital';
+alter table public.expenses add column if not exists paid_by_partner_name text;
+alter table public.expenses add column if not exists reimbursement_status text not null default 'not_applicable';
+alter table public.expenses add column if not exists reimbursed_at timestamptz;
+alter table public.expenses add column if not exists reimbursed_by text;
+alter table public.expenses add column if not exists expense_date timestamptz not null default now();
+alter table public.expenses add column if not exists notes text;
+alter table public.expenses add column if not exists receipt_url text;
+alter table public.expenses add column if not exists created_by text;
+alter table public.expenses add column if not exists created_at timestamptz not null default now();
+
 create index if not exists expenses_source_idx on public.expenses (payment_source);
 create index if not exists expenses_reimbursement_idx on public.expenses (reimbursement_status);
 create index if not exists expenses_category_idx on public.expenses (category);
@@ -200,6 +224,16 @@ create table if not exists public.capital_contributions (
   notes text,
   created_at timestamptz not null default now()
 );
+
+-- Backward-compatible migration for existing capital_contributions tables
+alter table public.capital_contributions add column if not exists partner_name text not null default 'Anonymous';
+alter table public.capital_contributions add column if not exists amount numeric not null default 0;
+alter table public.capital_contributions add column if not exists contribution_date date not null default current_date;
+alter table public.capital_contributions add column if not exists notes text;
+alter table public.capital_contributions add column if not exists created_at timestamptz not null default now();
+
+create index if not exists capital_partner_idx on public.capital_contributions (partner_name);
+create index if not exists capital_date_idx on public.capital_contributions (contribution_date);
 
 -- ---------------------------------------------------------------------
 -- Seed standard menu items if empty (including all user-requested items)
@@ -265,6 +299,8 @@ create table if not exists public.tables (
   created_at timestamptz not null default now()
 );
 
+alter table public.tables add column if not exists active boolean not null default true;
+
 -- ---------------------------------------------------------------------
 -- waiting_list: first-come-first-served queue for customers waiting on a
 -- free station. They can order food while they wait, and are optionally
@@ -288,6 +324,10 @@ create table if not exists public.waiting_list (
 
 -- Backward-compatible migration for databases created before tables existed.
 alter table public.waiting_list add column if not exists table_name text;
+alter table public.waiting_list add column if not exists food_items jsonb not null default '[]'::jsonb;
+alter table public.waiting_list add column if not exists food_total numeric not null default 0;
+alter table public.waiting_list add column if not exists staff_id uuid references public.staff(id) on delete set null;
+alter table public.waiting_list add column if not exists staff_name text;
 
 create index if not exists waiting_list_status_idx on public.waiting_list (status);
 
@@ -398,3 +438,14 @@ begin
   exception when duplicate_object then null;
   end;
 end $$;
+
+-- ---------------------------------------------------------------------
+-- Role Permissions & PostgREST cache reload
+-- ---------------------------------------------------------------------
+grant all on all tables in schema public to anon, authenticated, service_role;
+grant all on all sequences in schema public to anon, authenticated, service_role;
+grant all on all routines in schema public to anon, authenticated, service_role;
+
+-- Instruct PostgREST to reload its schema cache immediately
+notify pgrst, 'reload schema';
+

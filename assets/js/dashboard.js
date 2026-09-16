@@ -16,7 +16,7 @@
   let expenses = [];
   let capitalContributions = [];
   let adminNotices = [];
-  let initialCapitalAmount = CFG.INITIAL_CAPITAL || 1500000;
+  let initialCapitalAmount = 0;
   let panNumber = CFG.PAN_NUMBER || "625001462";
   let currentStaff = null; // { id, name, username, role }
   let sdkReady = false;
@@ -1674,7 +1674,7 @@
     const cafeRevExpenses = expenses.filter(e => e.payment_source === "cafe_revenue").reduce((s, e) => s + Number(e.amount), 0);
 
     const totalContributedCapital = capitalContributions.reduce((s, c) => s + Number(c.amount || 0), 0);
-    const effectiveCapital = totalContributedCapital > 0 ? totalContributedCapital : initialCapitalAmount;
+    const effectiveCapital = totalContributedCapital;
     const remaining = Math.max(0, effectiveCapital - capitalSpent);
 
     const el = (id) => document.getElementById(id);
@@ -1945,10 +1945,15 @@
             <p class="text-[10px] text-slate-600 mt-1">${notice.created_at ? fmtDateTime(notice.created_at) : ""}</p>
           </div>
           <div class="flex flex-col gap-1 shrink-0">
+            <button type="button" class="edit-notice-btn rounded-lg border border-slate-600 px-2 py-1.5 text-[10px] text-slate-300 hover:text-[#d8ff45] hover:border-[#d8ff45]">Edit</button>
             <button type="button" class="toggle-notice-btn rounded-lg border border-slate-600 px-2 py-1.5 text-[10px] text-slate-300 hover:text-[#d8ff45] hover:border-[#d8ff45]">${notice.active ? "Deactivate" : "Activate"}</button>
             <button type="button" class="delete-notice-btn rounded-lg border border-slate-600 px-2 py-1.5 text-[10px] text-red-400 hover:border-red-500">Delete</button>
           </div>
         </div>`;
+
+      card.querySelector(".edit-notice-btn").addEventListener("click", () => {
+        openEditNoticeModal(notice);
+      });
 
       card.querySelector(".toggle-notice-btn").addEventListener("click", async () => {
         const { error } = await window.sb.from("notices").update({ active: !notice.active }).eq("id", notice.id);
@@ -1965,6 +1970,69 @@
 
       list.appendChild(card);
     });
+  }
+
+  function openEditNoticeModal(notice) {
+    document.getElementById("edit-notice-id").value = notice.id;
+    document.getElementById("edit-notice-title").value = notice.title || "";
+    document.getElementById("edit-notice-badge").value = notice.badge || "";
+    document.getElementById("edit-notice-image").value = notice.image_url || "";
+    document.getElementById("edit-notice-message").value = notice.message || "";
+    document.getElementById("edit-notice-btn-text").value = notice.button_text || "";
+    document.getElementById("edit-notice-btn-url").value = notice.button_url || "";
+    document.getElementById("edit-notice-popup").checked = Boolean(notice.popup);
+    document.getElementById("edit-notice-active").checked = Boolean(notice.active);
+    document.getElementById("edit-notice-modal").classList.add("show");
+  }
+
+  function closeEditNoticeModal() {
+    document.getElementById("edit-notice-modal").classList.remove("show");
+  }
+
+  function initEditNoticeModal() {
+    const modal = document.getElementById("edit-notice-modal");
+    const closeBtn = document.getElementById("edit-notice-close");
+    const cancelBtn = document.getElementById("edit-notice-cancel");
+    const form = document.getElementById("edit-notice-form");
+
+    if (closeBtn) closeBtn.addEventListener("click", closeEditNoticeModal);
+    if (cancelBtn) cancelBtn.addEventListener("click", closeEditNoticeModal);
+    if (modal) {
+      modal.addEventListener("click", (event) => {
+        if (event.target === modal) closeEditNoticeModal();
+      });
+    }
+
+    if (form) {
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!sdkReady) return showToast("Supabase isn't connected yet.");
+        const id = document.getElementById("edit-notice-id").value;
+        const title = document.getElementById("edit-notice-title").value.trim();
+        const message = document.getElementById("edit-notice-message").value.trim();
+        if (!id || !title || !message) return showToast("Title and message are required.");
+
+        const payload = {
+          title,
+          message,
+          badge: document.getElementById("edit-notice-badge").value.trim() || "Announcement",
+          image_url: document.getElementById("edit-notice-image").value.trim() || null,
+          button_text: document.getElementById("edit-notice-btn-text").value.trim() || null,
+          button_url: document.getElementById("edit-notice-btn-url").value.trim() || null,
+          popup: document.getElementById("edit-notice-popup").checked,
+          active: document.getElementById("edit-notice-active").checked
+        };
+
+        const { error } = await window.sb.from("notices").update(payload).eq("id", id);
+        if (error) {
+          showToast("Could not update notice: " + error.message);
+        } else {
+          closeEditNoticeModal();
+          showToast("Notice updated successfully.");
+          fetchNotices();
+        }
+      });
+    }
   }
 
   async function fetchNotices() {
@@ -2091,6 +2159,7 @@
     initCheckoutModal();
     initEditModal();
     initQuickFoodModal();
+    initEditNoticeModal();
     switchPage("page-overview");
 
     // --- Expense quick-chips, source toggle, form, and filters ---
@@ -2174,6 +2243,20 @@
       cancelCapBtn.addEventListener("click", () => capForm.classList.add("hidden"));
     }
 
+    const recheckCapBtn = document.getElementById("btn-recheck-capital");
+    if (recheckCapBtn) {
+      recheckCapBtn.addEventListener("click", async () => {
+        showToast("Checking Supabase for capital_contributions table...");
+        await fetchCapitalContributions();
+        const alertEl = document.getElementById("capital-sql-alert");
+        if (alertEl && alertEl.classList.contains("hidden")) {
+          showToast("Table connected successfully!");
+        } else {
+          showToast("Table not detected yet. Run the copied SQL in Supabase SQL Editor first.");
+        }
+      });
+    }
+
     if (copyCapSqlBtn) {
       copyCapSqlBtn.addEventListener("click", async () => {
         const sql = `create table if not exists public.capital_contributions (
@@ -2184,9 +2267,20 @@
   notes text,
   created_at timestamptz not null default now()
 );
+create index if not exists capital_partner_idx on public.capital_contributions (partner_name);
+create index if not exists capital_date_idx on public.capital_contributions (contribution_date);
 alter table public.capital_contributions enable row level security;
 drop policy if exists "capital_all_anon" on public.capital_contributions;
-create policy "capital_all_anon" on public.capital_contributions for all using (true) with check (true);`;
+create policy "capital_all_anon" on public.capital_contributions for all using (true) with check (true);
+grant all on table public.capital_contributions to anon, authenticated, service_role;
+do $$
+begin
+  begin
+    alter publication supabase_realtime add table public.capital_contributions;
+  exception when duplicate_object then null;
+  end;
+end $$;
+notify pgrst, 'reload schema';`;
         try {
           await navigator.clipboard.writeText(sql);
           showToast("SQL script copied! Paste and run it in Supabase SQL Editor.");
