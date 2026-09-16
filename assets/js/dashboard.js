@@ -850,13 +850,155 @@
     document.getElementById("checkout-discount-value").value = 0;
   }
 
+  // ---------- LinkyPot Loyalty POS Integration ----------
+  const LINKYPOT_CARD_SLUG = "chillpill";
+  const LINKYPOT_EMBED_KEY = "lp_emb_513d91d0fa22c2d09b49b4e8d967d94c";
+  const LINKYPOT_API_URL = `https://www.linkypot.com/api/cards/${LINKYPOT_CARD_SLUG}/loyalty/pos`;
+
+  async function fetchCustomerLoyalty(phone) {
+    if (!phone) return null;
+    try {
+      const res = await fetch(`${LINKYPOT_API_URL}?key=${LINKYPOT_EMBED_KEY}&phone=${encodeURIComponent(phone.trim())}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      console.warn("[ChillPill] Could not check LinkyPot loyalty status:", e);
+      return null;
+    }
+  }
+
+  async function logVisitToLinkyPot(phone, name, amount, redeemed = false) {
+    if (!phone) return;
+    try {
+      const res = await fetch(LINKYPOT_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: LINKYPOT_EMBED_KEY,
+          action: "log_visit",
+          phone: phone.trim(),
+          name: name ? name.trim() : "Customer",
+          amount_spent: Number(amount) || 0,
+          logged_by: currentStaff ? currentStaff.name : "ChillPill POS",
+          redeemed: Boolean(redeemed),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        if (data.reward_ready && !redeemed) {
+          showToast(`🎉 LinkyPot: ${name || phone} unlocked a loyalty reward!`);
+        } else {
+          showToast(`⚡ LinkyPot: Visit recorded (${data.current_progress}/${data.target_value} stamps).`);
+        }
+      }
+    } catch (e) {
+      console.warn("[ChillPill] Background visit log to LinkyPot failed:", e);
+    }
+  }
+
+  async function syncPastRecordsToLinkyPot() {
+    const syncBtn = document.getElementById("btn-sync-linkypot");
+    const syncText = document.getElementById("btn-sync-linkypot-text");
+    if (!syncBtn || !syncText) return;
+
+    const completedSessions = records.filter((r) => r.status === "Completed" && r.customer_phone && r.customer_phone.trim().length >= 7);
+    if (!completedSessions.length) {
+      showToast("No completed sessions with phone numbers found to sync.");
+      return;
+    }
+
+    const customerMap = new Map();
+    completedSessions.forEach((s) => {
+      const cleanPhone = s.customer_phone.trim();
+      const existing = customerMap.get(cleanPhone) || { phone: cleanPhone, name: s.customer_name || "Customer", visits: 0, total_spent: 0 };
+      existing.visits += 1;
+      existing.total_spent += Number(s.amount || s.final_amount || 0);
+      if (s.customer_name && s.customer_name !== "Customer") existing.name = s.customer_name;
+      customerMap.set(cleanPhone, existing);
+    });
+
+    const customers = Array.from(customerMap.values());
+    syncBtn.disabled = true;
+    syncText.textContent = `Syncing ${customers.length} customers...`;
+
+    try {
+      const res = await fetch(LINKYPOT_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: LINKYPOT_EMBED_KEY,
+          action: "bulk_sync",
+          customers,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        showToast(`✅ Synced ${data.synced_count || customers.length} customers with past visits to LinkyPot!`);
+        const iframe = document.getElementById("linkypot-frame");
+        if (iframe) {
+          const src = iframe.src;
+          iframe.src = "";
+          setTimeout(() => { iframe.src = src; }, 50);
+        }
+      } else {
+        showToast("Sync failed: " + (data.error || "Check console"));
+      }
+    } catch (err) {
+      showToast("Could not connect to LinkyPot API.");
+    } finally {
+      syncBtn.disabled = false;
+      syncText.textContent = "Sync Past Records";
+    }
+  }
+
   function openCheckoutModal(record) {
     const modal = document.getElementById("checkout-modal");
     modal.dataset.recordId = record.id;
+    modal.dataset.linkypotRedeemed = "false";
     document.getElementById("checkout-customer").textContent = record.customer_name || "—";
     document.getElementById("checkout-station").textContent = `${record.station_name || ""} · ${record.duration_minutes || 0} min`;
     setCheckoutDiscountMode("amount");
     renderCheckoutBreakdown(record);
+
+    // LinkyPot Loyalty & Reward Check
+    const lpBadge = document.getElementById("checkout-linkypot-badge");
+    const lpText = document.getElementById("checkout-linkypot-text");
+    const lpBtn = document.getElementById("btn-apply-linkypot-reward");
+
+    if (lpBadge) {
+      if (record.customer_phone && record.customer_phone.trim()) {
+        lpBadge.classList.remove("hidden");
+        lpText.textContent = "Checking LinkyPot loyalty...";
+        if (lpBtn) lpBtn.classList.add("hidden");
+
+        fetchCustomerLoyalty(record.customer_phone).then((info) => {
+          if (!info || !info.success) {
+            lpText.textContent = `Customer: ${record.customer_phone} (New to loyalty program)`;
+            return;
+          }
+          if (info.reward_ready) {
+            lpText.textContent = `🎁 REWARD READY: ${info.reward_description} (${info.current_progress}/${info.target_value} stamps)!`;
+            if (lpBtn) {
+              lpBtn.classList.remove("hidden");
+              lpBtn.onclick = () => {
+                setCheckoutDiscountMode("percent");
+                document.getElementById("checkout-discount-value").value = 100;
+                modal.dataset.linkypotRedeemed = "true";
+                renderCheckoutBreakdown(record);
+                lpBtn.classList.add("hidden");
+                lpText.textContent = `🎉 Reward Applied: ${info.reward_description} (will be redeemed on checkout)`;
+                showToast("LinkyPot reward applied to bill!");
+              };
+            }
+          } else {
+            lpText.textContent = `Loyalty Stamps: ${info.current_progress}/${info.target_value} (${info.stamps_needed} more needed for ${info.reward_description})`;
+          }
+        });
+      } else {
+        lpBadge.classList.add("hidden");
+      }
+    }
+
     modal.classList.add("show");
     clearInterval(Number(modal.dataset.refreshTimer) || 0);
     modal.dataset.refreshTimer = setInterval(() => {
@@ -867,6 +1009,7 @@
 
   function closeCheckoutModal() {
     const modal = document.getElementById("checkout-modal");
+    modal.dataset.linkypotRedeemed = "false";
     modal.classList.remove("show");
     clearInterval(Number(modal.dataset.refreshTimer) || 0);
   }
@@ -913,9 +1056,12 @@
         btn.disabled = false;
         if (error) showToast("Could not record payment: " + error.message);
         else {
+          const redeemed = modal.dataset.linkypotRedeemed === "true";
           closeCheckoutModal();
           const extras = [overtime.amount > 0 ? `+${inr(overtime.amount)} overtime` : null, discount.amount > 0 ? `−${inr(discount.amount)} discount` : null].filter(Boolean).join(", ");
           showToast(`Payment recorded — ${method}${extras ? ` (${extras})` : ""}.`);
+          // Log visit to LinkyPot loyalty program
+          logVisitToLinkyPot(record.customer_phone, record.customer_name, grandTotal, redeemed);
         }
       })
     );
@@ -946,10 +1092,13 @@
         payAndPrintBtn.disabled = false;
         if (error) showToast("Could not record payment: " + error.message);
         else {
+          const redeemed = modal.dataset.linkypotRedeemed === "true";
           const updated = { ...record, status: "Completed", paid: true, payment_method: method, amount: grandTotal, overtime_amount: overtime.amount, discount_amount: discount.amount };
           closeCheckoutModal();
           showToast(`Payment recorded — Cash. Printing PAN bill...`);
           printPanBill(updated, "Cash");
+          // Log visit to LinkyPot loyalty program
+          logVisitToLinkyPot(record.customer_phone, record.customer_name, grandTotal, redeemed);
         }
       });
     }
@@ -2161,6 +2310,10 @@
     initQuickFoodModal();
     initEditNoticeModal();
     switchPage("page-overview");
+
+    // LinkyPot: wire bulk historical sync button
+    const syncBtn = document.getElementById("btn-sync-linkypot");
+    if (syncBtn) syncBtn.addEventListener("click", syncPastRecordsToLinkyPot);
 
     // --- Expense quick-chips, source toggle, form, and filters ---
     document.querySelectorAll(".expense-chip").forEach((chip) =>
