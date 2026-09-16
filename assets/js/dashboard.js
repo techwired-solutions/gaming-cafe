@@ -2645,7 +2645,7 @@ notify pgrst, 'reload schema';`;
     const copyLinkyBtn = document.getElementById("btn-copy-linkypot");
     if (copyLinkyBtn) {
       copyLinkyBtn.addEventListener("click", () => {
-        const url = "https://linkypot.com/chillpill";
+        const url = "https://chillpill.linkypot.com";
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(url).then(() => showToast("LinkyPot URL copied to clipboard!"))
             .catch(() => showToast("Public URL: " + url));
