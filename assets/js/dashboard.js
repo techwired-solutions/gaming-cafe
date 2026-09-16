@@ -442,7 +442,8 @@
     // bookings clashing, not just "someone's on it right now."
     const startTimeStr = document.getElementById("start-time").value;
     const duration = Number(document.getElementById("duration-minutes").value) || 0;
-    const candidateStart = startTimeStr ? combineDateAndTime(new Date(), startTimeStr) : new Date();
+    const baseDate = window._getSessionBaseDate ? window._getSessionBaseDate() : new Date();
+    const candidateStart = startTimeStr ? combineDateAndTime(baseDate, startTimeStr) : new Date();
     const candidateEnd = new Date(candidateStart.getTime() + duration * 60000);
     const overlap = findStationTimeOverlap(stationName, candidateStart, candidateEnd);
 
@@ -2668,7 +2669,8 @@ notify pgrst, 'reload schema';`;
       const startTimeStr = document.getElementById("start-time").value;
       const { total, foodTotal, duration, rate } = calculateAmount();
       const foodItems = collectFrItems("food-order-list");
-      const startDate = startTimeStr ? combineDateAndTime(new Date(), startTimeStr) : status !== "Booked" ? new Date() : null;
+      const baseDate = window._getSessionBaseDate ? window._getSessionBaseDate() : new Date();
+      const startDate = startTimeStr ? combineDateAndTime(baseDate, startTimeStr) : status !== "Booked" ? new Date() : null;
       const startIso = startDate ? startDate.toISOString() : null;
       const endIso = startDate ? new Date(startDate.getTime() + duration * 60000).toISOString() : null;
 
@@ -2823,8 +2825,28 @@ notify pgrst, 'reload schema';`;
 
     // initial state
     sessionStatusActiveOption = document.getElementById("session-status-active-option");
+
+    // ---- Session date: Today / Tomorrow toggle ----
+    let sessionBaseDate = new Date();
+    function setSessionBaseDate(offset) {
+      sessionBaseDate = new Date();
+      sessionBaseDate.setDate(sessionBaseDate.getDate() + offset);
+      document.getElementById("session-today-label").textContent = fmtDateLabel(sessionBaseDate);
+      document.querySelectorAll(".session-date-pill").forEach((btn) => {
+        const active = Number(btn.dataset.offset) === offset;
+        btn.className = active
+          ? "session-date-pill rounded-lg px-3 py-1.5 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45] transition"
+          : "session-date-pill rounded-lg px-3 py-1.5 text-xs font-bold border border-slate-600 bg-transparent text-slate-400 hover:border-slate-400 hover:text-slate-200 transition";
+      });
+      updateStationConflictUI();
+    }
+    document.querySelectorAll(".session-date-pill").forEach((btn) =>
+      btn.addEventListener("click", () => setSessionBaseDate(Number(btn.dataset.offset)))
+    );
+    window._getSessionBaseDate = () => sessionBaseDate;
+
     document.getElementById("start-time").value = timeInputValue(new Date());
-    document.getElementById("session-today-label").textContent = fmtDateLabel(new Date());
+    setSessionBaseDate(0); // initialise label & pill styles
     syncEndFromDuration("start-time", "duration-minutes", "end-time");
     registerFoodContainer("food-order-list", calculateAmount);
     registerFoodContainer("edit-food-rows", recalcEditModal);

@@ -346,6 +346,18 @@
                   <h3 class="font-semibold text-lg">Time tracking</h3>
                   <span id="session-today-label" class="mono text-xs text-slate-500"></span>
                 </div>
+                <!-- Session date: Today / Tomorrow toggle -->
+                <div class="flex items-center gap-2 mb-4">
+                  <span class="text-xs text-slate-400 font-medium mr-1">Date:</span>
+                  <button type="button" id="session-date-today" data-offset="0"
+                    class="session-date-pill rounded-lg px-3 py-1.5 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45] transition">
+                    Today
+                  </button>
+                  <button type="button" id="session-date-tomorrow" data-offset="1"
+                    class="session-date-pill rounded-lg px-3 py-1.5 text-xs font-bold border border-slate-600 bg-transparent text-slate-400 hover:border-slate-400 hover:text-slate-200 transition">
+                    Tomorrow
+                  </button>
+                </div>
                 <div class="grid sm:grid-cols-2 gap-4">
                   <div><label class="block text-sm font-medium mb-2" for="start-time">Start time</label><input id="start-time" class="form-control" type="time"></div>
                   <div><label class="block text-sm font-medium mb-2" for="end-time">End time</label><input id="end-time" class="form-control" type="time"></div>
