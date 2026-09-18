@@ -56,13 +56,11 @@
 </head>
 <body class="bg-app">
   <!-- ===================== TOP ANNOUNCEMENT BANNER ===================== -->
-  <aside id="top-announcement-banner" class="bg-gradient-to-r from-amber-500/20 via-[#d8ff45]/20 to-emerald-500/20 border-b border-[#d8ff45]/30 text-xs sm:text-sm py-2.5 px-4 text-center cursor-pointer hover:bg-slate-900/90 transition flex items-center justify-center gap-2">
+  <aside id="top-announcement-banner" class="hidden bg-gradient-to-r from-amber-500/20 via-[#d8ff45]/20 to-emerald-500/20 border-b border-[#d8ff45]/30 text-xs sm:text-sm py-2.5 px-4 text-center cursor-pointer hover:bg-slate-900/90 transition items-center justify-center gap-2">
     <span class="inline-flex items-center gap-1.5 font-bold text-[#d8ff45] uppercase tracking-wider text-[11px] bg-[#d8ff45]/20 border border-[#d8ff45]/40 rounded-full px-2 py-0.5">
-      <span class="w-1.5 h-1.5 rounded-full bg-[#d8ff45] animate-pulse"></span> Opening Notice
+      <span class="w-1.5 h-1.5 rounded-full bg-[#d8ff45] animate-pulse"></span> <span id="banner-badge">Notice</span>
     </span>
-    <span id="banner-text" class="text-slate-200 font-semibold">
-      🚀 <strong>Soft Opening: Thursday, Sept 17</strong> &nbsp;|&nbsp; 🏆 <strong>Grand Opening: Saturday, Sept 19</strong> (7 AM – 8 PM)
-    </span>
+    <span id="banner-text" class="text-slate-200 font-semibold"></span>
     <span class="text-[#d8ff45] underline font-bold ml-1 hidden sm:inline">Click for Details →</span>
   </aside>
 
@@ -272,27 +270,10 @@
         <img id="notice-image" src="" alt="Notice image" class="w-full h-full object-cover">
       </div>
 
-      <h2 id="notice-modal-title" class="text-2xl sm:text-3xl font-extrabold text-white leading-tight">
-        ChillPill Gaming Cafe is Opening Soon! 🎮
-      </h2>
+      <h2 id="notice-modal-title" class="text-2xl sm:text-3xl font-extrabold text-white leading-tight"></h2>
 
       <div class="mt-4 space-y-3">
-        <div class="grid grid-cols-2 gap-2.5">
-          <div class="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3">
-            <p class="text-[11px] uppercase tracking-wider text-amber-300 font-bold">Soft Opening</p>
-            <p class="text-lg font-extrabold text-white mt-0.5">Sept 17</p>
-            <p class="text-xs text-amber-200/80">Thursday</p>
-          </div>
-          <div class="rounded-xl border border-[#d8ff45]/40 bg-[#d8ff45]/10 p-3">
-            <p class="text-[11px] uppercase tracking-wider text-[#d8ff45] font-bold">Grand Opening</p>
-            <p class="text-lg font-extrabold text-[#d8ff45] mt-0.5">Sept 19</p>
-            <p class="text-xs text-slate-300">Saturday</p>
-          </div>
-        </div>
-
-        <div id="notice-body-text" class="text-sm text-slate-300 leading-relaxed bg-[#0f141f] rounded-xl p-3.5 border border-slate-800">
-          Get ready for immersive PS5 &amp; PS4 compartments, big 4K displays, specialty coffees, mocktails, fresh bakery items, and non-stop gaming excitement!
-        </div>
+        <div id="notice-body-text" class="text-sm text-slate-300 leading-relaxed bg-[#0f141f] rounded-xl p-3.5 border border-slate-800 whitespace-pre-line"></div>
 
         <div class="grid grid-cols-2 gap-2 text-xs text-slate-400">
           <div class="flex items-center gap-1.5"><i data-lucide="clock" width="14" height="14" class="text-[#d8ff45]"></i> 7:00 AM – 8:00 PM</div>
@@ -301,8 +282,8 @@
       </div>
 
       <div class="mt-6 flex flex-col sm:flex-row gap-3">
-        <a id="notice-action-btn" href="https://wa.me/9779765130636?text=Hi!%20I%20saw%20the%20opening%20notice%20for%20ChillPill%20Gaming%20Cafe" target="_blank" rel="noopener" class="btn-acid flex-1 rounded-xl py-3 px-4 font-bold text-center text-sm flex items-center justify-center gap-2">
-          <i data-lucide="message-circle" width="16" height="16"></i> Inquire on WhatsApp
+        <a id="notice-action-btn" href="#" target="_blank" rel="noopener" class="hidden btn-acid flex-1 rounded-xl py-3 px-4 font-bold text-center text-sm flex items-center justify-center gap-2">
+          <i data-lucide="message-circle" width="16" height="16"></i> <span id="notice-action-btn-text">Inquire on WhatsApp</span>
         </a>
         <button id="notice-dismiss-btn" type="button" class="btn-outline rounded-xl py-3 px-5 font-bold text-sm text-slate-300 hover:text-white">
           Got it!

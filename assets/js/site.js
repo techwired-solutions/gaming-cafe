@@ -98,6 +98,8 @@
   }
 
   // ---------- NOTICE POPUP SYSTEM ----------
+  let currentActiveNoticeId = null;
+
   function openNoticeModal() {
     const modal = document.getElementById("notice-modal");
     if (!modal) return;
@@ -114,6 +116,9 @@
     document.body.style.overflow = "";
     try {
       sessionStorage.setItem("cp_notice_dismissed", "1");
+      if (currentActiveNoticeId) {
+        sessionStorage.setItem("cp_notice_dismissed_" + currentActiveNoticeId, "1");
+      }
     } catch (e) {}
   }
 
@@ -136,9 +141,22 @@
   }
 
   async function loadNotices() {
+    const banner = document.getElementById("top-announcement-banner");
+    const modal = document.getElementById("notice-modal");
+
+    // Ensure hidden by default
+    if (banner) {
+      banner.classList.add("hidden");
+      banner.classList.remove("flex");
+    }
+    if (modal) {
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+
     let notice = null;
 
-    if (window.SUPABASE_CONFIGURED) {
+    if (window.SUPABASE_CONFIGURED && window.sb) {
       try {
         const { data, error } = await window.sb
           .from("notices")
@@ -152,49 +170,84 @@
           notice = data;
         }
       } catch (err) {
-        console.warn("[ChillPill] Notice fetch failed, using default:", err);
+        console.warn("[ChillPill] Notice fetch failed:", err);
       }
     }
 
-    // If notice found from DB, update the modal elements
-    if (notice) {
-      const titleEl = document.getElementById("notice-modal-title");
-      const badgeEl = document.getElementById("notice-badge");
-      const bodyEl = document.getElementById("notice-body-text");
-      const imgWrap = document.getElementById("notice-image-wrap");
-      const imgEl = document.getElementById("notice-image");
-      const actionBtn = document.getElementById("notice-action-btn");
+    // If no active notice exists, keep everything hidden and exit!
+    if (!notice || !notice.active) {
+      return;
+    }
+
+    currentActiveNoticeId = notice.id;
+
+    // Show and configure the top announcement banner
+    if (banner) {
+      const bannerBadge = document.getElementById("banner-badge");
       const bannerText = document.getElementById("banner-text");
 
-      if (titleEl && notice.title) titleEl.textContent = notice.title;
-      if (badgeEl && notice.badge) badgeEl.textContent = notice.badge;
-      if (bodyEl && notice.message) bodyEl.textContent = notice.message;
-      if (bannerText && notice.title) bannerText.innerHTML = `<strong>${notice.title}</strong> — Click for Details`;
-
-      if (notice.image_url && imgWrap && imgEl) {
-        imgEl.src = notice.image_url;
-        imgWrap.classList.remove("hidden");
+      if (bannerBadge && notice.badge) bannerBadge.textContent = notice.badge;
+      if (bannerText && notice.title) {
+        bannerText.innerHTML = `<strong>${notice.title}</strong>`;
       }
+      banner.classList.remove("hidden");
+      banner.classList.add("flex");
+    }
 
-      if (notice.button_text && actionBtn) {
-        actionBtn.innerHTML = `<i data-lucide="message-circle" width="16" height="16"></i> ${notice.button_text}`;
-      }
-      if (notice.button_url && actionBtn) {
-        actionBtn.href = notice.button_url;
+    // Configure the modal elements
+    const titleEl = document.getElementById("notice-modal-title");
+    const badgeEl = document.getElementById("notice-badge");
+    const bodyEl = document.getElementById("notice-body-text");
+    const imgWrap = document.getElementById("notice-image-wrap");
+    const imgEl = document.getElementById("notice-image");
+    const actionBtn = document.getElementById("notice-action-btn");
+    const actionBtnText = document.getElementById("notice-action-btn-text");
+
+    if (titleEl && notice.title) titleEl.textContent = notice.title;
+    if (badgeEl && notice.badge) badgeEl.textContent = notice.badge;
+    if (bodyEl && notice.message) bodyEl.textContent = notice.message;
+
+    if (notice.image_url && imgWrap && imgEl) {
+      imgEl.src = notice.image_url;
+      imgWrap.classList.remove("hidden");
+    } else if (imgWrap) {
+      imgWrap.classList.add("hidden");
+    }
+
+    if (actionBtn) {
+      if (notice.button_url || notice.button_text) {
+        actionBtn.classList.remove("hidden");
+        if (actionBtnText && notice.button_text) actionBtnText.textContent = notice.button_text;
+        actionBtn.href = notice.button_url || whatsappUrl() || "#contact";
+      } else {
+        const waUrl = whatsappUrl();
+        if (waUrl) {
+          actionBtn.classList.remove("hidden");
+          if (actionBtnText) actionBtnText.textContent = "Inquire on WhatsApp";
+          actionBtn.href = waUrl;
+        } else {
+          actionBtn.classList.add("hidden");
+        }
       }
     }
 
-    // Auto popup if not dismissed in this session
-    let dismissed = false;
-    try {
-      dismissed = sessionStorage.getItem("cp_notice_dismissed") === "1";
-    } catch (e) {}
+    if (window.lucide) {
+      lucide.createIcons();
+    }
 
-    // If never dismissed, show popup smoothly after 600ms
-    if (!dismissed) {
-      setTimeout(() => {
-        openNoticeModal();
-      }, 600);
+    // Only auto popup if the notice has popup enabled and hasn't been dismissed in this session
+    if (notice.popup) {
+      let dismissed = false;
+      try {
+        dismissed = sessionStorage.getItem("cp_notice_dismissed_" + notice.id) === "1" ||
+                    sessionStorage.getItem("cp_notice_dismissed") === "1";
+      } catch (e) {}
+
+      if (!dismissed) {
+        setTimeout(() => {
+          openNoticeModal();
+        }, 600);
+      }
     }
   }
 

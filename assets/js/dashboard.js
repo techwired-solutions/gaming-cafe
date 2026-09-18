@@ -2107,15 +2107,23 @@
 
       card.querySelector(".toggle-notice-btn").addEventListener("click", async () => {
         const { error } = await window.sb.from("notices").update({ active: !notice.active }).eq("id", notice.id);
-        if (error) showToast("Could not update notice.");
-        else showToast(notice.active ? "Notice deactivated." : "Notice activated.");
+        if (error) {
+          showToast("Could not update notice.");
+        } else {
+          showToast(notice.active ? "Notice deactivated." : "Notice activated.");
+          fetchNotices();
+        }
       });
 
       card.querySelector(".delete-notice-btn").addEventListener("click", async () => {
         if (!confirm(`Delete notice "${notice.title}"?`)) return;
         const { error } = await window.sb.from("notices").delete().eq("id", notice.id);
-        if (error) showToast("Could not delete notice.");
-        else showToast("Notice deleted.");
+        if (error) {
+          showToast("Could not delete notice.");
+        } else {
+          showToast("Notice deleted.");
+          fetchNotices();
+        }
       });
 
       list.appendChild(card);
@@ -2500,6 +2508,7 @@ notify pgrst, 'reload schema';`;
         document.getElementById("notice-input-popup").checked = true;
         document.getElementById("notice-input-active").checked = true;
         showToast("Notice published — it's now live on the website.");
+        fetchNotices();
       }
     });
 
