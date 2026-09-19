@@ -5,7 +5,7 @@ Disallow: /staff
 Disallow: /dashboard
 
 # Sitemap location
-Sitemap: https://chillpill.linkypot.com/sitemap.xml
+Sitemap: https://www.chillpill.com.np/sitemap.xml
 
 # Crawl-delay for polite crawlers
 Crawl-delay: 10
