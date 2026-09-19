@@ -1672,7 +1672,7 @@
     document.getElementById("mr-rate").addEventListener("input", recalcMissingRecord);
 
     // Food rows
-    registerFrContainer("mr-food-rows", recalcMissingRecord);
+    registerFoodContainer("mr-food-rows", recalcMissingRecord);
     const addFoodBtn = document.getElementById("mr-add-food-row");
     if (addFoodBtn) {
       addFoodBtn.addEventListener("click", () => addFrRow("mr-food-rows"));
@@ -3527,11 +3527,27 @@ notify pgrst, 'reload schema';`;
     }
 
     setConnectionStatus(false, "Connecting…");
-    loadAll().finally(() => {
-      sdkReady = true;
-      setConnectionStatus(true, "Connected");
-      subscribeRealtime();
-    });
+    const connectionTimeout = setTimeout(() => {
+      if (!sdkReady) {
+        sdkReady = true;
+        setConnectionStatus(true, "Connected");
+      }
+    }, 6000);
+
+    loadAll()
+      .catch((err) => {
+        console.warn("[ChillPill] loadAll warning:", err);
+      })
+      .finally(() => {
+        clearTimeout(connectionTimeout);
+        sdkReady = true;
+        setConnectionStatus(true, "Connected");
+        try {
+          subscribeRealtime();
+        } catch (e) {
+          console.warn("[ChillPill] Realtime subscribe warning:", e);
+        }
+      });
   }
 
   document.addEventListener("DOMContentLoaded", initLogin);
