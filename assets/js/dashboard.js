@@ -924,7 +924,7 @@
 
   // ---------- LinkyPot Loyalty POS Integration ----------
   const DEFAULT_LINKYPOT_SLUG = "chillpill";
-  const DEFAULT_LINKYPOT_KEY = "lp_emb_513d91d0fa22c2d09b49b4e8d967d94c";
+  const DEFAULT_LINKYPOT_KEY = "lp_emb_c55111f8d6ef264d767f1215e51ac632";
   const DEFAULT_LINKYPOT_HOST = "https://www.linkypot.com";
   const DEFAULT_LINKYPOT_EMBED_URL = `${DEFAULT_LINKYPOT_HOST}/embed/${DEFAULT_LINKYPOT_SLUG}?key=${DEFAULT_LINKYPOT_KEY}`;
   const DEFAULT_LINKYPOT_EMBED_CODE = `<iframe src="${DEFAULT_LINKYPOT_EMBED_URL}" width="100%" height="750px" frameborder="0" style="border-radius:16px;border:1px solid #e5e7eb;min-height:650px;" allow="clipboard-write"></iframe>`;
@@ -938,6 +938,8 @@
     let clean = urlStr.trim();
     // Normalize apex linkypot.com to canonical www.linkypot.com to prevent 308 redirect iframe blockage
     clean = clean.replace(/https?:\/\/linkypot\.com/gi, "https://www.linkypot.com");
+    // Replace old revoked embed key if present
+    clean = clean.replace(/lp_emb_513d91d0fa22c2d09b49b4e8d967d94c/g, DEFAULT_LINKYPOT_KEY);
     return clean;
   }
 
@@ -3410,6 +3412,10 @@ notify pgrst, 'reload schema';`;
       } catch (e) {}
       if (!saved && cafeSettings && cafeSettings.linkypot_embed_code) {
         saved = cafeSettings.linkypot_embed_code;
+      }
+      if (saved && saved.includes("lp_emb_513d91d0fa22c2d09b49b4e8d967d94c")) {
+        saved = saved.replace(/lp_emb_513d91d0fa22c2d09b49b4e8d967d94c/g, DEFAULT_LINKYPOT_KEY);
+        try { localStorage.setItem("cp_linkypot_embed_code", saved); } catch (e) {}
       }
 
       window._applyLinkyPotEmbed = applyEmbed;
