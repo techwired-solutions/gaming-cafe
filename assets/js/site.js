@@ -346,6 +346,31 @@
     renderCategorizedMenu(items);
   }
 
+  // ── FAQ accordion ──────────────────────────────────────────────────────────
+  function initFaqAccordion() {
+    const accordion = document.getElementById("faq-accordion");
+    if (!accordion) return;
+    accordion.querySelectorAll(".faq-question").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const item = btn.closest(".faq-item");
+        const isOpen = item.classList.contains("open");
+        // Close all
+        accordion.querySelectorAll(".faq-item.open").forEach((el) => {
+          el.classList.remove("open");
+          el.querySelector(".faq-question").setAttribute("aria-expanded", "false");
+        });
+        // Open clicked (unless it was already open)
+        if (!isOpen) {
+          item.classList.add("open");
+          btn.setAttribute("aria-expanded", "true");
+        }
+      });
+      btn.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); btn.click(); }
+      });
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     fillCafeInfo();
     wireWhatsappLinks();
@@ -354,6 +379,7 @@
     loadSettings();
     loadMenu();
     loadNotices();
+    initFaqAccordion();
     if (window.lucide) lucide.createIcons();
   });
 })();

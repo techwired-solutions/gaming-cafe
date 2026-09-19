@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+
+  <url>
+    <loc>https://chillpill.linkypot.com/</loc>
+    <lastmod>2026-09-19</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <!-- Hero images -->
+    <image:image>
+      <image:loc>https://chillpill.linkypot.com/assets/images/cabin-single.jpg</image:loc>
+      <image:title>Cozy PS5 private gaming cabin at ChillPill Gaming Cafe, Budhanilkantha Kathmandu</image:title>
+      <image:geo_location>Budhanilkantha, Kathmandu, Nepal</image:geo_location>
+    </image:image>
+    <image:image>
+      <image:loc>https://chillpill.linkypot.com/assets/images/cabin-corridor.jpg</image:loc>
+      <image:title>Gaming cabin corridor at ChillPill Gaming Cafe Kathmandu</image:title>
+      <image:geo_location>Budhanilkantha, Kathmandu, Nepal</image:geo_location>
+    </image:image>
+    <image:image>
+      <image:loc>https://chillpill.linkypot.com/assets/images/cafe-lounge.jpg</image:loc>
+      <image:title>Cafe lounge and chill seating area at ChillPill Gaming Cafe</image:title>
+      <image:geo_location>Budhanilkantha, Kathmandu, Nepal</image:geo_location>
+    </image:image>
+    <image:image>
+      <image:loc>https://chillpill.linkypot.com/assets/images/main-entrance.jpg</image:loc>
+      <image:title>Main entrance of ChillPill Gaming Cafe Budhanilkantha</image:title>
+      <image:geo_location>Budhanilkantha, Kathmandu, Nepal</image:geo_location>
+    </image:image>
+    <image:image>
+      <image:loc>https://chillpill.linkypot.com/assets/images/reception-counter.jpg</image:loc>
+      <image:title>Reception counter at ChillPill Gaming Cafe Nepal</image:title>
+      <image:geo_location>Budhanilkantha, Kathmandu, Nepal</image:geo_location>
+    </image:image>
+    <image:image>
+      <image:loc>https://chillpill.linkypot.com/assets/images/walking-area.jpg</image:loc>
+      <image:title>Walkway between private gaming cabins at ChillPill</image:title>
+      <image:geo_location>Budhanilkantha, Kathmandu, Nepal</image:geo_location>
+    </image:image>
+    <image:image>
+      <image:loc>https://chillpill.linkypot.com/assets/images/logo.png</image:loc>
+      <image:title>ChillPill Gaming Cafe Logo</image:title>
+      <image:geo_location>Budhanilkantha, Kathmandu, Nepal</image:geo_location>
+    </image:image>
+  </url>
+
+</urlset>

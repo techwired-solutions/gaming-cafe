@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /staff
+Disallow: /dashboard
+
+# Sitemap location
+Sitemap: https://chillpill.linkypot.com/sitemap.xml
+
+# Crawl-delay for polite crawlers
+Crawl-delay: 10
