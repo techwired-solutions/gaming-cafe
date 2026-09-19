@@ -126,6 +126,7 @@ alter table public.settings add column if not exists whatsapp_message text not n
 alter table public.settings add column if not exists pan_number text not null default '625001462';
 alter table public.settings add column if not exists initial_capital numeric not null default 1500000;
 alter table public.settings add column if not exists google_maps_url text not null default 'https://maps.app.goo.gl/uBQnASzc9W2igYmh6';
+alter table public.settings add column if not exists linkypot_embed_code text;
 
 insert into public.settings (id)
 values (1)

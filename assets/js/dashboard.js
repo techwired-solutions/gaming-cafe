@@ -852,14 +852,48 @@
   }
 
   // ---------- LinkyPot Loyalty POS Integration ----------
-  const LINKYPOT_CARD_SLUG = "chillpill";
-  const LINKYPOT_EMBED_KEY = "lp_emb_513d91d0fa22c2d09b49b4e8d967d94c";
-  const LINKYPOT_API_URL = `https://www.linkypot.com/api/cards/${LINKYPOT_CARD_SLUG}/loyalty/pos`;
+  const DEFAULT_LINKYPOT_SLUG = "chillpill";
+  const DEFAULT_LINKYPOT_KEY = "lp_emb_513d91d0fa22c2d09b49b4e8d967d94c";
+  const DEFAULT_LINKYPOT_EMBED_URL = `https://linkypot.com/embed/${DEFAULT_LINKYPOT_SLUG}?key=${DEFAULT_LINKYPOT_KEY}`;
+  const DEFAULT_LINKYPOT_EMBED_CODE = `<iframe src="${DEFAULT_LINKYPOT_EMBED_URL}" width="100%" height="750px" frameborder="0" style="border-radius:16px;border:1px solid #e5e7eb;min-height:650px;" allow="clipboard-write"></iframe>`;
+
+  let currentLinkyPotSlug = DEFAULT_LINKYPOT_SLUG;
+  let currentLinkyPotKey = DEFAULT_LINKYPOT_KEY;
+  let currentLinkyPotHost = "https://linkypot.com";
+
+  function extractEmbedUrl(raw) {
+    if (!raw) return "";
+    const str = raw.trim();
+    const match = str.match(/src=["']([^"']+)["']/i);
+    return match ? match[1].trim() : str;
+  }
+
+  function parseSlugAndKey(url) {
+    let slug = DEFAULT_LINKYPOT_SLUG;
+    let key = DEFAULT_LINKYPOT_KEY;
+    let host = "https://linkypot.com";
+    try {
+      const u = new URL(url, "https://linkypot.com");
+      host = `${u.protocol}//${u.host}`;
+      const parts = u.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("embed");
+      if (idx !== -1 && parts[idx + 1]) {
+        slug = parts[idx + 1];
+      }
+      const k = u.searchParams.get("key");
+      if (k) key = k;
+    } catch (e) {}
+    return { slug, key, host };
+  }
+
+  function getLinkyPotApiUrl() {
+    return `${currentLinkyPotHost}/api/cards/${currentLinkyPotSlug}/loyalty/pos`;
+  }
 
   async function fetchCustomerLoyalty(phone) {
     if (!phone) return null;
     try {
-      const res = await fetch(`${LINKYPOT_API_URL}?key=${LINKYPOT_EMBED_KEY}&phone=${encodeURIComponent(phone.trim())}`);
+      const res = await fetch(`${getLinkyPotApiUrl()}?key=${currentLinkyPotKey}&phone=${encodeURIComponent(phone.trim())}`);
       if (!res.ok) return null;
       return await res.json();
     } catch (e) {
@@ -871,11 +905,11 @@
   async function logVisitToLinkyPot(phone, name, amount, redeemed = false) {
     if (!phone) return;
     try {
-      const res = await fetch(LINKYPOT_API_URL, {
+      const res = await fetch(getLinkyPotApiUrl(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          key: LINKYPOT_EMBED_KEY,
+          key: currentLinkyPotKey,
           action: "log_visit",
           phone: phone.trim(),
           name: name ? name.trim() : "Customer",
@@ -923,11 +957,11 @@
     syncText.textContent = `Syncing ${customers.length} customers...`;
 
     try {
-      const res = await fetch(LINKYPOT_API_URL, {
+      const res = await fetch(getLinkyPotApiUrl(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          key: LINKYPOT_EMBED_KEY,
+          key: currentLinkyPotKey,
           action: "bulk_sync",
           customers,
         }),
@@ -2806,10 +2840,100 @@ notify pgrst, 'reload schema';`;
     initWaitingEditModal();
 
     // --- LinkyPot Actions ---
+    function initLinkyPotEmbedSettings() {
+      const input = document.getElementById("linkypot-embed-input");
+      const iframe = document.getElementById("linkypot-frame");
+      const saveBtn = document.getElementById("btn-save-linkypot-embed");
+      const resetBtn = document.getElementById("btn-reset-linkypot-embed");
+      const toggleBtn = document.getElementById("btn-toggle-embed-settings");
+      const panel = document.getElementById("linkypot-embed-settings-panel");
+
+      function applyEmbed(codeOrUrl, isInitial = false) {
+        const raw = (codeOrUrl || "").trim();
+        const url = extractEmbedUrl(raw) || DEFAULT_LINKYPOT_EMBED_URL;
+        const parsed = parseSlugAndKey(url);
+        currentLinkyPotSlug = parsed.slug;
+        currentLinkyPotKey = parsed.key;
+        currentLinkyPotHost = parsed.host;
+
+        if (iframe) {
+          iframe.src = url;
+        }
+        if (input) {
+          input.value = raw || DEFAULT_LINKYPOT_EMBED_CODE;
+        }
+        if (!isInitial) {
+          showToast("LinkyPot embed updated & loaded.");
+        }
+      }
+
+      // Check saved embed in localStorage or DB settings
+      let saved = "";
+      try {
+        saved = localStorage.getItem("cp_linkypot_embed_code") || "";
+      } catch (e) {}
+      if (!saved && settings && settings.linkypot_embed_code) {
+        saved = settings.linkypot_embed_code;
+      }
+
+      if (saved) {
+        applyEmbed(saved, true);
+      } else {
+        if (input) input.value = DEFAULT_LINKYPOT_EMBED_CODE;
+        if (iframe) iframe.src = DEFAULT_LINKYPOT_EMBED_URL;
+      }
+
+      if (toggleBtn && panel) {
+        toggleBtn.addEventListener("click", () => {
+          panel.classList.toggle("hidden");
+          if (!panel.classList.contains("hidden") && input) {
+            input.focus();
+          }
+        });
+      }
+
+      if (saveBtn && input) {
+        saveBtn.addEventListener("click", async () => {
+          const val = input.value.trim();
+          if (!val) {
+            showToast("Please enter an embed code or URL.");
+            return;
+          }
+          applyEmbed(val);
+          try {
+            localStorage.setItem("cp_linkypot_embed_code", val);
+          } catch (e) {}
+          if (sdkReady && window.sb) {
+            try {
+              await window.sb.from("settings").update({ linkypot_embed_code: val }).eq("id", 1);
+            } catch (e) {}
+          }
+        });
+      }
+
+      if (resetBtn) {
+        resetBtn.addEventListener("click", async () => {
+          if (!confirm("Reset LinkyPot embed code to default?")) return;
+          applyEmbed(DEFAULT_LINKYPOT_EMBED_CODE);
+          try {
+            localStorage.removeItem("cp_linkypot_embed_code");
+          } catch (e) {}
+          if (sdkReady && window.sb) {
+            try {
+              await window.sb.from("settings").update({ linkypot_embed_code: null }).eq("id", 1);
+            } catch (e) {}
+          }
+          showToast("Reset to default LinkyPot embed.");
+        });
+      }
+    }
+
+    initLinkyPotEmbedSettings();
+
     const copyLinkyBtn = document.getElementById("btn-copy-linkypot");
     if (copyLinkyBtn) {
       copyLinkyBtn.addEventListener("click", () => {
-        const url = "https://chillpill.linkypot.com";
+        const url = `https://${currentLinkyPotSlug}.linkypot.com`;
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(url).then(() => showToast("LinkyPot URL copied to clipboard!"))
             .catch(() => showToast("Public URL: " + url));

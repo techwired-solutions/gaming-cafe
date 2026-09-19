@@ -884,6 +884,10 @@
                 </div>
                 <!-- Action buttons -->
                 <div class="flex flex-wrap items-center gap-2 shrink-0">
+                  <button id="btn-toggle-embed-settings" type="button" class="rounded-xl border border-slate-600 bg-slate-900/60 px-3.5 py-2 text-xs font-semibold text-slate-200 hover:border-[#d8ff45] hover:text-[#d8ff45] flex items-center gap-1.5 transition">
+                    <i data-lucide="code" width="14" height="14"></i>
+                    <span>Embed Settings</span>
+                  </button>
                   <button id="btn-copy-linkypot" type="button" class="rounded-xl border border-slate-600 bg-slate-900/60 px-3.5 py-2 text-xs font-semibold text-slate-200 hover:border-[#d8ff45] hover:text-[#d8ff45] flex items-center gap-1.5 transition">
                     <i data-lucide="copy" width="14" height="14"></i>
                     <span>Copy Card URL</span>
@@ -919,10 +923,55 @@
               </button>
             </div>
 
+            <!-- LinkyPot Embed Settings Card -->
+            <div id="linkypot-embed-settings-panel" class="panel rounded-2xl p-4 sm:p-5 border border-slate-700/80 bg-[#121722] space-y-3">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-lg bg-[#d8ff45]/15 text-[#d8ff45] flex items-center justify-center shrink-0 border border-[#d8ff45]/30">
+                    <i data-lucide="code" width="16" height="16"></i>
+                  </div>
+                  <div>
+                    <h3 class="font-bold text-sm text-white">Embed Code Configuration</h3>
+                    <p class="text-[11px] text-slate-400">Update your embed snippet or URL directly without touching any code.</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button id="btn-save-linkypot-embed" type="button" class="rounded-xl px-3.5 py-1.5 text-xs font-bold text-[#10141e] bg-[#d8ff45] hover:brightness-105 transition flex items-center gap-1.5 shadow">
+                    <i data-lucide="check" width="13" height="13"></i>
+                    <span>Save &amp; Update Embed</span>
+                  </button>
+                  <button id="btn-reset-linkypot-embed" type="button" class="rounded-xl border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white transition">
+                    Reset Default
+                  </button>
+                </div>
+              </div>
+
+              <div class="space-y-1.5">
+                <label for="linkypot-embed-input" class="block text-xs font-semibold text-slate-300">
+                  LinkyPot &lt;iframe&gt; Embed Code or Direct Embed URL
+                </label>
+                <textarea id="linkypot-embed-input" rows="3" class="form-control font-mono text-xs w-full" placeholder='Paste your &lt;iframe src="https://linkypot.com/embed/chillpill?key=..."&gt;&lt;/iframe&gt; code or direct URL'></textarea>
+                <p class="text-[11px] text-slate-500">
+                  💡 Tip: You can paste the whole <code class="bg-slate-800 px-1 py-0.5 rounded text-slate-300">&lt;iframe src="..."&gt;</code> HTML snippet from LinkyPot or just the direct URL. The dashboard automatically extracts the source link and updates both this live preview and the POS loyalty card sync.
+                </p>
+              </div>
+
+              <!-- Connection Diagnostics -->
+              <div class="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs flex items-start gap-2.5">
+                <i data-lucide="alert-triangle" width="16" height="16" class="shrink-0 text-amber-400 mt-0.5"></i>
+                <div class="space-y-1 text-amber-200/90 text-[11px] leading-relaxed">
+                  <span class="font-bold text-amber-300 block text-xs">Seeing "refused to connect"?</span>
+                  <span>1. Check domain: Try <strong class="text-white">https://linkypot.com/...</strong> (without <code class="bg-black/30 px-1 rounded">www.</code>) as www may not be configured on LinkyPot.</span><br>
+                  <span>2. Frame Security: If LinkyPot is running in Next.js, verify that <code class="bg-black/30 px-1 rounded">middleware.ts</code> does not set <code class="bg-black/30 px-1 rounded">X-Frame-Options: SAMEORIGIN</code> on the <code class="bg-black/30 px-1 rounded">/embed/*</code> route.</span><br>
+                  <span>3. Fallback: You can always use <strong class="text-white">Open Public Link</strong> above to open the digital card directly in a new tab.</span>
+                </div>
+              </div>
+            </div>
+
             <!-- Embed Frame Container -->
             <div class="panel rounded-2xl p-2 sm:p-4 border border-slate-700/80 bg-[#121722] shadow-2xl">
               <div class="w-full rounded-xl overflow-hidden bg-white/5 border border-slate-800 flex justify-center">
-                <iframe id="linkypot-frame" src="https://www.linkypot.com/embed/chillpill?key=lp_emb_513d91d0fa22c2d09b49b4e8d967d94c" width="100%" height="750px" frameborder="0" style="border-radius:16px;border:1px solid #e5e7eb;min-height:650px;" allow="clipboard-write"></iframe>
+                <iframe id="linkypot-frame" src="https://linkypot.com/embed/chillpill?key=lp_emb_513d91d0fa22c2d09b49b4e8d967d94c" width="100%" height="750px" frameborder="0" style="border-radius:16px;border:1px solid #e5e7eb;min-height:650px;" allow="clipboard-write"></iframe>
               </div>
             </div>
 
