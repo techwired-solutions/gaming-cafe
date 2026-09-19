@@ -925,27 +925,41 @@
   // ---------- LinkyPot Loyalty POS Integration ----------
   const DEFAULT_LINKYPOT_SLUG = "chillpill";
   const DEFAULT_LINKYPOT_KEY = "lp_emb_513d91d0fa22c2d09b49b4e8d967d94c";
-  const DEFAULT_LINKYPOT_EMBED_URL = `https://linkypot.com/embed/${DEFAULT_LINKYPOT_SLUG}?key=${DEFAULT_LINKYPOT_KEY}`;
+  const DEFAULT_LINKYPOT_HOST = "https://www.linkypot.com";
+  const DEFAULT_LINKYPOT_EMBED_URL = `${DEFAULT_LINKYPOT_HOST}/embed/${DEFAULT_LINKYPOT_SLUG}?key=${DEFAULT_LINKYPOT_KEY}`;
   const DEFAULT_LINKYPOT_EMBED_CODE = `<iframe src="${DEFAULT_LINKYPOT_EMBED_URL}" width="100%" height="750px" frameborder="0" style="border-radius:16px;border:1px solid #e5e7eb;min-height:650px;" allow="clipboard-write"></iframe>`;
 
   let currentLinkyPotSlug = DEFAULT_LINKYPOT_SLUG;
   let currentLinkyPotKey = DEFAULT_LINKYPOT_KEY;
-  let currentLinkyPotHost = "https://linkypot.com";
+  let currentLinkyPotHost = DEFAULT_LINKYPOT_HOST;
+
+  function normalizeLinkyPotUrl(urlStr) {
+    if (!urlStr) return "";
+    let clean = urlStr.trim();
+    // Normalize apex linkypot.com to canonical www.linkypot.com to prevent 308 redirect iframe blockage
+    clean = clean.replace(/https?:\/\/linkypot\.com/gi, "https://www.linkypot.com");
+    return clean;
+  }
 
   function extractEmbedUrl(raw) {
     if (!raw) return "";
     const str = raw.trim();
     const match = str.match(/src=["']([^"']+)["']/i);
-    return match ? match[1].trim() : str;
+    const extracted = match ? match[1].trim() : str;
+    return normalizeLinkyPotUrl(extracted);
   }
 
   function parseSlugAndKey(url) {
     let slug = DEFAULT_LINKYPOT_SLUG;
     let key = DEFAULT_LINKYPOT_KEY;
-    let host = "https://linkypot.com";
+    let host = DEFAULT_LINKYPOT_HOST;
     try {
-      const u = new URL(url, "https://linkypot.com");
+      const normalized = normalizeLinkyPotUrl(url);
+      const u = new URL(normalized, DEFAULT_LINKYPOT_HOST);
       host = `${u.protocol}//${u.host}`;
+      if (host.toLowerCase() === "https://linkypot.com") {
+        host = "https://www.linkypot.com";
+      }
       const parts = u.pathname.split("/").filter(Boolean);
       const idx = parts.indexOf("embed");
       if (idx !== -1 && parts[idx + 1]) {
@@ -3371,7 +3385,7 @@ notify pgrst, 'reload schema';`;
       const panel = document.getElementById("linkypot-embed-settings-panel");
 
       function applyEmbed(codeOrUrl, isInitial = false) {
-        const raw = (codeOrUrl || "").trim();
+        let raw = normalizeLinkyPotUrl((codeOrUrl || "").trim());
         const url = extractEmbedUrl(raw) || DEFAULT_LINKYPOT_EMBED_URL;
         const parsed = parseSlugAndKey(url);
         currentLinkyPotSlug = parsed.slug;
@@ -3418,7 +3432,7 @@ notify pgrst, 'reload schema';`;
 
       if (saveBtn && input) {
         saveBtn.addEventListener("click", async () => {
-          const val = input.value.trim();
+          let val = normalizeLinkyPotUrl(input.value.trim());
           if (!val) {
             showToast("Please enter an embed code or URL.");
             return;

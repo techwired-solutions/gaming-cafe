@@ -975,9 +975,9 @@
                 <label for="linkypot-embed-input" class="block text-xs font-semibold text-slate-300">
                   LinkyPot &lt;iframe&gt; Embed Code or Direct Embed URL
                 </label>
-                <textarea id="linkypot-embed-input" rows="3" class="form-control font-mono text-xs w-full" placeholder='Paste your &lt;iframe src="https://linkypot.com/embed/chillpill?key=..."&gt;&lt;/iframe&gt; code or direct URL'></textarea>
+                <textarea id="linkypot-embed-input" rows="3" class="form-control font-mono text-xs w-full" placeholder='Paste your &lt;iframe src="https://www.linkypot.com/embed/chillpill?key=..."&gt;&lt;/iframe&gt; code or direct URL'></textarea>
                 <p class="text-[11px] text-slate-500">
-                  💡 Tip: You can paste the whole <code class="bg-slate-800 px-1 py-0.5 rounded text-slate-300">&lt;iframe src="..."&gt;</code> HTML snippet from LinkyPot or just the direct URL. The dashboard automatically extracts the source link and updates both this live preview and the POS loyalty card sync.
+                  💡 Tip: You can paste the whole <code class="bg-slate-800 px-1 py-0.5 rounded text-slate-300">&lt;iframe src="..."&gt;</code> HTML snippet from LinkyPot or just the direct URL. The dashboard automatically extracts the source link, normalizes to the canonical domain, and updates both this live preview and the POS loyalty card sync.
                 </p>
               </div>
 
@@ -986,8 +986,8 @@
                 <i data-lucide="alert-triangle" width="16" height="16" class="shrink-0 text-amber-400 mt-0.5"></i>
                 <div class="space-y-1 text-amber-200/90 text-[11px] leading-relaxed">
                   <span class="font-bold text-amber-300 block text-xs">Seeing "refused to connect"?</span>
-                  <span>1. Check domain: Try <strong class="text-white">https://linkypot.com/...</strong> (without <code class="bg-black/30 px-1 rounded">www.</code>) as www may not be configured on LinkyPot.</span><br>
-                  <span>2. Frame Security: If LinkyPot is running in Next.js, verify that <code class="bg-black/30 px-1 rounded">middleware.ts</code> does not set <code class="bg-black/30 px-1 rounded">X-Frame-Options: SAMEORIGIN</code> on the <code class="bg-black/30 px-1 rounded">/embed/*</code> route.</span><br>
+                  <span>1. Canonical domain: Always use <strong class="text-white">https://www.linkypot.com/...</strong> (with <code class="bg-black/30 px-1 rounded">www.</code>) to avoid apex redirect security blocks in iframes.</span><br>
+                  <span>2. Frame Security: If LinkyPot is running in Next.js, verify that <code class="bg-black/30 px-1 rounded">middleware.ts</code> permits embedding (<code class="bg-black/30 px-1 rounded">Content-Security-Policy: frame-ancestors *</code>).</span><br>
                   <span>3. Fallback: You can always use <strong class="text-white">Open Public Link</strong> above to open the digital card directly in a new tab.</span>
                 </div>
               </div>
@@ -996,7 +996,7 @@
             <!-- Embed Frame Container -->
             <div class="panel rounded-2xl p-2 sm:p-4 border border-slate-700/80 bg-[#121722] shadow-2xl">
               <div class="w-full rounded-xl overflow-hidden bg-white/5 border border-slate-800 flex justify-center">
-                <iframe id="linkypot-frame" src="https://linkypot.com/embed/chillpill?key=lp_emb_513d91d0fa22c2d09b49b4e8d967d94c" width="100%" height="750px" frameborder="0" style="border-radius:16px;border:1px solid #e5e7eb;min-height:650px;" allow="clipboard-write"></iframe>
+                <iframe id="linkypot-frame" src="https://www.linkypot.com/embed/chillpill?key=lp_emb_513d91d0fa22c2d09b49b4e8d967d94c" width="100%" height="750px" frameborder="0" style="border-radius:16px;border:1px solid #e5e7eb;min-height:650px;" allow="clipboard-write"></iframe>
               </div>
             </div>
 
