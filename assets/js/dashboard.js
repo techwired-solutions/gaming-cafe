@@ -19,6 +19,7 @@
   let initialCapitalAmount = 0;
   let panNumber = CFG.PAN_NUMBER || "625001462";
   let currentStaff = null; // { id, name, username, role }
+  let cafeSettings = null;
   let sdkReady = false;
   let realtimeChannel = null;
   const overdueToasted = new Set();
@@ -992,6 +993,7 @@
     modal.dataset.linkypotRedeemed = "false";
     document.getElementById("checkout-customer").textContent = record.customer_name || "—";
     document.getElementById("checkout-station").textContent = `${record.station_name || ""} · ${record.duration_minutes || 0} min`;
+    if (window._resetCheckoutMethod) window._resetCheckoutMethod();
     setCheckoutDiscountMode("amount");
     renderCheckoutBreakdown(record);
 
@@ -1051,6 +1053,26 @@
 
   function initCheckoutModal() {
     const modal = document.getElementById("checkout-modal");
+    let selectedPaymentMethod = "Cash";
+
+    function updatePaymentMethodUI(method) {
+      selectedPaymentMethod = method;
+      const cashBtn = document.getElementById("method-btn-cash");
+      const onlineBtn = document.getElementById("method-btn-online");
+      const label = document.getElementById("checkout-selected-method-label");
+      if (label) label.textContent = method;
+
+      if (cashBtn && onlineBtn) {
+        if (method === "Cash") {
+          cashBtn.className = "checkout-method-btn rounded-xl py-3 px-3 font-bold flex flex-col items-center gap-1 border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45] transition cursor-pointer";
+          onlineBtn.className = "checkout-method-btn rounded-xl py-3 px-3 font-bold flex flex-col items-center gap-1 border border-slate-600 bg-[#1c2333] text-slate-400 hover:border-slate-500 hover:text-slate-200 transition cursor-pointer";
+        } else {
+          onlineBtn.className = "checkout-method-btn rounded-xl py-3 px-3 font-bold flex flex-col items-center gap-1 border border-sky-400 bg-sky-400/15 text-sky-300 transition cursor-pointer";
+          cashBtn.className = "checkout-method-btn rounded-xl py-3 px-3 font-bold flex flex-col items-center gap-1 border border-slate-600 bg-[#1c2333] text-slate-400 hover:border-slate-500 hover:text-slate-200 transition cursor-pointer";
+        }
+      }
+    }
+
     document.getElementById("checkout-cancel").addEventListener("click", closeCheckoutModal);
     modal.addEventListener("click", (event) => { if (event.target === modal) closeCheckoutModal(); });
     modal.querySelectorAll(".discount-mode-btn").forEach((btn) =>
@@ -1064,22 +1086,36 @@
       const record = records.find((r) => r.id === modal.dataset.recordId);
       if (record) renderCheckoutBreakdown(record);
     });
-    modal.querySelectorAll(".checkout-pay-btn").forEach((btn) =>
-      btn.addEventListener("click", async () => {
+
+    // Method selection buttons (Cash or Online)
+    modal.querySelectorAll(".checkout-method-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        updatePaymentMethodUI(btn.dataset.method || "Cash");
+      });
+    });
+
+    window._resetCheckoutMethod = () => updatePaymentMethodUI("Cash");
+
+    // "Complete & Pay" button (with confirmation!)
+    const confirmPayBtn = document.getElementById("checkout-confirm-pay");
+    if (confirmPayBtn) {
+      confirmPayBtn.addEventListener("click", async () => {
         const recordId = modal.dataset.recordId;
-        const method = btn.dataset.method;
         const record = records.find((r) => r.id === recordId);
         if (!record) return;
-        // Recompute fresh at the moment of payment, not from when the modal
-        // happened to be opened, so the charge reflects actual checkout time.
         const { overtime, discount, grandTotal } = renderCheckoutBreakdown(record);
-        btn.disabled = true;
+
+        if (!confirm(`Complete checkout for ${record.customer_name || "Customer"}?\n• Amount: ${inr(grandTotal)}\n• Method: ${selectedPaymentMethod}`)) {
+          return;
+        }
+
+        confirmPayBtn.disabled = true;
         const { error } = await window.sb
           .from("sessions")
           .update({
             status: "Completed",
             paid: true,
-            payment_method: method,
+            payment_method: selectedPaymentMethod,
             paid_at: new Date().toISOString(),
             amount: grandTotal,
             overtime_amount: overtime.amount,
@@ -1088,19 +1124,19 @@
             discount_value: discount.amount > 0 ? discount.value : 0
           })
           .eq("id", recordId);
-        btn.disabled = false;
+        confirmPayBtn.disabled = false;
         if (error) showToast("Could not record payment: " + error.message);
         else {
           const redeemed = modal.dataset.linkypotRedeemed === "true";
           closeCheckoutModal();
           const extras = [overtime.amount > 0 ? `+${inr(overtime.amount)} overtime` : null, discount.amount > 0 ? `−${inr(discount.amount)} discount` : null].filter(Boolean).join(", ");
-          showToast(`Payment recorded — ${method}${extras ? ` (${extras})` : ""}.`);
-          // Log visit to LinkyPot loyalty program
+          showToast(`Payment recorded — ${selectedPaymentMethod}${extras ? ` (${extras})` : ""}.`);
           logVisitToLinkyPot(record.customer_phone, record.customer_name, grandTotal, redeemed);
         }
-      })
-    );
+      });
+    }
 
+    // "Pay & Print PAN Bill" button (with confirmation!)
     const payAndPrintBtn = document.getElementById("checkout-pay-print");
     if (payAndPrintBtn) {
       payAndPrintBtn.addEventListener("click", async () => {
@@ -1108,14 +1144,18 @@
         const record = records.find((r) => r.id === recordId);
         if (!record) return;
         const { overtime, discount, grandTotal } = renderCheckoutBreakdown(record);
+
+        if (!confirm(`Confirm payment & print PAN bill for ${record.customer_name || "Customer"}?\n• Amount: ${inr(grandTotal)}\n• Method: ${selectedPaymentMethod}`)) {
+          return;
+        }
+
         payAndPrintBtn.disabled = true;
-        const method = "Cash";
         const { error } = await window.sb
           .from("sessions")
           .update({
             status: "Completed",
             paid: true,
-            payment_method: method,
+            payment_method: selectedPaymentMethod,
             paid_at: new Date().toISOString(),
             amount: grandTotal,
             overtime_amount: overtime.amount,
@@ -1128,11 +1168,10 @@
         if (error) showToast("Could not record payment: " + error.message);
         else {
           const redeemed = modal.dataset.linkypotRedeemed === "true";
-          const updated = { ...record, status: "Completed", paid: true, payment_method: method, amount: grandTotal, overtime_amount: overtime.amount, discount_amount: discount.amount };
+          const updated = { ...record, status: "Completed", paid: true, payment_method: selectedPaymentMethod, amount: grandTotal, overtime_amount: overtime.amount, discount_amount: discount.amount };
           closeCheckoutModal();
-          showToast(`Payment recorded — Cash. Printing PAN bill...`);
-          printPanBill(updated, "Cash");
-          // Log visit to LinkyPot loyalty program
+          showToast(`Payment recorded — ${selectedPaymentMethod}. Printing PAN bill...`);
+          printPanBill(updated, selectedPaymentMethod);
           logVisitToLinkyPot(record.customer_phone, record.customer_name, grandTotal, redeemed);
         }
       });
@@ -1146,7 +1185,7 @@
         if (record) {
           const { overtime, discount, grandTotal } = renderCheckoutBreakdown(record);
           const previewRecord = { ...record, amount: grandTotal, overtime_amount: overtime.amount, discount_amount: discount.amount };
-          printPanBill(previewRecord, record.payment_method || "Due");
+          printPanBill(previewRecord, selectedPaymentMethod || "Due");
         }
       });
     }
@@ -1804,30 +1843,104 @@
           </div>
           <div class="flex gap-1.5 shrink-0">
             <button type="button" class="toggle-active rounded-lg border border-slate-600 px-2 py-1.5 text-xs text-slate-300">${staff.active ? "Deactivate" : "Activate"}</button>
-            <button type="button" class="reset-password rounded-lg border border-slate-600 px-2 py-1.5 text-xs text-slate-300">Reset pw</button>
+            <button type="button" class="reset-password rounded-lg border border-slate-600 px-2 py-1.5 text-xs text-slate-300 hover:text-[#d8ff45] hover:border-[#d8ff45]">Reset pw</button>
           </div>
-        </div>
-        <div class="reset-result hidden mt-2 text-xs rounded bg-[#0f1520] border border-slate-700 p-2"></div>`;
+        </div>`;
       row.querySelector(".toggle-active").addEventListener("click", async () => {
         if (staff.id === currentStaff.id && staff.active) return showToast("You can't deactivate your own account while signed in.");
         const { error } = await window.sb.from("staff").update({ active: !staff.active }).eq("id", staff.id);
         if (error) showToast("Could not update this account.");
       });
-      row.querySelector(".reset-password").addEventListener("click", async () => {
-        const btn = row.querySelector(".reset-password");
-        btn.disabled = true;
-        const newPassword = randomPassword();
-        const salt = window.ChillPillCrypto.randomSalt();
-        const hash = await window.ChillPillCrypto.hashPassword(newPassword, salt);
-        const { error } = await window.sb.from("staff").update({ password_hash: hash, password_salt: salt }).eq("id", staff.id);
-        btn.disabled = false;
-        if (error) return showToast("Could not reset password.");
-        const resultEl = row.querySelector(".reset-result");
-        resultEl.textContent = `New password for ${staff.username}: ${newPassword} — share this now, it won't be shown again.`;
-        resultEl.classList.remove("hidden");
+      row.querySelector(".reset-password").addEventListener("click", () => {
+        openStaffResetPwModal(staff);
       });
       list.appendChild(row);
     });
+  }
+
+  function openStaffResetPwModal(staff) {
+    const modal = document.getElementById("staff-reset-pw-modal");
+    if (!modal) return;
+    document.getElementById("reset-pw-staff-id").value = staff.id;
+    document.getElementById("reset-pw-staff-name").textContent = staff.name;
+    document.getElementById("reset-pw-staff-username").textContent = `@${staff.username}`;
+    document.getElementById("reset-pw-input").value = randomPassword();
+    const successBox = document.getElementById("reset-pw-success-box");
+    if (successBox) successBox.classList.add("hidden");
+    modal.classList.add("show");
+  }
+
+  function closeStaffResetPwModal() {
+    const modal = document.getElementById("staff-reset-pw-modal");
+    if (modal) modal.classList.remove("show");
+  }
+
+  function initStaffResetPwModal() {
+    const modal = document.getElementById("staff-reset-pw-modal");
+    const closeBtn = document.getElementById("staff-reset-pw-close");
+    const cancelBtn = document.getElementById("staff-reset-pw-cancel");
+    const genBtn = document.getElementById("btn-generate-staff-pw");
+    const copyBtn = document.getElementById("btn-copy-reset-pw");
+    const form = document.getElementById("staff-reset-pw-form");
+    const input = document.getElementById("reset-pw-input");
+    const resultDisplay = document.getElementById("reset-pw-result-display");
+    const successBox = document.getElementById("reset-pw-success-box");
+
+    if (closeBtn) closeBtn.addEventListener("click", closeStaffResetPwModal);
+    if (cancelBtn) cancelBtn.addEventListener("click", closeStaffResetPwModal);
+    if (modal) {
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) closeStaffResetPwModal();
+      });
+    }
+
+    if (genBtn && input) {
+      genBtn.addEventListener("click", () => {
+        input.value = randomPassword();
+        input.focus();
+      });
+    }
+
+    if (copyBtn && resultDisplay) {
+      copyBtn.addEventListener("click", () => {
+        const txt = resultDisplay.textContent.trim();
+        if (txt && navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(txt).then(() => showToast("Password copied to clipboard!"));
+        } else if (txt) {
+          showToast("Password: " + txt);
+        }
+      });
+    }
+
+    if (form) {
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const staffId = document.getElementById("reset-pw-staff-id").value;
+        const newPassword = input.value.trim();
+        if (!staffId || !newPassword) return showToast("Password cannot be empty.");
+        if (newPassword.length < 4) return showToast("Password must be at least 4 characters.");
+
+        const submitBtn = document.getElementById("staff-reset-pw-submit");
+        if (submitBtn) submitBtn.disabled = true;
+
+        try {
+          const salt = window.ChillPillCrypto.randomSalt();
+          const hash = await window.ChillPillCrypto.hashPassword(newPassword, salt);
+          const { error } = await window.sb.from("staff").update({ password_hash: hash, password_salt: salt }).eq("id", staffId);
+          if (error) {
+            showToast("Could not reset password: " + error.message);
+          } else {
+            if (resultDisplay) resultDisplay.textContent = newPassword;
+            if (successBox) successBox.classList.remove("hidden");
+            showToast("Password successfully changed!");
+          }
+        } catch (err) {
+          showToast("Failed to hash or save password.");
+        } finally {
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      });
+    }
   }
 
   function fillContentForm(settings) {
@@ -2280,10 +2393,14 @@
   async function fetchSettings() {
     const { data, error } = await window.sb.from("settings").select("*").eq("id", 1).maybeSingle();
     if (error || !data) return;
+    cafeSettings = data;
     document.getElementById("admin-rate").value = data.default_rate;
     document.getElementById("rate").value = data.default_rate;
     calculateAmount();
     fillContentForm(data);
+    if (data.linkypot_embed_code && typeof window._applyLinkyPotEmbed === "function") {
+      window._applyLinkyPotEmbed(data.linkypot_embed_code, true);
+    }
   }
 
   async function fetchStaff() {
@@ -2323,7 +2440,18 @@
   }
 
   async function loadAll() {
-    await Promise.all([fetchSessions(), fetchMenu(), fetchSettings(), fetchStaff(), fetchWaitingList(), fetchStations(), fetchTables(), fetchExpenses(), fetchNotices(), fetchCapitalContributions()]);
+    await Promise.allSettled([
+      fetchSessions(),
+      fetchMenu(),
+      fetchSettings(),
+      fetchStaff(),
+      fetchWaitingList(),
+      fetchStations(),
+      fetchTables(),
+      fetchExpenses(),
+      fetchNotices(),
+      fetchCapitalContributions()
+    ]);
   }
 
   function subscribeRealtime() {
@@ -2872,9 +3000,11 @@ notify pgrst, 'reload schema';`;
       try {
         saved = localStorage.getItem("cp_linkypot_embed_code") || "";
       } catch (e) {}
-      if (!saved && settings && settings.linkypot_embed_code) {
-        saved = settings.linkypot_embed_code;
+      if (!saved && cafeSettings && cafeSettings.linkypot_embed_code) {
+        saved = cafeSettings.linkypot_embed_code;
       }
+
+      window._applyLinkyPotEmbed = applyEmbed;
 
       if (saved) {
         applyEmbed(saved, true);
@@ -2994,6 +3124,8 @@ notify pgrst, 'reload schema';`;
     setInterval(checkTimeAlerts, 5000);
     lucide.createIcons();
 
+    initStaffResetPwModal();
+
     if (!window.SUPABASE_CONFIGURED) {
       setConnectionStatus(false, "Supabase not configured");
       showMessage("Supabase isn't configured yet. Edit assets/js/config.js, then reload this page.", true);
@@ -3001,8 +3133,9 @@ notify pgrst, 'reload schema';`;
     }
 
     setConnectionStatus(false, "Connecting…");
-    loadAll().then(() => {
+    loadAll().finally(() => {
       sdkReady = true;
+      setConnectionStatus(true, "Connected");
       subscribeRealtime();
     });
   }

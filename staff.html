@@ -1069,24 +1069,29 @@
         <input id="checkout-discount-value" type="number" min="0" value="0" class="form-control">
         <p id="checkout-discount-cap" class="text-[11px] text-slate-500 mt-1"></p>
       </div>
-      <p class="text-sm font-medium mt-4 mb-2">Record Payment &amp; Billing</p>
-      <div class="grid grid-cols-2 gap-3 mb-2.5">
-        <button type="button" class="checkout-pay-btn rounded-xl py-3 font-bold flex flex-col items-center gap-1" data-method="Cash" style="background:#1c2333;border:1px solid #405069;">
-          <i data-lucide="wallet" width="18" height="18"></i>Cash
+      <p class="text-sm font-medium mt-4 mb-2">Select Payment Method</p>
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <button id="method-btn-cash" type="button" class="checkout-method-btn rounded-xl py-3 px-3 font-bold flex flex-col items-center gap-1 border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45] transition cursor-pointer" data-method="Cash">
+          <i data-lucide="wallet" width="18" height="18"></i>
+          <span>Cash</span>
         </button>
-        <button type="button" class="checkout-pay-btn rounded-xl py-3 font-bold flex flex-col items-center gap-1" data-method="Online" style="background:#1c2333;border:1px solid #405069;">
-          <i data-lucide="credit-card" width="18" height="18"></i>Online
+        <button id="method-btn-online" type="button" class="checkout-method-btn rounded-xl py-3 px-3 font-bold flex flex-col items-center gap-1 border border-slate-600 bg-[#1c2333] text-slate-400 hover:border-slate-500 hover:text-slate-200 transition cursor-pointer" data-method="Online">
+          <i data-lucide="qr-code" width="18" height="18"></i>
+          <span>QR / Online</span>
         </button>
       </div>
       <div class="space-y-2">
-        <button id="checkout-pay-print" type="button" class="w-full rounded-xl py-3 font-bold flex items-center justify-center gap-2 hover:brightness-110 transition" style="background:#d8ff45;color:#10141e;">
+        <button id="checkout-confirm-pay" type="button" class="w-full rounded-xl py-3 font-bold flex items-center justify-center gap-2 transition border border-slate-600 bg-slate-800 text-slate-200 hover:border-[#d8ff45] hover:text-white">
+          <i data-lucide="check-circle" width="18" height="18"></i> Complete &amp; Pay (<span id="checkout-selected-method-label">Cash</span>)
+        </button>
+        <button id="checkout-pay-print" type="button" class="w-full rounded-xl py-3 font-bold flex items-center justify-center gap-2 hover:brightness-110 transition shadow-lg" style="background:#d8ff45;color:#10141e;">
           <i data-lucide="printer" width="18" height="18"></i> Pay &amp; Print PAN Bill
         </button>
         <button id="checkout-print-only" type="button" class="w-full rounded-xl py-2 border border-slate-600 text-xs font-semibold text-slate-300 hover:text-white flex items-center justify-center gap-1.5">
           <i data-lucide="receipt" width="14" height="14"></i> Print Bill Preview
         </button>
       </div>
-      <button id="checkout-cancel" type="button" class="w-full mt-3 rounded-xl border border-slate-700 py-2.5 text-xs text-slate-400">Cancel</button>
+      <button id="checkout-cancel" type="button" class="w-full mt-3 rounded-xl border border-slate-700 py-2.5 text-xs text-slate-400 hover:text-white">Cancel</button>
     </div>
   </div>
 
@@ -1268,6 +1273,61 @@
         <div class="grid grid-cols-2 gap-3 pt-2">
           <button id="edit-notice-cancel" type="button" class="rounded-xl border border-slate-600 py-2.5 text-sm text-slate-300 hover:text-white">Cancel</button>
           <button type="submit" class="rounded-xl py-2.5 font-bold flex items-center justify-center gap-2" style="background:#d8ff45;color:#10141e;">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================== RESET STAFF PASSWORD MODAL ===================== -->
+  <div id="staff-reset-pw-modal" class="modal-overlay">
+    <div class="panel rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-700/80 pb-3">
+        <div>
+          <p class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">STAFF SECURITY</p>
+          <h3 class="font-bold text-lg text-white mt-0.5">Reset Staff Password</h3>
+        </div>
+        <button id="staff-reset-pw-close" type="button" class="text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
+      </div>
+
+      <div class="rounded-xl bg-[#0f1520] border border-slate-800 p-3 text-xs">
+        <p class="text-slate-400">Staff Account: <span id="reset-pw-staff-name" class="font-bold text-white">Staff Member</span> <span id="reset-pw-staff-username" class="text-slate-500">@username</span></p>
+      </div>
+
+      <!-- Password input & generator form -->
+      <form id="staff-reset-pw-form" class="space-y-3">
+        <input id="reset-pw-staff-id" type="hidden">
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="block text-xs text-slate-300 font-semibold" for="reset-pw-input">New Password</label>
+            <button id="btn-generate-staff-pw" type="button" class="text-xs text-[#d8ff45] hover:underline font-bold flex items-center gap-1 cursor-pointer">
+              <i data-lucide="refresh-cw" width="12" height="12"></i> Generate Random
+            </button>
+          </div>
+          <input id="reset-pw-input" type="text" class="form-control font-mono text-sm" placeholder="Enter custom password or click Generate" required minlength="4">
+          <p class="text-[11px] text-slate-500 mt-1">Type whatever password you or the staff prefer, or click Generate Random.</p>
+        </div>
+
+        <!-- Success notification box -->
+        <div id="reset-pw-success-box" class="hidden rounded-xl border border-emerald-500/40 bg-emerald-950/40 p-3.5 space-y-2">
+          <div class="flex items-center gap-2 text-emerald-400 font-bold text-xs">
+            <i data-lucide="check-circle" width="16" height="16"></i>
+            <span>Password successfully updated!</span>
+          </div>
+          <p class="text-xs text-slate-300">Share this password with the staff member now:</p>
+          <div class="flex items-center gap-2">
+            <code id="reset-pw-result-display" class="flex-1 bg-black/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-[#d8ff45] font-bold select-all"></code>
+            <button id="btn-copy-reset-pw" type="button" class="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-bold text-slate-200 hover:text-white hover:border-[#d8ff45] shrink-0 flex items-center gap-1">
+              <i data-lucide="copy" width="13" height="13"></i> Copy
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 pt-2">
+          <button id="staff-reset-pw-cancel" type="button" class="rounded-xl border border-slate-600 py-2.5 text-xs text-slate-300 hover:text-white">Close</button>
+          <button id="staff-reset-pw-submit" type="submit" class="rounded-xl py-2.5 font-bold text-xs flex items-center justify-center gap-1.5 shadow" style="background:#d8ff45;color:#10141e;">
+            <i data-lucide="key" width="14" height="14"></i>
+            <span>Save Password</span>
+          </button>
         </div>
       </form>
     </div>
