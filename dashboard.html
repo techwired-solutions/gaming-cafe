@@ -423,15 +423,40 @@
         <!-- ===================== RECORDS ===================== -->
         <section id="page-records" class="page-view">
           <div class="panel rounded-2xl overflow-hidden">
-            <div class="p-5 border-b border-slate-700/80 flex items-center justify-between">
-              <div><p class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">LOUNGE LOG</p><h2 class="font-bold mt-1 text-xl">All records</h2></div>
-              <span id="record-count" class="mono text-xs rounded-full bg-slate-700 px-2.5 py-1">0</span>
+            <div class="p-5 border-b border-slate-700/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">LOUNGE LOG</p>
+                <h2 class="font-bold mt-1 text-xl flex items-center gap-2">
+                  All records
+                  <span id="record-count" class="mono text-xs font-normal rounded-full bg-slate-700 px-2.5 py-0.5 text-slate-300">0</span>
+                </h2>
+              </div>
+              <div class="flex items-center gap-2">
+                <button type="button" id="btn-open-missing-record" class="rounded-xl px-4 py-2.5 font-bold text-sm flex items-center gap-2 hover:brightness-110 shadow transition" style="background:#d8ff45;color:#10141e;">
+                  <i data-lucide="file-plus" width="16" height="16"></i> Add Missing Record
+                </button>
+              </div>
             </div>
+
+            <!-- Search and filters -->
+            <div class="p-4 border-b border-slate-700/60 bg-[#161d2a] flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+              <div class="relative flex-1">
+                <i data-lucide="search" width="15" height="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input id="records-search-input" type="text" placeholder="Search by customer, phone, station, game or notes..." class="form-control pl-9 text-xs py-2 w-full">
+              </div>
+              <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0" id="records-filter-pills">
+                <button type="button" class="records-filter-pill active rounded-lg px-2.5 py-1.5 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45]" data-filter="all">All</button>
+                <button type="button" class="records-filter-pill rounded-lg px-2.5 py-1.5 text-xs font-bold border border-slate-700 text-slate-400 hover:text-slate-200" data-filter="Completed">Completed</button>
+                <button type="button" class="records-filter-pill rounded-lg px-2.5 py-1.5 text-xs font-bold border border-slate-700 text-slate-400 hover:text-slate-200" data-filter="Active">Active</button>
+                <button type="button" class="records-filter-pill rounded-lg px-2.5 py-1.5 text-xs font-bold border border-slate-700 text-slate-400 hover:text-slate-200" data-filter="Booked">Booked</button>
+              </div>
+            </div>
+
             <div id="records-list" class="p-3 space-y-3" aria-live="polite"></div>
             <div id="empty-records" class="p-8 text-center">
               <div class="w-11 h-11 rounded-full bg-slate-800 grid place-items-center mx-auto mb-3 text-slate-400"><i data-lucide="joystick" width="21" height="21"></i></div>
-              <p class="font-semibold">No records yet</p>
-              <p class="text-sm text-slate-400 mt-1">Add a customer session or food order to get started.</p>
+              <p class="font-semibold">No records found</p>
+              <p class="text-sm text-slate-400 mt-1">Add a missing record from the register, or start a new live session.</p>
             </div>
           </div>
         </section>
@@ -1139,6 +1164,7 @@
           <span id="edit-today-label" class="mono text-xs text-slate-500"></span>
         </div>
         <div class="grid sm:grid-cols-2 gap-3">
+          <div class="sm:col-span-2"><label class="block text-xs text-slate-400 mb-1" for="edit-date">Session date</label><input id="edit-date" class="form-control" type="date"></div>
           <div><label class="block text-xs text-slate-400 mb-1" for="edit-start-time">Start time</label><input id="edit-start-time" class="form-control" type="time"></div>
           <div><label class="block text-xs text-slate-400 mb-1" for="edit-end-time">End time</label><input id="edit-end-time" class="form-control" type="time"></div>
           <div><label class="block text-xs text-slate-400 mb-1" for="edit-duration">Duration (min)</label><input id="edit-duration" class="form-control" type="number" min="0"></div>
@@ -1171,6 +1197,157 @@
         <button id="edit-session-cancel" type="button" class="rounded-xl border border-slate-600 py-2.5 text-sm text-slate-300">Cancel</button>
         <button id="edit-session-save" type="button" class="rounded-xl py-2.5 font-bold" style="background:#d8ff45;color:#10141e;">Save changes</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ===================== ADD MISSING RECORD MODAL (Paper Register Backfill) ===================== -->
+  <div id="missing-record-modal" class="modal-overlay">
+    <div class="panel rounded-2xl p-6 w-full max-w-xl" style="max-height:92vh; overflow-y:auto;">
+      <div class="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <p class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">PAPER REGISTER BACKFILL</p>
+          <h3 class="font-bold text-xl mt-0.5">Add Missing Record</h3>
+          <p class="text-xs text-slate-400 mt-1">Add a past customer session or order recorded in your physical registration file.</p>
+        </div>
+        <button id="mr-close" type="button" class="text-slate-400 hover:text-white text-2xl leading-none cursor-pointer">&times;</button>
+      </div>
+
+      <form id="missing-record-form" novalidate>
+        <!-- Date Selection -->
+        <div class="rounded-xl border border-slate-700/80 bg-[#161d2a] p-3.5 mb-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <label class="text-xs font-semibold text-slate-300 flex items-center gap-1.5" for="mr-date">
+              <i data-lucide="calendar" width="14" height="14" class="text-[#d8ff45]"></i> Record Date *
+            </label>
+            <div class="flex items-center gap-1.5">
+              <button type="button" id="mr-chip-today" class="rounded-lg px-2.5 py-1 text-xs font-bold border border-slate-600 text-slate-300 hover:text-white transition">Today</button>
+              <button type="button" id="mr-chip-yesterday" class="rounded-lg px-2.5 py-1 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45] transition">Yesterday</button>
+            </div>
+          </div>
+          <input id="mr-date" type="date" class="form-control font-medium" required>
+        </div>
+
+        <!-- Customer & Station Details -->
+        <div class="grid sm:grid-cols-2 gap-3 mb-4">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1" for="mr-station">Station / Console *</label>
+            <input id="mr-station" class="form-control" type="text" list="station-list" placeholder="e.g. PS5 - Station 1, Cabin 1" required>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1" for="mr-game">Game played (optional)</label>
+            <input id="mr-game" class="form-control" type="text" placeholder="e.g. FIFA 24, Tekken 8, COD">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1" for="mr-customer-name">Customer or Group *</label>
+            <input id="mr-customer-name" class="form-control" type="text" placeholder="e.g. Bibek Subedi" required>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1" for="mr-customer-phone">Customer phone</label>
+            <input id="mr-customer-phone" class="form-control" type="tel" placeholder="e.g. 98XXXXXXXX">
+          </div>
+        </div>
+
+        <!-- Time Tracking -->
+        <div class="border-t border-slate-700/80 pt-4 mb-4">
+          <h4 class="font-semibold text-sm mb-2 flex items-center gap-1.5">
+            <i data-lucide="clock" width="14" height="14" class="text-[#d8ff45]"></i> Time Tracking
+          </h4>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="mr-start-time">Start time *</label>
+              <input id="mr-start-time" class="form-control" type="time" required>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="mr-end-time">End time</label>
+              <input id="mr-end-time" class="form-control" type="time">
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="mr-duration">Duration (min)</label>
+              <input id="mr-duration" class="form-control" type="number" min="0" value="60">
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="mr-rate">Rate (रु/hr)</label>
+              <input id="mr-rate" class="form-control" type="number" min="0" value="100">
+            </div>
+          </div>
+        </div>
+
+        <!-- Food & Drinks Order (Optional) -->
+        <div class="border-t border-slate-700/80 pt-4 mb-4">
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="font-semibold text-sm flex items-center gap-1.5">
+              <i data-lucide="sandwich" width="14" height="14" class="text-[#d8ff45]"></i> Food &amp; drinks ordered (optional)
+            </h4>
+            <button id="mr-add-food-row" type="button" class="text-xs font-bold text-[#d8ff45] flex items-center gap-1 cursor-pointer">
+              <i data-lucide="plus" width="14" height="14"></i>Add item
+            </button>
+          </div>
+          <div class="grid grid-cols-[1fr_auto_auto_auto] gap-2 text-xs text-slate-500 mb-2">
+            <span>Menu item</span><span>Qty</span><span>Price</span><span></span>
+          </div>
+          <div id="mr-food-rows" class="space-y-2 max-h-36 overflow-y-auto"></div>
+          <p id="mr-menu-empty" class="hidden text-xs text-slate-400 mt-2">No menu items configured yet.</p>
+        </div>
+
+        <!-- Payment & Settlement -->
+        <div class="border-t border-slate-700/80 pt-4 mb-4">
+          <h4 class="font-semibold text-sm mb-2 flex items-center gap-1.5">
+            <i data-lucide="wallet" width="14" height="14" class="text-[#d8ff45]"></i> Payment &amp; Settlement
+          </h4>
+          <div class="grid sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="mr-payment-status">Payment Status</label>
+              <select id="mr-payment-status" class="form-control font-semibold">
+                <option value="Paid" selected>Paid (Settled)</option>
+                <option value="Unpaid">Unpaid / Credit</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="mr-payment-method">Payment Method</label>
+              <select id="mr-payment-method" class="form-control font-semibold">
+                <option value="Cash" selected>Cash</option>
+                <option value="Online">Online / QR (Fonepay/eSewa)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="mr-staff-select">Handled / Logged by</label>
+              <select id="mr-staff-select" class="form-control"></select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Register Notes -->
+        <div class="mb-4">
+          <label class="block text-xs text-slate-400 mb-1" for="mr-notes">Register Reference / Notes</label>
+          <input id="mr-notes" class="form-control" type="text" placeholder="e.g. Page #14 from physical register notebook">
+        </div>
+
+        <!-- Live Bill Summary -->
+        <div class="rounded-xl bg-[#0f1520] border border-slate-700 p-3.5 mb-4 flex items-center justify-between">
+          <div>
+            <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Calculated Total</p>
+            <p class="text-xs text-slate-400 mt-0.5" id="mr-calc-breakdown">Play time: रु 0 · Food: रु 0</p>
+          </div>
+          <div class="text-right">
+            <span id="mr-total-display" class="mono text-2xl text-[#d8ff45] font-bold">रु 0</span>
+          </div>
+        </div>
+
+        <p id="mr-message" class="text-sm min-h-5 mb-3" aria-live="polite"></p>
+
+        <!-- Submit Buttons -->
+        <div class="grid sm:grid-cols-3 gap-2">
+          <button id="mr-cancel" type="button" class="rounded-xl border border-slate-600 py-2.5 text-sm text-slate-300 hover:text-white cursor-pointer">
+            Cancel
+          </button>
+          <button id="mr-save-only" type="submit" class="rounded-xl py-2.5 font-bold border border-[#d8ff45] text-[#d8ff45] hover:bg-[#d8ff45]/15 transition flex items-center justify-center gap-1.5 cursor-pointer">
+            <i data-lucide="check" width="16" height="16"></i> Save Record
+          </button>
+          <button id="mr-save-print" type="button" class="rounded-xl py-2.5 font-bold hover:brightness-110 transition flex items-center justify-center gap-1.5 shadow-lg cursor-pointer" style="background:#d8ff45;color:#10141e;">
+            <i data-lucide="printer" width="16" height="16"></i> Save &amp; Print Bill
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 

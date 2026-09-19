@@ -673,9 +673,11 @@
       countdown.classList.add("hidden");
     }
 
-    // Edit is available on both Active and Booked sessions; +Food/extend/
-    // checkout only make sense once a session is actually running.
-    if (record.status === "Active" || record.status === "Booked") {
+    const printBtn = card.querySelector(".print-bill-btn");
+    const isRunning = record.status === "Active" || record.status === "Booked";
+    const isCompleted = record.status === "Completed";
+
+    if (isRunning || isCompleted) {
       actions.classList.remove("hidden");
       actions.classList.add("flex");
       const isActive = record.status === "Active";
@@ -683,6 +685,8 @@
       checkoutBtn.classList.toggle("hidden", !isActive);
       addFoodBtn.classList.toggle("hidden", !isActive);
       editBtn.classList.toggle("col-span-2", !isActive);
+      editBtn.classList.remove("hidden");
+      if (printBtn) printBtn.classList.toggle("hidden", !isCompleted && !isActive);
     } else {
       actions.classList.add("hidden");
       actions.classList.remove("flex");
@@ -764,12 +768,78 @@
     existing.forEach((card) => card.remove());
   }
 
+  let recordsFilterStatus = "all";
+  let recordsSearchQuery = "";
+
+  function getFilteredRecords() {
+    return records
+      .filter((r) => {
+        if (recordsFilterStatus !== "all" && r.status !== recordsFilterStatus) return false;
+        if (recordsSearchQuery) {
+          const q = recordsSearchQuery.toLowerCase();
+          const matchCustomer = (r.customer_name || "").toLowerCase().includes(q);
+          const matchPhone = (r.customer_phone || "").toLowerCase().includes(q);
+          const matchStation = (r.station_name || "").toLowerCase().includes(q);
+          const matchGame = (r.game || "").toLowerCase().includes(q);
+          const matchNotes = (r.notes || "").toLowerCase().includes(q);
+          const matchStaff = (r.staff_name || "").toLowerCase().includes(q);
+          if (!matchCustomer && !matchPhone && !matchStation && !matchGame && !matchNotes && !matchStaff) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const timeA = new Date(a.start_time || a.created_at || 0).getTime();
+        const timeB = new Date(b.start_time || b.created_at || 0).getTime();
+        return timeB - timeA;
+      });
+  }
+
+  function renderRecordsList() {
+    const listEl = document.getElementById("records-list");
+    const emptyEl = document.getElementById("empty-records");
+    if (!listEl) return;
+    const filtered = getFilteredRecords();
+    syncCardList(listEl, filtered);
+    if (emptyEl) {
+      emptyEl.classList.toggle("hidden", filtered.length > 0);
+      const titleP = emptyEl.querySelector("p.font-semibold");
+      if (titleP) {
+        titleP.textContent = filtered.length === 0 && records.length > 0 ? "No matching records found" : "No records yet";
+      }
+    }
+  }
+
+  function initRecordsFilter() {
+    const searchInput = document.getElementById("records-search-input");
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => {
+        recordsSearchQuery = e.target.value.trim();
+        renderRecordsList();
+      });
+    }
+
+    const pills = document.querySelectorAll(".records-filter-pill");
+    pills.forEach((pill) => {
+      pill.addEventListener("click", () => {
+        pills.forEach((p) => {
+          p.classList.remove("active", "border-[#d8ff45]", "bg-[#d8ff45]/15", "text-[#d8ff45]");
+          p.classList.add("border-slate-700", "text-slate-400");
+        });
+        pill.classList.add("active", "border-[#d8ff45]", "bg-[#d8ff45]/15", "text-[#d8ff45]");
+        pill.classList.remove("border-slate-700", "text-slate-400");
+        recordsFilterStatus = pill.dataset.filter || "all";
+        renderRecordsList();
+      });
+    });
+  }
+
   function renderAllLists() {
-    const sorted = [...records].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const sorted = [...records].sort((a, b) => new Date(b.start_time || b.created_at) - new Date(a.start_time || a.created_at));
     const active = sorted.filter((r) => r.status === "Active");
 
-    syncCardList(document.getElementById("records-list"), sorted);
-    document.getElementById("empty-records").classList.toggle("hidden", records.length > 0);
+    renderRecordsList();
 
     syncCardList(document.getElementById("overview-active-list"), active);
     document.getElementById("overview-empty").classList.toggle("hidden", active.length > 0);
@@ -1200,9 +1270,9 @@
     const grandTotal = record.paid && record.amount != null ? Number(record.amount) : Math.max(0, Math.round(timeCost + (record.food_total || 0) + overtime.amount - discountAmount));
 
     const billNo = "CP-" + (record.id ? record.id.slice(0, 8).toUpperCase() : Math.floor(1000 + Math.random() * 9000));
-    const now = new Date();
-    const dateStr = now.toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "2-digit" });
-    const timeStr = now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+    const recDate = record.paid_at ? new Date(record.paid_at) : record.start_time ? new Date(record.start_time) : new Date();
+    const dateStr = recDate.toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "2-digit" });
+    const timeStr = recDate.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 
     const billNoEl = document.getElementById("receipt-bill-no");
     const dateEl = document.getElementById("receipt-date");
@@ -1304,6 +1374,11 @@
     // time-of-day) instead of silently moving it to today.
     editBaseDate = record.start_time ? new Date(record.start_time) : record.created_at ? new Date(record.created_at) : new Date();
     document.getElementById("edit-today-label").textContent = fmtDateLabel(editBaseDate);
+    const dateInput = document.getElementById("edit-date");
+    if (dateInput) {
+      const pad = (n) => String(n).padStart(2, "0");
+      dateInput.value = `${editBaseDate.getFullYear()}-${pad(editBaseDate.getMonth() + 1)}-${pad(editBaseDate.getDate())}`;
+    }
     document.getElementById("edit-start-time").value = record.start_time ? timeInputValue(new Date(record.start_time)) : timeInputValue(new Date());
     document.getElementById("edit-duration").value = record.duration_minutes || 0;
     if (record.end_time) document.getElementById("edit-end-time").value = timeInputValue(new Date(record.end_time));
@@ -1354,6 +1429,12 @@
         return;
       }
 
+      const editDateInput = document.getElementById("edit-date");
+      if (editDateInput && editDateInput.value) {
+        const [yr, mo, da] = editDateInput.value.split("-").map(Number);
+        if (yr && mo && da) editBaseDate = new Date(yr, mo - 1, da);
+      }
+
       const { total, foodTotal, duration, rate } = recalcEditModal();
       const foodItems = collectFrItems("edit-food-rows");
       const startTimeStr = document.getElementById("edit-start-time").value;
@@ -1376,23 +1457,29 @@
 
       const btn = document.getElementById("edit-session-save");
       btn.disabled = true;
+      const updatePayload = {
+        station_name: station,
+        game: document.getElementById("edit-game").value.trim(),
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        start_time: startIso,
+        end_time: endIso,
+        duration_minutes: duration,
+        rate,
+        food_items: foodItems,
+        food_total: foodTotal,
+        amount: total,
+        notes: document.getElementById("edit-notes").value.trim(),
+        notified_5min: false
+      };
+      if (editTarget.status === "Completed" && startIso) {
+        updatePayload.created_at = startIso;
+        if (editTarget.paid) updatePayload.paid_at = endIso || startIso;
+      }
+
       const { error } = await window.sb
         .from("sessions")
-        .update({
-          station_name: station,
-          game: document.getElementById("edit-game").value.trim(),
-          customer_name: customerName,
-          customer_phone: customerPhone,
-          start_time: startIso,
-          end_time: endIso,
-          duration_minutes: duration,
-          rate,
-          food_items: foodItems,
-          food_total: foodTotal,
-          amount: total,
-          notes: document.getElementById("edit-notes").value.trim(),
-          notified_5min: false
-        })
+        .update(updatePayload)
         .eq("id", editTarget.id);
       btn.disabled = false;
       if (error) {
@@ -1404,6 +1491,311 @@
         showToast("Session updated.");
       }
     });
+  }
+
+  // ---------- Add Missing Record (Paper Register Backfill) ----------
+  function populateMrStaffSelect() {
+    const sel = document.getElementById("mr-staff-select");
+    if (!sel) return;
+    sel.innerHTML = "";
+    if (!staffList || staffList.length === 0) {
+      const opt = document.createElement("option");
+      opt.value = currentStaff ? currentStaff.id : "";
+      opt.textContent = currentStaff ? currentStaff.name : "Staff / Admin";
+      sel.appendChild(opt);
+      return;
+    }
+    staffList.forEach((s) => {
+      const opt = document.createElement("option");
+      opt.value = s.id;
+      opt.textContent = `${s.name} (${s.role})`;
+      if (currentStaff && currentStaff.id === s.id) {
+        opt.selected = true;
+      }
+      sel.appendChild(opt);
+    });
+  }
+
+  function recalcMissingRecord() {
+    const duration = Math.max(0, Number(document.getElementById("mr-duration").value) || 0);
+    const rate = Math.max(0, Number(document.getElementById("mr-rate").value) || 0);
+    const timeCost = Math.round((duration / 60) * rate);
+    const foodTotal = frTotal("mr-food-rows");
+    const total = timeCost + foodTotal;
+
+    const breakdownEl = document.getElementById("mr-calc-breakdown");
+    const totalEl = document.getElementById("mr-total-display");
+    if (breakdownEl) {
+      breakdownEl.textContent = `Play time (${duration}m @ रु ${rate}/h): रु ${timeCost} · Food: रु ${foodTotal}`;
+    }
+    if (totalEl) {
+      totalEl.textContent = inr(total);
+    }
+    return { total, foodTotal, duration, rate, timeCost };
+  }
+
+  function openMissingRecordModal() {
+    const modal = document.getElementById("missing-record-modal");
+    if (!modal) return;
+
+    // Reset date to yesterday by default (most common register backfill)
+    const yest = new Date();
+    yest.setDate(yest.getDate() - 1);
+    const pad = (n) => String(n).padStart(2, "0");
+    const yestStr = `${yest.getFullYear()}-${pad(yest.getMonth() + 1)}-${pad(yest.getDate())}`;
+
+    const dateInput = document.getElementById("mr-date");
+    dateInput.value = yestStr;
+
+    const chipToday = document.getElementById("mr-chip-today");
+    const chipYesterday = document.getElementById("mr-chip-yesterday");
+    if (chipToday && chipYesterday) {
+      chipToday.className = "rounded-lg px-2.5 py-1 text-xs font-bold border border-slate-600 text-slate-300 hover:text-white transition cursor-pointer";
+      chipYesterday.className = "rounded-lg px-2.5 py-1 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45] transition cursor-pointer";
+    }
+
+    // Default times
+    document.getElementById("mr-start-time").value = "14:00";
+    document.getElementById("mr-duration").value = "60";
+    document.getElementById("mr-end-time").value = "15:00";
+
+    // Rate
+    const defaultRate = Number(document.getElementById("admin-rate") ? document.getElementById("admin-rate").value : 100) || 100;
+    document.getElementById("mr-rate").value = defaultRate;
+
+    // Customer & Station
+    document.getElementById("mr-station").value = stations && stations.length ? stations[0].name : "";
+    if (stations && stations.length && stations[0].rate) {
+      document.getElementById("mr-rate").value = stations[0].rate;
+    }
+    document.getElementById("mr-game").value = "";
+    document.getElementById("mr-customer-name").value = "";
+    document.getElementById("mr-customer-phone").value = "";
+    document.getElementById("mr-notes").value = "";
+
+    // Payment defaults
+    document.getElementById("mr-payment-status").value = "Paid";
+    document.getElementById("mr-payment-method").value = "Cash";
+
+    // Staff select
+    populateMrStaffSelect();
+
+    // Food rows
+    clearFrContainer("mr-food-rows");
+    const menuEmpty = document.getElementById("mr-menu-empty");
+    if (menuEmpty) menuEmpty.classList.toggle("hidden", menuItems.length > 0);
+
+    const msgEl = document.getElementById("mr-message");
+    if (msgEl) {
+      msgEl.textContent = "";
+      msgEl.className = "text-sm min-h-5 mb-3";
+    }
+
+    recalcMissingRecord();
+    if (window.lucide) window.lucide.createIcons();
+    modal.classList.add("show");
+  }
+
+  function closeMissingRecordModal() {
+    const modal = document.getElementById("missing-record-modal");
+    if (modal) modal.classList.remove("show");
+  }
+
+  function initMissingRecordModal() {
+    const modal = document.getElementById("missing-record-modal");
+    if (!modal) return;
+
+    const openBtn = document.getElementById("btn-open-missing-record");
+    if (openBtn) openBtn.addEventListener("click", openMissingRecordModal);
+
+    const closeBtn = document.getElementById("mr-close");
+    if (closeBtn) closeBtn.addEventListener("click", closeMissingRecordModal);
+
+    const cancelBtn = document.getElementById("mr-cancel");
+    if (cancelBtn) cancelBtn.addEventListener("click", closeMissingRecordModal);
+
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) closeMissingRecordModal();
+    });
+
+    // Date chips
+    const chipToday = document.getElementById("mr-chip-today");
+    const chipYesterday = document.getElementById("mr-chip-yesterday");
+    const dateInput = document.getElementById("mr-date");
+    const pad = (n) => String(n).padStart(2, "0");
+
+    if (chipToday) {
+      chipToday.addEventListener("click", () => {
+        const now = new Date();
+        dateInput.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+        chipToday.className = "rounded-lg px-2.5 py-1 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45] transition cursor-pointer";
+        chipYesterday.className = "rounded-lg px-2.5 py-1 text-xs font-bold border border-slate-600 text-slate-300 hover:text-white transition cursor-pointer";
+      });
+    }
+
+    if (chipYesterday) {
+      chipYesterday.addEventListener("click", () => {
+        const yest = new Date();
+        yest.setDate(yest.getDate() - 1);
+        dateInput.value = `${yest.getFullYear()}-${pad(yest.getMonth() + 1)}-${pad(yest.getDate())}`;
+        chipYesterday.className = "rounded-lg px-2.5 py-1 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45] transition cursor-pointer";
+        chipToday.className = "rounded-lg px-2.5 py-1 text-xs font-bold border border-slate-600 text-slate-300 hover:text-white transition cursor-pointer";
+      });
+    }
+
+    // Station auto-rate fill
+    const stationInput = document.getElementById("mr-station");
+    if (stationInput) {
+      stationInput.addEventListener("input", () => {
+        const val = stationInput.value.trim().toLowerCase();
+        const match = stations.find((s) => (s.name || "").toLowerCase() === val);
+        if (match && match.rate) {
+          document.getElementById("mr-rate").value = match.rate;
+          recalcMissingRecord();
+        }
+      });
+    }
+
+    // Time calculations
+    document.getElementById("mr-start-time").addEventListener("input", () => {
+      syncEndFromDuration("mr-start-time", "mr-duration", "mr-end-time");
+      recalcMissingRecord();
+    });
+    document.getElementById("mr-end-time").addEventListener("input", () => {
+      syncDurationFromEnd("mr-start-time", "mr-duration", "mr-end-time");
+      recalcMissingRecord();
+    });
+    document.getElementById("mr-duration").addEventListener("input", () => {
+      syncEndFromDuration("mr-start-time", "mr-duration", "mr-end-time");
+      recalcMissingRecord();
+    });
+    document.getElementById("mr-rate").addEventListener("input", recalcMissingRecord);
+
+    // Food rows
+    registerFrContainer("mr-food-rows", recalcMissingRecord);
+    const addFoodBtn = document.getElementById("mr-add-food-row");
+    if (addFoodBtn) {
+      addFoodBtn.addEventListener("click", () => addFrRow("mr-food-rows"));
+    }
+
+    // Form submission helper
+    async function submitMissingRecord(printBill = false) {
+      const station = document.getElementById("mr-station").value.trim();
+      const customerName = document.getElementById("mr-customer-name").value.trim();
+      const customerPhone = document.getElementById("mr-customer-phone").value.trim();
+      const dateVal = document.getElementById("mr-date").value;
+      const startTimeStr = document.getElementById("mr-start-time").value;
+      const msgEl = document.getElementById("mr-message");
+
+      if (!station || !customerName || !dateVal || !startTimeStr) {
+        msgEl.textContent = "Please fill in Station, Customer name, Date, and Start time.";
+        msgEl.className = "text-sm min-h-5 mb-3 text-red-300";
+        return;
+      }
+
+      const { total, foodTotal, duration, rate } = recalcMissingRecord();
+      const foodItems = collectFrItems("mr-food-rows");
+
+      const [yr, mo, da] = dateVal.split("-").map(Number);
+      const baseDate = new Date(yr, mo - 1, da);
+      const startDate = combineDateAndTime(baseDate, startTimeStr);
+      const startIso = startDate ? startDate.toISOString() : new Date().toISOString();
+      const endIso = startDate ? new Date(startDate.getTime() + duration * 60000).toISOString() : startIso;
+
+      const isPaid = document.getElementById("mr-payment-status").value === "Paid";
+      const paymentMethod = isPaid ? document.getElementById("mr-payment-method").value : null;
+
+      const staffSelect = document.getElementById("mr-staff-select");
+      let selectedStaffId = staffSelect ? staffSelect.value : null;
+      let selectedStaffName = null;
+      if (selectedStaffId) {
+        const st = staffList.find((s) => s.id === selectedStaffId);
+        selectedStaffName = st ? st.name : currentStaff ? currentStaff.name : null;
+      } else if (currentStaff) {
+        selectedStaffId = currentStaff.id;
+        selectedStaffName = currentStaff.name;
+      }
+
+      const notes = document.getElementById("mr-notes").value.trim();
+      const noteWithTag = notes ? `[Paper Register] ${notes}` : "[Paper Register Entry]";
+
+      const recordPayload = {
+        type: "Walk-in",
+        station_name: station,
+        game: document.getElementById("mr-game").value.trim() || null,
+        customer_name: customerName,
+        customer_phone: customerPhone || "—",
+        start_time: startIso,
+        end_time: endIso,
+        duration_minutes: duration,
+        rate,
+        food_items: foodItems,
+        food_total: foodTotal,
+        amount: total,
+        overtime_amount: 0,
+        discount_amount: 0,
+        discount_type: null,
+        discount_value: 0,
+        status: "Completed",
+        notes: noteWithTag,
+        notified_5min: true,
+        staff_id: selectedStaffId || null,
+        staff_name: selectedStaffName || null,
+        payment_method: paymentMethod,
+        paid: isPaid,
+        paid_at: isPaid ? endIso : null,
+        created_at: startIso
+      };
+
+      const saveOnlyBtn = document.getElementById("mr-save-only");
+      const savePrintBtn = document.getElementById("mr-save-print");
+      if (saveOnlyBtn) saveOnlyBtn.disabled = true;
+      if (savePrintBtn) savePrintBtn.disabled = true;
+      msgEl.textContent = "Saving missing record...";
+      msgEl.className = "text-sm min-h-5 mb-3 text-slate-300";
+
+      const { data, error } = await window.sb.from("sessions").insert(recordPayload).select();
+
+      if (saveOnlyBtn) saveOnlyBtn.disabled = false;
+      if (savePrintBtn) savePrintBtn.disabled = false;
+
+      if (error) {
+        msgEl.textContent = "Could not save record: " + error.message;
+        msgEl.className = "text-sm min-h-5 mb-3 text-red-300";
+        return;
+      }
+
+      const savedRecord = (data && data[0]) ? data[0] : { ...recordPayload, id: "TEMP-" + Date.now() };
+
+      // Update in-memory records list
+      const existingIdx = records.findIndex((r) => r.id === savedRecord.id);
+      if (existingIdx >= 0) records[existingIdx] = savedRecord;
+      else records.unshift(savedRecord);
+
+      renderAllLists();
+      closeMissingRecordModal();
+      showToast("Missing record added from register successfully!");
+
+      if (printBill) {
+        printPanBill(savedRecord);
+      }
+    }
+
+    const form = document.getElementById("missing-record-form");
+    if (form) {
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        submitMissingRecord(false);
+      });
+    }
+
+    const printSaveBtn = document.getElementById("mr-save-print");
+    if (printSaveBtn) {
+      printSaveBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        submitMissingRecord(true);
+      });
+    }
   }
 
   // ---------- quick add food (active sessions only) ----------
@@ -2480,6 +2872,8 @@
     initEditModal();
     initQuickFoodModal();
     initEditNoticeModal();
+    initMissingRecordModal();
+    initRecordsFilter();
     switchPage("page-overview");
 
     // LinkyPot: wire bulk historical sync button
