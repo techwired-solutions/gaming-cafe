@@ -1053,10 +1053,16 @@
     const customerMap = new Map();
     completedSessions.forEach((s) => {
       const cleanPhone = s.customer_phone.trim();
-      const existing = customerMap.get(cleanPhone) || { phone: cleanPhone, name: s.customer_name || "Customer", visits: 0, total_spent: 0 };
+      const existing = customerMap.get(cleanPhone) || { phone: cleanPhone, name: s.customer_name || "Customer", visits: 0, total_spent: 0, last_visit_at: null };
       existing.visits += 1;
       existing.total_spent += Number(s.amount || s.final_amount || 0);
       if (s.customer_name && s.customer_name !== "Customer") existing.name = s.customer_name;
+      // Track the most-recent session date so LinkyPot shows accurate last-visit time.
+      const sessionDate = s.end_time || s.start_time || s.created_at;
+      if (sessionDate) {
+        const d = new Date(sessionDate).toISOString();
+        if (!existing.last_visit_at || d > existing.last_visit_at) existing.last_visit_at = d;
+      }
       customerMap.set(cleanPhone, existing);
     });
 
