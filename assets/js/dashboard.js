@@ -3231,6 +3231,250 @@ notify pgrst, 'reload schema';`;
       }
     });
 
+    // =====================================================================
+    // Customer autocomplete — smart name→phone lookup for regular customers
+    // =====================================================================
+    //
+    // Builds a name→[{name, phone}] map from all existing records so staff
+    // never have to re-type a phone number for a returning customer.
+    //
+    // Usage: type a few letters of the name → a dropdown of matching known
+    //   customers appears. Selecting one auto-fills the phone field.
+    //   If two customers share the same name, the dropdown shows the last 4
+    //   digits so the staff can pick the right person without typing the
+    //   whole number.
+    //
+    // Reverse: once the name is filled (by selection or by typing), entering
+    //   a phone number that matches a known customer will auto-fill the name.
+
+    function buildCustomerLookup() {
+      // Deduplicate by phone number — keep the most recent name variant.
+      const byPhone = new Map();
+      [...records].reverse().forEach((r) => {
+        const phone = (r.customer_phone || "").trim();
+        const name  = (r.customer_name  || "").trim();
+        if (!phone || !name) return;
+        if (!byPhone.has(phone)) byPhone.set(phone, { name, phone });
+        else if (name) byPhone.get(phone).name = name; // prefer a more-recent non-empty name
+      });
+      // Group by normalized name → [{name, phone}, …]
+      const byName = new Map();
+      byPhone.forEach(({ name, phone }) => {
+        const key = name.toLowerCase();
+        if (!byName.has(key)) byName.set(key, []);
+        byName.get(key).push({ name, phone });
+      });
+      return { byPhone, byName };
+    }
+
+    // Inject the shared dropdown CSS once.
+    if (!document.getElementById("cp-autocomplete-style")) {
+      const style = document.createElement("style");
+      style.id = "cp-autocomplete-style";
+      style.textContent = `
+        .cp-ac-dropdown {
+          position: absolute;
+          z-index: 9999;
+          background: #1a2236;
+          border: 1px solid #2d3a4f;
+          border-radius: 10px;
+          box-shadow: 0 8px 32px rgba(0,0,0,.55);
+          min-width: 220px;
+          max-height: 220px;
+          overflow-y: auto;
+          padding: 4px 0;
+          animation: cp-ac-in .12s ease;
+        }
+        @keyframes cp-ac-in { from { opacity:0; transform:translateY(-6px) } to { opacity:1; transform:translateY(0) } }
+        .cp-ac-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 8px 13px;
+          cursor: pointer;
+          font-size: 13px;
+          color: #e2e8f0;
+          transition: background .1s;
+        }
+        .cp-ac-item:hover, .cp-ac-item.selected {
+          background: #d8ff45;
+          color: #10141e;
+        }
+        .cp-ac-item .cp-ac-phone-hint {
+          font-size: 11px;
+          opacity: .65;
+          font-variant-numeric: tabular-nums;
+          letter-spacing: .03em;
+        }
+        .cp-ac-item:hover .cp-ac-phone-hint,
+        .cp-ac-item.selected .cp-ac-phone-hint { opacity: .8; }
+        .cp-ac-empty {
+          padding: 9px 13px;
+          font-size: 12px;
+          color: #64748b;
+          pointer-events: none;
+        }
+        .cp-ac-wrap { position: relative; }
+      `;
+      document.head.appendChild(style);
+    }
+
+    /**
+     * Attaches smart customer autocomplete to a name+phone input pair.
+     * @param {string} nameId  - id of the customer name <input>
+     * @param {string} phoneId - id of the customer phone <input>
+     */
+    function attachCustomerAutocomplete(nameId, phoneId) {
+      const nameEl  = document.getElementById(nameId);
+      const phoneEl = document.getElementById(phoneId);
+      if (!nameEl || !phoneEl) return;
+
+      // Wrap the name input so we can position the dropdown relative to it.
+      if (!nameEl.parentElement.classList.contains("cp-ac-wrap")) {
+        const wrap = document.createElement("div");
+        wrap.className = "cp-ac-wrap";
+        nameEl.parentElement.insertBefore(wrap, nameEl);
+        wrap.appendChild(nameEl);
+      }
+
+      let dropdown = null;
+      let activeIdx = -1;
+
+      function closeDropdown() {
+        if (dropdown) { dropdown.remove(); dropdown = null; }
+        activeIdx = -1;
+      }
+
+      function openDropdown(matches) {
+        closeDropdown();
+        if (!matches.length) return;
+
+        dropdown = document.createElement("div");
+        dropdown.className = "cp-ac-dropdown";
+        dropdown.style.width = nameEl.offsetWidth + "px";
+
+        matches.forEach((m, i) => {
+          const item = document.createElement("div");
+          item.className = "cp-ac-item";
+          // Show last-4 hint whenever there's any ambiguity (multiple entries)
+          // or always — it helps staff confirm the right person.
+          const digits = m.phone.slice(-4);
+          item.innerHTML = `<span class="cp-ac-name">${escHtml(m.name)}</span>`
+                         + `<span class="cp-ac-phone-hint">···${escHtml(digits)}</span>`;
+
+          item.addEventListener("mousedown", (e) => {
+            e.preventDefault(); // prevent blur firing before click
+            selectMatch(m);
+          });
+          dropdown.appendChild(item);
+        });
+
+        nameEl.parentElement.appendChild(dropdown);
+      }
+
+      function selectMatch(m) {
+        nameEl.value  = m.name;
+        phoneEl.value = m.phone;
+        closeDropdown();
+        // Trigger change events so any dependent listeners (billing calc etc.) react.
+        nameEl.dispatchEvent(new Event("input", { bubbles: true }));
+        phoneEl.dispatchEvent(new Event("input", { bubbles: true }));
+        phoneEl.focus();
+      }
+
+      function escHtml(s) {
+        return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      }
+
+      // ── Name field: live autocomplete as user types ──────────────────────
+      nameEl.addEventListener("input", () => {
+        const q = nameEl.value.trim().toLowerCase();
+        if (q.length < 1) { closeDropdown(); return; }
+
+        const { byName } = buildCustomerLookup();
+        const matches = [];
+        byName.forEach((entries, key) => {
+          if (key.includes(q)) matches.push(...entries);
+        });
+        // Sort: starts-with first, then contains.
+        matches.sort((a, b) => {
+          const aStarts = a.name.toLowerCase().startsWith(q);
+          const bStarts = b.name.toLowerCase().startsWith(q);
+          if (aStarts !== bStarts) return aStarts ? -1 : 1;
+          return a.name.localeCompare(b.name);
+        });
+
+        if (!matches.length) { closeDropdown(); return; }
+
+        // If exactly one match and the name already fully typed → auto-fill phone silently.
+        if (matches.length === 1 && matches[0].name.toLowerCase() === q) {
+          if (!phoneEl.value.trim()) {
+            phoneEl.value = matches[0].phone;
+            phoneEl.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+          closeDropdown();
+          return;
+        }
+
+        openDropdown(matches.slice(0, 8)); // cap at 8 suggestions
+      });
+
+      // Keyboard navigation inside the dropdown.
+      nameEl.addEventListener("keydown", (e) => {
+        if (!dropdown) return;
+        const items = dropdown.querySelectorAll(".cp-ac-item");
+        if (!items.length) return;
+
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          activeIdx = Math.min(activeIdx + 1, items.length - 1);
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          activeIdx = Math.max(activeIdx - 1, 0);
+        } else if (e.key === "Enter") {
+          if (activeIdx >= 0) {
+            e.preventDefault();
+            items[activeIdx].dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+          }
+          closeDropdown();
+          return;
+        } else if (e.key === "Escape") {
+          closeDropdown();
+          return;
+        } else {
+          return;
+        }
+        items.forEach((it, i) => it.classList.toggle("selected", i === activeIdx));
+        items[activeIdx]?.scrollIntoView({ block: "nearest" });
+      });
+
+      nameEl.addEventListener("blur", () => {
+        // Small delay so mousedown on a dropdown item fires first.
+        setTimeout(closeDropdown, 160);
+      });
+
+      // ── Phone field: reverse lookup — if a known phone is typed/pasted,
+      //    auto-fill the name (only when name is still empty to avoid overwrite)
+      phoneEl.addEventListener("input", () => {
+        const q = phoneEl.value.trim();
+        if (q.length < 7) return;
+        const { byPhone } = buildCustomerLookup();
+        const hit = byPhone.get(q);
+        if (hit && !nameEl.value.trim()) {
+          nameEl.value = hit.name;
+          nameEl.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      });
+    }
+
+    // Attach to every form that has customer name + phone fields.
+    attachCustomerAutocomplete("customer-name",      "customer-phone");      // New Session
+    attachCustomerAutocomplete("waiting-name",       "waiting-phone");       // Waiting list
+    attachCustomerAutocomplete("mr-customer-name",   "mr-customer-phone");   // Missing Record modal
+    attachCustomerAutocomplete("edit-customer-name", "edit-customer-phone"); // Edit Session modal
+    // =====================================================================
+
     document.getElementById("station-name").addEventListener("input", () => {
       updateStationConflictUI();
       autofillRateForStation(document.getElementById("station-name").value.trim());
