@@ -1012,6 +1012,8 @@
         } else {
           showToast(`⚡ LinkyPot: Visit recorded (${data.current_progress}/${data.target_value} stamps).`);
         }
+      } else {
+        console.warn("[ChillPill] LinkyPot visit log response:", res.status, data);
       }
     } catch (e) {
       console.warn("[ChillPill] Background visit log to LinkyPot failed:", e);
@@ -1023,8 +1025,27 @@
     const syncText = document.getElementById("btn-sync-linkypot-text");
     if (!syncBtn || !syncText) return;
 
-    const completedSessions = records.filter((r) => r.status === "Completed" && r.customer_phone && r.customer_phone.trim().length >= 7);
+    syncBtn.disabled = true;
+    syncText.textContent = "Checking records...";
+
+    let completedSessions = records.filter((r) => r.status === "Completed" && r.customer_phone && r.customer_phone.trim().length >= 7);
+
+    // Also pull directly from Supabase if connected to ensure all historical records are included
+    if (window.sb) {
+      try {
+        const { data: dbSessions } = await window.sb.from("sessions").select("*").eq("status", "Completed");
+        if (dbSessions && dbSessions.length) {
+          const dbFiltered = dbSessions.filter((r) => r.customer_phone && r.customer_phone.trim().length >= 7);
+          if (dbFiltered.length >= completedSessions.length) {
+            completedSessions = dbFiltered;
+          }
+        }
+      } catch (e) {}
+    }
+
     if (!completedSessions.length) {
+      syncBtn.disabled = false;
+      syncText.textContent = "Sync Past Records";
       showToast("No completed sessions with phone numbers found to sync.");
       return;
     }
@@ -1040,7 +1061,6 @@
     });
 
     const customers = Array.from(customerMap.values());
-    syncBtn.disabled = true;
     syncText.textContent = `Syncing ${customers.length} customers...`;
 
     try {
@@ -1791,6 +1811,12 @@
       renderAllLists();
       closeMissingRecordModal();
       showToast("Missing record added from register successfully!");
+
+      // Log visit to LinkyPot CRM & Loyalty if phone number is provided
+      if (savedRecord.customer_phone && (savedRecord.status === "Completed" || savedRecord.paid)) {
+        const amt = Number(savedRecord.amount || savedRecord.final_amount || 0);
+        logVisitToLinkyPot(savedRecord.customer_phone, savedRecord.customer_name, amt, false);
+      }
 
       if (printBill) {
         printPanBill(savedRecord);
