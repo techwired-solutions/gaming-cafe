@@ -624,7 +624,12 @@
 
   function updateCard(card, record) {
     card.dataset.recordId = record.id;
-    card.querySelector(".record-customer").textContent = record.customer_name || "—";
+    const custEl = card.querySelector(".record-customer");
+    if (custEl) {
+      custEl.textContent = record.customer_name || "—";
+      custEl.classList.add("cursor-pointer", "hover:text-[#d8ff45]", "transition");
+      custEl.title = "Click to filter records by this customer";
+    }
     card.querySelector(".record-station").textContent = (record.station_name || "—") + " · " + (record.type || "—");
     card.querySelector(".record-duration").textContent = (Number(record.duration_minutes) || 0) + " min";
     card.querySelector(".record-amount").textContent = inr(record.amount);
@@ -652,6 +657,9 @@
     if (record.paid && record.payment_method) {
       paymentEl.textContent = record.payment_method;
       paymentEl.className = "record-payment rounded-full px-2 py-0.5 font-bold " + (record.payment_method === "Cash" ? "badge-cash" : "badge-online");
+    } else if (record.status === "Completed" && !record.paid) {
+      paymentEl.textContent = "Unpaid / Due";
+      paymentEl.className = "record-payment rounded-full px-2 py-0.5 font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30";
     } else paymentEl.classList.add("hidden");
 
     const countdown = card.querySelector(".record-countdown");
@@ -700,6 +708,16 @@
     const fragment = document.getElementById("record-template").content.cloneNode(true);
     const card = fragment.querySelector("article");
     updateCard(card, record);
+
+    const custEl = card.querySelector(".record-customer");
+    if (custEl) {
+      custEl.addEventListener("click", () => {
+        const item = records.find((row) => row.id === card.dataset.recordId);
+        if (item && item.customer_name) {
+          setRecordsCustomerFilter(item.customer_name);
+        }
+      });
+    }
 
     const trigger = card.querySelector(".delete-trigger");
     const confirmArea = card.querySelector(".delete-confirm");
@@ -769,20 +787,64 @@
   }
 
   let recordsFilterStatus = "all";
+  let recordsFilterPay = "all";
+  let recordsFilterDate = "";
+  let recordsFilterCustomer = "";
   let recordsSearchQuery = "";
 
+  function getRecordLocalDateStr(record) {
+    const raw = record.start_time || record.created_at;
+    if (!raw) return "";
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return "";
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  function getTodayDateStr() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  function getYesterdayDateStr() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
   function getFilteredRecords() {
+    const searchQ = recordsSearchQuery.toLowerCase();
+    const custQ = recordsFilterCustomer.toLowerCase();
+
     return records
       .filter((r) => {
         if (recordsFilterStatus !== "all" && r.status !== recordsFilterStatus) return false;
-        if (recordsSearchQuery) {
-          const q = recordsSearchQuery.toLowerCase();
-          const matchCustomer = (r.customer_name || "").toLowerCase().includes(q);
-          const matchPhone = (r.customer_phone || "").toLowerCase().includes(q);
-          const matchStation = (r.station_name || "").toLowerCase().includes(q);
-          const matchGame = (r.game || "").toLowerCase().includes(q);
-          const matchNotes = (r.notes || "").toLowerCase().includes(q);
-          const matchStaff = (r.staff_name || "").toLowerCase().includes(q);
+
+        if (recordsFilterPay !== "all") {
+          const m = (r.payment_method || "").trim().toLowerCase();
+          if (recordsFilterPay.toLowerCase() !== m) return false;
+        }
+
+        if (recordsFilterDate) {
+          const recDateStr = getRecordLocalDateStr(r);
+          if (recDateStr !== recordsFilterDate) return false;
+        }
+
+        if (custQ) {
+          const name = (r.customer_name || "").toLowerCase();
+          const phone = (r.customer_phone || "").toLowerCase();
+          if (!name.includes(custQ) && !phone.includes(custQ)) return false;
+        }
+
+        if (searchQ) {
+          const matchCustomer = (r.customer_name || "").toLowerCase().includes(searchQ);
+          const matchPhone = (r.customer_phone || "").toLowerCase().includes(searchQ);
+          const matchStation = (r.station_name || "").toLowerCase().includes(searchQ);
+          const matchGame = (r.game || "").toLowerCase().includes(searchQ);
+          const matchNotes = (r.notes || "").toLowerCase().includes(searchQ);
+          const matchStaff = (r.staff_name || "").toLowerCase().includes(searchQ);
           if (!matchCustomer && !matchPhone && !matchStation && !matchGame && !matchNotes && !matchStaff) {
             return false;
           }
@@ -796,12 +858,173 @@
       });
   }
 
+  function updateRecordsCustomerDatalist() {
+    const datalist = document.getElementById("records-customer-datalist");
+    if (!datalist) return;
+    datalist.innerHTML = "";
+    const seen = new Set();
+    const sorted = [...records].sort((a, b) => new Date(b.start_time || b.created_at || 0) - new Date(a.start_time || a.created_at || 0));
+    sorted.forEach((r) => {
+      const name = (r.customer_name || "").trim();
+      const phone = (r.customer_phone || "").trim();
+      if (name && !seen.has(name.toLowerCase())) {
+        seen.add(name.toLowerCase());
+        const opt = document.createElement("option");
+        opt.value = name;
+        if (phone && phone !== "—") {
+          opt.label = `${name} · ${phone}`;
+        }
+        datalist.appendChild(opt);
+      }
+    });
+  }
+
+  function createFilterTag(label, onRemove) {
+    const tag = document.createElement("span");
+    tag.className = "inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-300 text-[11px] font-medium";
+    tag.textContent = label;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "text-slate-400 hover:text-white ml-0.5 cursor-pointer font-bold";
+    btn.innerHTML = "&times;";
+    btn.addEventListener("click", onRemove);
+    tag.appendChild(btn);
+    return tag;
+  }
+
+  function updateRecordsFilterIndicator(filteredCount, totalCount) {
+    const indicator = document.getElementById("records-filter-indicator");
+    const summary = document.getElementById("records-filter-summary");
+    const tagsContainer = document.getElementById("records-active-tags");
+    if (!indicator || !summary || !tagsContainer) return;
+
+    const hasActiveFilter =
+      recordsFilterStatus !== "all" ||
+      recordsFilterPay !== "all" ||
+      !!recordsFilterDate ||
+      !!recordsFilterCustomer ||
+      !!recordsSearchQuery;
+
+    indicator.classList.toggle("hidden", !hasActiveFilter);
+
+    if (!hasActiveFilter) {
+      tagsContainer.innerHTML = "";
+      return;
+    }
+
+    summary.textContent = `Showing ${filteredCount} of ${totalCount} records`;
+    tagsContainer.innerHTML = "";
+
+    if (recordsFilterDate) {
+      const todayStr = getTodayDateStr();
+      const yestStr = getYesterdayDateStr();
+      let label = recordsFilterDate;
+      if (recordsFilterDate === todayStr) label = `Today (${recordsFilterDate})`;
+      else if (recordsFilterDate === yestStr) label = `Yesterday (${recordsFilterDate})`;
+      tagsContainer.appendChild(createFilterTag(`Date: ${label}`, () => setRecordsDateFilter("")));
+    }
+
+    if (recordsFilterCustomer) {
+      tagsContainer.appendChild(createFilterTag(`Customer: ${recordsFilterCustomer}`, () => setRecordsCustomerFilter("")));
+    }
+
+    if (recordsFilterStatus !== "all") {
+      tagsContainer.appendChild(createFilterTag(`Status: ${recordsFilterStatus}`, () => {
+        const pills = document.querySelectorAll(".records-filter-pill");
+        pills.forEach((p) => {
+          const isAll = p.dataset.filter === "all";
+          p.classList.toggle("active", isAll);
+          p.classList.toggle("border-[#d8ff45]", isAll);
+          p.classList.toggle("bg-[#d8ff45]/15", isAll);
+          p.classList.toggle("text-[#d8ff45]", isAll);
+          p.classList.toggle("border-slate-700", !isAll);
+          p.classList.toggle("text-slate-400", !isAll);
+        });
+        recordsFilterStatus = "all";
+        renderRecordsList();
+      }));
+    }
+
+    if (recordsFilterPay !== "all") {
+      tagsContainer.appendChild(createFilterTag(`Pay: ${recordsFilterPay}`, () => {
+        const pills = document.querySelectorAll(".records-pay-pill");
+        pills.forEach((p) => {
+          const isAll = p.dataset.pay === "all";
+          p.classList.toggle("active", isAll);
+          p.classList.toggle("border-slate-600", isAll);
+          p.classList.toggle("bg-slate-800", isAll);
+          p.classList.toggle("text-slate-200", isAll);
+          p.classList.toggle("border-slate-700", !isAll);
+          p.classList.toggle("text-slate-400", !isAll);
+        });
+        recordsFilterPay = "all";
+        renderRecordsList();
+      }));
+    }
+
+    if (recordsSearchQuery) {
+      tagsContainer.appendChild(createFilterTag(`Search: "${recordsSearchQuery}"`, () => {
+        const searchInput = document.getElementById("records-search-input");
+        if (searchInput) searchInput.value = "";
+        recordsSearchQuery = "";
+        renderRecordsList();
+      }));
+    }
+  }
+
+  function setRecordsCustomerFilter(custName) {
+    recordsFilterCustomer = (custName || "").trim();
+    const input = document.getElementById("records-customer-filter");
+    if (input) input.value = recordsFilterCustomer;
+    const clearBtn = document.getElementById("records-customer-clear");
+    if (clearBtn) clearBtn.classList.toggle("hidden", !recordsFilterCustomer);
+
+    const recLink = document.querySelector('.sidebar-link[data-page="page-records"]');
+    if (recLink) recLink.click();
+
+    renderRecordsList();
+  }
+
+  function setRecordsDateFilter(dateStr) {
+    recordsFilterDate = (dateStr || "").trim();
+    const dateInput = document.getElementById("records-date-filter");
+    if (dateInput) dateInput.value = recordsFilterDate;
+
+    const clearBtn = document.getElementById("records-date-clear");
+    if (clearBtn) clearBtn.classList.toggle("hidden", !recordsFilterDate);
+
+    const todayStr = getTodayDateStr();
+    const yestStr = getYesterdayDateStr();
+    const todayBtn = document.getElementById("records-date-today");
+    const yestBtn = document.getElementById("records-date-yesterday");
+
+    if (todayBtn) {
+      const isToday = recordsFilterDate === todayStr;
+      todayBtn.classList.toggle("bg-[#d8ff45]/20", isToday);
+      todayBtn.classList.toggle("border-[#d8ff45]", isToday);
+      todayBtn.classList.toggle("text-[#d8ff45]", isToday);
+      todayBtn.classList.toggle("border-slate-700", !isToday);
+      todayBtn.classList.toggle("text-slate-300", !isToday);
+    }
+    if (yestBtn) {
+      const isYest = recordsFilterDate === yestStr;
+      yestBtn.classList.toggle("bg-[#d8ff45]/20", isYest);
+      yestBtn.classList.toggle("border-[#d8ff45]", isYest);
+      yestBtn.classList.toggle("text-[#d8ff45]", isYest);
+      yestBtn.classList.toggle("border-slate-700", !isYest);
+      yestBtn.classList.toggle("text-slate-300", !isYest);
+    }
+
+    renderRecordsList();
+  }
+
   function renderRecordsList() {
     const listEl = document.getElementById("records-list");
     const emptyEl = document.getElementById("empty-records");
     if (!listEl) return;
     const filtered = getFilteredRecords();
     syncCardList(listEl, filtered);
+    updateRecordsFilterIndicator(filtered.length, records.length);
     if (emptyEl) {
       emptyEl.classList.toggle("hidden", filtered.length > 0);
       const titleP = emptyEl.querySelector("p.font-semibold");
@@ -820,6 +1043,56 @@
       });
     }
 
+    const custInput = document.getElementById("records-customer-filter");
+    const custClearBtn = document.getElementById("records-customer-clear");
+    if (custInput) {
+      custInput.addEventListener("input", (e) => {
+        recordsFilterCustomer = e.target.value.trim();
+        if (custClearBtn) custClearBtn.classList.toggle("hidden", !recordsFilterCustomer);
+        renderRecordsList();
+      });
+      custInput.addEventListener("change", (e) => {
+        recordsFilterCustomer = e.target.value.trim();
+        if (custClearBtn) custClearBtn.classList.toggle("hidden", !recordsFilterCustomer);
+        renderRecordsList();
+      });
+    }
+    if (custClearBtn) {
+      custClearBtn.addEventListener("click", () => {
+        setRecordsCustomerFilter("");
+      });
+    }
+
+    const dateInput = document.getElementById("records-date-filter");
+    const dateClearBtn = document.getElementById("records-date-clear");
+    const todayBtn = document.getElementById("records-date-today");
+    const yestBtn = document.getElementById("records-date-yesterday");
+
+    if (dateInput) {
+      dateInput.addEventListener("change", (e) => {
+        setRecordsDateFilter(e.target.value);
+      });
+    }
+    if (dateClearBtn) {
+      dateClearBtn.addEventListener("click", () => {
+        setRecordsDateFilter("");
+      });
+    }
+    if (todayBtn) {
+      todayBtn.addEventListener("click", () => {
+        const today = getTodayDateStr();
+        if (recordsFilterDate === today) setRecordsDateFilter("");
+        else setRecordsDateFilter(today);
+      });
+    }
+    if (yestBtn) {
+      yestBtn.addEventListener("click", () => {
+        const yest = getYesterdayDateStr();
+        if (recordsFilterDate === yest) setRecordsDateFilter("");
+        else setRecordsDateFilter(yest);
+      });
+    }
+
     const pills = document.querySelectorAll(".records-filter-pill");
     pills.forEach((pill) => {
       pill.addEventListener("click", () => {
@@ -833,12 +1106,75 @@
         renderRecordsList();
       });
     });
+
+    const payPills = document.querySelectorAll(".records-pay-pill");
+    payPills.forEach((pill) => {
+      pill.addEventListener("click", () => {
+        payPills.forEach((p) => {
+          p.classList.remove("active", "border-slate-600", "bg-slate-800", "text-slate-200");
+          p.classList.add("border-slate-700", "text-slate-400");
+        });
+        pill.classList.add("active", "border-slate-600", "bg-slate-800", "text-slate-200");
+        pill.classList.remove("border-slate-700", "text-slate-400");
+        recordsFilterPay = pill.dataset.pay || "all";
+        renderRecordsList();
+      });
+    });
+
+    const resetAllBtn = document.getElementById("records-reset-all");
+    if (resetAllBtn) {
+      resetAllBtn.addEventListener("click", () => {
+        recordsSearchQuery = "";
+        recordsFilterCustomer = "";
+        recordsFilterDate = "";
+        recordsFilterStatus = "all";
+        recordsFilterPay = "all";
+
+        if (searchInput) searchInput.value = "";
+        if (custInput) custInput.value = "";
+        if (custClearBtn) custClearBtn.classList.add("hidden");
+        if (dateInput) dateInput.value = "";
+        if (dateClearBtn) dateClearBtn.classList.add("hidden");
+
+        if (todayBtn) {
+          todayBtn.classList.remove("bg-[#d8ff45]/20", "border-[#d8ff45]", "text-[#d8ff45]");
+          todayBtn.classList.add("border-slate-700", "text-slate-300");
+        }
+        if (yestBtn) {
+          yestBtn.classList.remove("bg-[#d8ff45]/20", "border-[#d8ff45]", "text-[#d8ff45]");
+          yestBtn.classList.add("border-slate-700", "text-slate-300");
+        }
+
+        pills.forEach((p) => {
+          const isAll = p.dataset.filter === "all";
+          p.classList.toggle("active", isAll);
+          p.classList.toggle("border-[#d8ff45]", isAll);
+          p.classList.toggle("bg-[#d8ff45]/15", isAll);
+          p.classList.toggle("text-[#d8ff45]", isAll);
+          p.classList.toggle("border-slate-700", !isAll);
+          p.classList.toggle("text-slate-400", !isAll);
+        });
+
+        payPills.forEach((p) => {
+          const isAll = p.dataset.pay === "all";
+          p.classList.toggle("active", isAll);
+          p.classList.toggle("border-slate-600", isAll);
+          p.classList.toggle("bg-slate-800", isAll);
+          p.classList.toggle("text-slate-200", isAll);
+          p.classList.toggle("border-slate-700", !isAll);
+          p.classList.toggle("text-slate-400", !isAll);
+        });
+
+        renderRecordsList();
+      });
+    }
   }
 
   function renderAllLists() {
     const sorted = [...records].sort((a, b) => new Date(b.start_time || b.created_at) - new Date(a.start_time || a.created_at));
     const active = sorted.filter((r) => r.status === "Active");
 
+    updateRecordsCustomerDatalist();
     renderRecordsList();
 
     syncCardList(document.getElementById("overview-active-list"), active);
@@ -1434,6 +1770,16 @@
     (record.food_items || []).forEach((item) => addFrRow("edit-food-rows", item.id, item.qty));
     if (!record.food_items || !record.food_items.length) addFrRow("edit-food-rows");
 
+    const payStatusEl = document.getElementById("edit-payment-status");
+    const payMethodEl = document.getElementById("edit-payment-method");
+    if (payStatusEl) {
+      payStatusEl.value = record.paid ? "Paid" : "Unpaid";
+    }
+    if (payMethodEl) {
+      payMethodEl.value = record.payment_method === "Online" ? "Online" : "Cash";
+      payMethodEl.disabled = !record.paid;
+    }
+
     recalcEditModal();
     document.getElementById("edit-session-modal").classList.add("show");
   }
@@ -1458,6 +1804,14 @@
       syncEndFromDuration("edit-start-time", "edit-duration", "edit-end-time");
       recalcEditModal();
     });
+
+    const editPayStatus = document.getElementById("edit-payment-status");
+    const editPayMethod = document.getElementById("edit-payment-method");
+    if (editPayStatus && editPayMethod) {
+      editPayStatus.addEventListener("change", () => {
+        editPayMethod.disabled = editPayStatus.value === "Unpaid";
+      });
+    }
 
     document.getElementById("edit-session-save").addEventListener("click", async () => {
       if (!editTarget) return;
@@ -1497,6 +1851,9 @@
         }
       }
 
+      const isPaid = editPayStatus ? editPayStatus.value === "Paid" : !!editTarget.paid;
+      const paymentMethod = isPaid ? (editPayMethod ? editPayMethod.value : editTarget.payment_method || "Cash") : null;
+
       const btn = document.getElementById("edit-session-save");
       btn.disabled = true;
       const updatePayload = {
@@ -1511,12 +1868,18 @@
         food_items: foodItems,
         food_total: foodTotal,
         amount: total,
+        paid: isPaid,
+        payment_method: paymentMethod,
         notes: document.getElementById("edit-notes").value.trim(),
         notified_5min: false
       };
+      if (isPaid) {
+        updatePayload.paid_at = editTarget.paid_at || endIso || startIso || new Date().toISOString();
+      } else {
+        updatePayload.paid_at = null;
+      }
       if (editTarget.status === "Completed" && startIso) {
         updatePayload.created_at = startIso;
-        if (editTarget.paid) updatePayload.paid_at = endIso || startIso;
       }
 
       const { error } = await window.sb

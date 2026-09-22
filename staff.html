@@ -439,16 +439,63 @@
             </div>
 
             <!-- Search and filters -->
-            <div class="p-4 border-b border-slate-700/60 bg-[#161d2a] flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-              <div class="relative flex-1">
-                <i data-lucide="search" width="15" height="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                <input id="records-search-input" type="text" placeholder="Search by customer, phone, station, game or notes..." class="form-control pl-9 text-xs py-2 w-full">
+            <div class="p-4 border-b border-slate-700/60 bg-[#161d2a] space-y-3">
+              <!-- Row 1: Search & Customer Filter -->
+              <div class="grid sm:grid-cols-2 gap-3 items-center">
+                <div class="relative">
+                  <i data-lucide="search" width="15" height="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                  <input id="records-search-input" type="text" placeholder="Search station, game, notes..." class="form-control pl-9 text-xs py-2 w-full">
+                </div>
+                <div class="relative flex items-center">
+                  <i data-lucide="user" width="15" height="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-[#d8ff45]"></i>
+                  <input id="records-customer-filter" type="text" list="records-customer-datalist" placeholder="Filter by customer name or phone..." class="form-control pl-9 pr-7 text-xs py-2 w-full font-medium">
+                  <button type="button" id="records-customer-clear" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs font-bold cursor-pointer" title="Clear customer filter">✕</button>
+                  <datalist id="records-customer-datalist"></datalist>
+                </div>
               </div>
-              <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0" id="records-filter-pills">
-                <button type="button" class="records-filter-pill active rounded-lg px-2.5 py-1.5 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45]" data-filter="all">All</button>
-                <button type="button" class="records-filter-pill rounded-lg px-2.5 py-1.5 text-xs font-bold border border-slate-700 text-slate-400 hover:text-slate-200" data-filter="Completed">Completed</button>
-                <button type="button" class="records-filter-pill rounded-lg px-2.5 py-1.5 text-xs font-bold border border-slate-700 text-slate-400 hover:text-slate-200" data-filter="Active">Active</button>
-                <button type="button" class="records-filter-pill rounded-lg px-2.5 py-1.5 text-xs font-bold border border-slate-700 text-slate-400 hover:text-slate-200" data-filter="Booked">Booked</button>
+
+              <!-- Row 2: Date Picker, Quick Date Chips, Status Pills, and Payment Filter -->
+              <div class="flex flex-wrap items-center justify-between gap-2.5 pt-1">
+                <!-- Date Filter Group -->
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <div class="flex items-center gap-1.5 bg-[#10141e] border border-slate-700 rounded-lg px-2.5 py-1">
+                    <i data-lucide="calendar" width="14" height="14" class="text-[#d8ff45]"></i>
+                    <label for="records-date-filter" class="text-[11px] text-slate-400 font-medium">Date:</label>
+                    <input id="records-date-filter" type="date" class="bg-transparent text-xs text-slate-200 outline-none border-0 cursor-pointer" title="Pick a particular date">
+                  </div>
+                  <button type="button" id="records-date-today" class="rounded-lg px-2.5 py-1 text-xs font-semibold border border-slate-700 text-slate-300 hover:text-white transition cursor-pointer">Today</button>
+                  <button type="button" id="records-date-yesterday" class="rounded-lg px-2.5 py-1 text-xs font-semibold border border-slate-700 text-slate-300 hover:text-white transition cursor-pointer">Yesterday</button>
+                  <button type="button" id="records-date-clear" class="hidden rounded-lg px-2 py-1 text-xs font-semibold text-amber-400 hover:text-amber-300 transition cursor-pointer" title="Show all dates">✕ All Dates</button>
+                </div>
+
+                <!-- Status & Payment Pills -->
+                <div class="flex flex-wrap items-center gap-2">
+                  <!-- Status pills -->
+                  <div class="flex items-center gap-1 overflow-x-auto" id="records-filter-pills">
+                    <button type="button" class="records-filter-pill active rounded-lg px-2.5 py-1 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45]" data-filter="all">All</button>
+                    <button type="button" class="records-filter-pill rounded-lg px-2.5 py-1 text-xs font-bold border border-slate-700 text-slate-400 hover:text-slate-200" data-filter="Completed">Completed</button>
+                    <button type="button" class="records-filter-pill rounded-lg px-2.5 py-1 text-xs font-bold border border-slate-700 text-slate-400 hover:text-slate-200" data-filter="Active">Active</button>
+                    <button type="button" class="records-filter-pill rounded-lg px-2.5 py-1 text-xs font-bold border border-slate-700 text-slate-400 hover:text-slate-200" data-filter="Booked">Booked</button>
+                  </div>
+
+                  <!-- Payment pills -->
+                  <div class="flex items-center gap-1 pl-2 border-l border-slate-700" id="records-payment-pills">
+                    <button type="button" class="records-pay-pill active rounded-lg px-2.5 py-1 text-xs font-bold border border-slate-600 bg-slate-800 text-slate-200" data-pay="all">All Pay</button>
+                    <button type="button" class="records-pay-pill rounded-lg px-2.5 py-1 text-xs font-bold border border-slate-700 text-slate-400 hover:text-slate-200" data-pay="Cash">Cash</button>
+                    <button type="button" class="records-pay-pill rounded-lg px-2.5 py-1 text-xs font-bold border border-slate-700 text-slate-400 hover:text-slate-200" data-pay="Online">Online</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Row 3: Active Filters Summary & Reset Button (visible when any filter active) -->
+              <div id="records-filter-indicator" class="hidden text-xs text-slate-400 flex items-center justify-between pt-2 border-t border-slate-800">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span id="records-filter-summary" class="font-medium">Showing 0 of 0 records</span>
+                  <div id="records-active-tags" class="flex items-center gap-1.5 flex-wrap"></div>
+                </div>
+                <button type="button" id="records-reset-all" class="text-xs text-[#d8ff45] hover:underline font-bold flex items-center gap-1 cursor-pointer">
+                  <i data-lucide="rotate-ccw" width="12" height="12"></i> Reset all filters
+                </button>
               </div>
             </div>
 
@@ -1180,6 +1227,29 @@
         <div class="grid grid-cols-[1fr_auto_auto_auto] gap-2 text-xs text-slate-500 mb-2"><span>Menu item</span><span>Qty</span><span>Price</span><span></span></div>
         <div id="edit-food-rows" class="space-y-2 max-h-40 overflow-y-auto"></div>
         <p id="edit-menu-empty" class="hidden text-xs text-slate-400 mt-2">No menu items yet — add some in Menu &amp; Pricing.</p>
+      </div>
+
+      <!-- Payment & Settlement -->
+      <div class="border-t border-slate-700 mt-4 pt-4">
+        <h4 class="font-semibold text-sm mb-2 flex items-center gap-1.5">
+          <i data-lucide="wallet" width="14" height="14" class="text-[#d8ff45]"></i> Payment &amp; Settlement
+        </h4>
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1" for="edit-payment-status">Payment Status</label>
+            <select id="edit-payment-status" class="form-control font-semibold">
+              <option value="Paid">Paid (Settled)</option>
+              <option value="Unpaid">Unpaid / Due</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1" for="edit-payment-method">Payment Method</label>
+            <select id="edit-payment-method" class="form-control font-semibold">
+              <option value="Cash">Cash</option>
+              <option value="Online">Online / QR (Fonepay/eSewa)</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       <div class="border-t border-slate-700 mt-4 pt-4">
