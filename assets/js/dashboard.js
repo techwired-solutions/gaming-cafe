@@ -316,11 +316,12 @@
   }
 
   function addFrRow(containerId, selectedId = "", qty = 1, customUnitPrice = null) {
-    const isMr = containerId === "mr-food-rows";
-    const isInternalActive = isMr && !!document.getElementById("mr-is-internal-sale")?.checked;
+    const hasCustomPriceCol = containerId === "mr-food-rows" || containerId === "edit-food-rows";
+    const isInternalActive = (containerId === "mr-food-rows" && !!document.getElementById("mr-is-internal-sale")?.checked) ||
+                             (containerId === "edit-food-rows" && !!document.getElementById("edit-is-internal-sale")?.checked);
 
     const row = document.createElement("div");
-    if (isMr) {
+    if (hasCustomPriceCol) {
       row.className = "fr-row grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 items-center";
       row.innerHTML = `
         <select aria-label="Food or drink item" class="form-control fr-select text-xs py-2">${menuOptions(selectedId)}</select>
@@ -1793,6 +1794,68 @@
     return { total, foodTotal, duration, rate };
   }
 
+  function updateEditInternalSaleState() {
+    const isInternal = !!document.getElementById("edit-is-internal-sale")?.checked;
+    const badge = document.getElementById("edit-internal-badge");
+    const chips = document.getElementById("edit-internal-chips");
+    const stationReq = document.getElementById("edit-station-req");
+    const startTimeReq = document.getElementById("edit-start-time-req");
+    const custInput = document.getElementById("edit-customer-name");
+    const phoneInput = document.getElementById("edit-customer-phone");
+    const stationInput = document.getElementById("edit-station");
+    const durationInput = document.getElementById("edit-duration");
+    const rateInput = document.getElementById("edit-rate");
+    const foodHdrNote = document.getElementById("edit-food-header-note");
+
+    if (badge) badge.classList.toggle("hidden", !isInternal);
+    if (chips) chips.classList.toggle("hidden", !isInternal);
+    if (stationReq) stationReq.classList.toggle("hidden", isInternal);
+    if (startTimeReq) startTimeReq.classList.toggle("hidden", isInternal);
+
+    if (isInternal) {
+      if (!custInput.value) {
+        custInput.value = "Internal Sale";
+      }
+      if (phoneInput) phoneInput.placeholder = "Optional for internal sale";
+      if (stationInput) stationInput.placeholder = "Optional (e.g. Counter, Lounge, or leave blank)";
+      if (foodHdrNote) {
+        foodHdrNote.textContent = "· 👑 Custom food prices enabled";
+        foodHdrNote.className = "text-[#d8ff45] font-semibold text-xs";
+      }
+    } else {
+      if (custInput.value === "Internal Sale" || custInput.value.startsWith("Internal Sale")) {
+        custInput.value = "";
+      }
+      if (phoneInput) phoneInput.placeholder = "Customer phone";
+      if (stationInput) stationInput.placeholder = "Station / table";
+      if (foodHdrNote) {
+        foodHdrNote.textContent = "";
+      }
+    }
+
+    // Toggle unit price input state in all edit-food-rows
+    const rows = document.querySelectorAll("#edit-food-rows .fr-row");
+    rows.forEach((row) => {
+      const pInput = row.querySelector(".fr-unit-price");
+      if (pInput) {
+        pInput.disabled = !isInternal;
+        pInput.classList.toggle("border-[#d8ff45]/60", isInternal);
+        pInput.classList.toggle("text-[#d8ff45]", isInternal);
+        pInput.classList.toggle("bg-[#101520]", isInternal);
+        pInput.classList.toggle("border-slate-700", !isInternal);
+        pInput.classList.toggle("text-slate-400", !isInternal);
+        pInput.classList.toggle("bg-slate-900/50", !isInternal);
+        pInput.title = isInternal ? "Custom price for internal sale" : "Turn on Internal Sale to edit price";
+        if (!isInternal) {
+          pInput.dataset.userEdited = "false";
+          updateFrRow(row);
+        }
+      }
+    });
+
+    recalcEditModal();
+  }
+
   function openEditModal(record) {
     editTarget = record;
     document.getElementById("edit-heading").textContent = `${record.customer_name || "—"} · ${record.status}`;
@@ -1800,6 +1863,13 @@
     document.getElementById("edit-game").value = record.game || "";
     document.getElementById("edit-customer-name").value = record.customer_name || "";
     document.getElementById("edit-customer-phone").value = record.customer_phone || "";
+
+    const isInternal = !!(record.customer_name && record.customer_name.toLowerCase().includes("internal")) ||
+                       !!(record.notes && record.notes.includes("[Internal Sale]"));
+    const internalToggle = document.getElementById("edit-is-internal-sale");
+    if (internalToggle) {
+      internalToggle.checked = isInternal;
+    }
 
     // Editing an older record keeps its original date (just changing the
     // time-of-day) instead of silently moving it to today.
@@ -1820,8 +1890,10 @@
 
     clearFrContainer("edit-food-rows");
     document.getElementById("edit-menu-empty").classList.toggle("hidden", menuItems.length > 0);
-    (record.food_items || []).forEach((item) => addFrRow("edit-food-rows", item.id, item.qty));
+    (record.food_items || []).forEach((item) => addFrRow("edit-food-rows", item.id, item.qty, item.price));
     if (!record.food_items || !record.food_items.length) addFrRow("edit-food-rows");
+
+    updateEditInternalSaleState();
 
     const payStatusEl = document.getElementById("edit-payment-status");
     const payMethodEl = document.getElementById("edit-payment-method");
@@ -1858,6 +1930,33 @@
       recalcEditModal();
     });
 
+    const editInternalToggle = document.getElementById("edit-is-internal-sale");
+    if (editInternalToggle) {
+      editInternalToggle.addEventListener("change", updateEditInternalSaleState);
+    }
+
+    document.querySelectorAll(".edit-preset-chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        const toggle = document.getElementById("edit-is-internal-sale");
+        if (toggle) toggle.checked = true;
+        const custInput = document.getElementById("edit-customer-name");
+        if (custInput) custInput.value = chip.dataset.name || "Internal Sale";
+        updateEditInternalSaleState();
+      });
+    });
+
+    const editCustNameInput = document.getElementById("edit-customer-name");
+    if (editCustNameInput) {
+      editCustNameInput.addEventListener("input", () => {
+        const val = editCustNameInput.value.trim().toLowerCase();
+        const toggle = document.getElementById("edit-is-internal-sale");
+        if ((val.startsWith("internal") || val.includes("owner")) && toggle && !toggle.checked) {
+          toggle.checked = true;
+          updateEditInternalSaleState();
+        }
+      });
+    }
+
     const editPayStatus = document.getElementById("edit-payment-status");
     const editPayMethod = document.getElementById("edit-payment-method");
     if (editPayStatus && editPayMethod) {
@@ -1868,14 +1967,26 @@
 
     document.getElementById("edit-session-save").addEventListener("click", async () => {
       if (!editTarget) return;
-      const station = document.getElementById("edit-station").value.trim();
-      const customerName = document.getElementById("edit-customer-name").value.trim();
-      const customerPhone = document.getElementById("edit-customer-phone").value.trim();
+
+      const internalToggle = document.getElementById("edit-is-internal-sale");
+      const isInternal = !!(internalToggle && internalToggle.checked) ||
+                         document.getElementById("edit-customer-name").value.trim().toLowerCase().includes("internal");
+
+      let station = document.getElementById("edit-station").value.trim();
+      let customerName = document.getElementById("edit-customer-name").value.trim();
+      let customerPhone = document.getElementById("edit-customer-phone").value.trim();
       const msgEl = document.getElementById("edit-session-message");
-      if (!station || !customerName || !customerPhone) {
-        msgEl.textContent = "Station, customer name, and phone can't be empty.";
-        msgEl.className = "text-sm min-h-5 mt-2 text-red-300";
-        return;
+
+      if (isInternal) {
+        if (!customerName) customerName = "Internal Sale";
+        if (!station) station = "Internal / Cafe";
+        if (!customerPhone) customerPhone = "Internal";
+      } else {
+        if (!station || !customerName || !customerPhone) {
+          msgEl.textContent = "Station, customer name, and phone can't be empty.";
+          msgEl.className = "text-sm min-h-5 mt-2 text-red-300";
+          return;
+        }
       }
 
       const editDateInput = document.getElementById("edit-date");
@@ -1886,15 +1997,14 @@
 
       const { total, foodTotal, duration, rate } = recalcEditModal();
       const foodItems = collectFrItems("edit-food-rows");
-      const startTimeStr = document.getElementById("edit-start-time").value;
+      const startTimeStr = document.getElementById("edit-start-time").value || (isInternal ? "12:00" : "");
       const startDate = startTimeStr ? combineDateAndTime(editBaseDate, startTimeStr) : null;
       const startIso = startDate ? startDate.toISOString() : editTarget.start_time || null;
       const endIso = startDate ? new Date(startDate.getTime() + duration * 60000).toISOString() : null;
 
       // A station can't run two overlapping Active/Booked sessions — check
-      // the (possibly just-changed) station and time window against
-      // everything else, excluding this record itself.
-      if ((editTarget.status === "Active" || editTarget.status === "Booked") && startIso && endIso) {
+      // only if this is a physical station (not an internal counter/food sale)
+      if (!isInternal && (editTarget.status === "Active" || editTarget.status === "Booked") && startIso && endIso) {
         const conflict = findStationTimeOverlap(station, new Date(startIso), new Date(endIso), editTarget.id);
         if (conflict) {
           const conflictWord = conflict.status === "Active" ? "an active" : "a booked";
@@ -1906,6 +2016,12 @@
 
       const isPaid = editPayStatus ? editPayStatus.value === "Paid" : !!editTarget.paid;
       const paymentMethod = isPaid ? (editPayMethod ? editPayMethod.value : editTarget.payment_method || "Cash") : null;
+
+      const rawNotes = document.getElementById("edit-notes").value.trim();
+      let finalNotes = rawNotes;
+      if (isInternal && !rawNotes.includes("[Internal Sale]")) {
+        finalNotes = rawNotes ? `[Internal Sale] ${rawNotes}` : "[Internal Sale]";
+      }
 
       const btn = document.getElementById("edit-session-save");
       btn.disabled = true;
@@ -1923,7 +2039,7 @@
         amount: total,
         paid: isPaid,
         payment_method: paymentMethod,
-        notes: document.getElementById("edit-notes").value.trim(),
+        notes: finalNotes,
         notified_5min: false
       };
       if (isPaid) {
