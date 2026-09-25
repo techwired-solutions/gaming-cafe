@@ -2899,6 +2899,167 @@
   }
 
   // ---------- revenue (admin) ----------
+  let revDailyChart = null;
+  let revChartDays = 30;
+  let revDateFilter = "";
+
+  function getDateStr(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  function getFriendlyDate(dateStr) {
+    if (!dateStr) return "";
+    const d = new Date(dateStr + "T00:00:00");
+    return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(d);
+  }
+
+  function buildDailyMap(paid) {
+    const map = {};
+    paid.forEach((r) => {
+      const ds = getDateStr(r.paid_at);
+      if (!ds) return;
+      if (!map[ds]) map[ds] = { total: 0, cash: 0, online: 0, sessions: [] };
+      map[ds].total += Number(r.amount) || 0;
+      if (r.payment_method === "Cash") map[ds].cash += Number(r.amount) || 0;
+      if (r.payment_method === "Online") map[ds].online += Number(r.amount) || 0;
+      map[ds].sessions.push(r);
+    });
+    return map;
+  }
+
+  function renderRevenueChart(dailyMap) {
+    const now = new Date();
+    const labels = [];
+    const data = [];
+    for (let i = revChartDays - 1; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      const ds = getDateStr(d.toISOString());
+      labels.push(new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short" }).format(d));
+      data.push(dailyMap[ds] ? dailyMap[ds].total : 0);
+    }
+    const ctx = document.getElementById("rev-daily-chart");
+    if (!ctx) return;
+    if (revDailyChart) { revDailyChart.destroy(); revDailyChart = null; }
+    revDailyChart = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          label: "Revenue (रु)",
+          data,
+          backgroundColor: data.map((v) => v > 0 ? "rgba(216,255,69,0.65)" : "rgba(255,255,255,0.05)"),
+          borderColor: data.map((v) => v > 0 ? "#d8ff45" : "rgba(255,255,255,0.1)"),
+          borderWidth: 1,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => ` रु ${ctx.parsed.y.toLocaleString("en-IN")}`
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: { color: "#95a0b8", font: { size: 10 }, maxRotation: 45 },
+            grid: { color: "rgba(255,255,255,0.04)" }
+          },
+          y: {
+            ticks: {
+              color: "#95a0b8",
+              font: { size: 10 },
+              callback: (v) => `रु ${Number(v).toLocaleString("en-IN")}`
+            },
+            grid: { color: "rgba(255,255,255,0.06)" },
+            beginAtZero: true
+          }
+        }
+      }
+    });
+  }
+
+  function renderDailyTable(dailyMap) {
+    const tbody = document.getElementById("rev-daily-table");
+    const empty = document.getElementById("rev-daily-empty");
+    const sorted = Object.entries(dailyMap).sort((a, b) => b[0].localeCompare(a[0]));
+    if (!sorted.length) {
+      tbody.innerHTML = "";
+      empty.classList.remove("hidden");
+      return;
+    }
+    empty.classList.add("hidden");
+    tbody.innerHTML = sorted.map(([ds, v]) => `
+      <tr class="hover:bg-white/5 cursor-pointer rev-daily-row" data-date="${ds}">
+        <td class="py-2.5 pr-4 font-medium">${getFriendlyDate(ds)}</td>
+        <td class="py-2.5 pr-4 text-slate-400">${v.sessions.length}</td>
+        <td class="py-2.5 pr-4 mono text-amber-300">${inr(v.cash)}</td>
+        <td class="py-2.5 pr-4 mono text-sky-300">${inr(v.online)}</td>
+        <td class="py-2.5 text-right mono font-bold text-[#d8ff45]">${inr(v.total)}</td>
+      </tr>`).join("");
+    tbody.querySelectorAll(".rev-daily-row").forEach((row) => {
+      row.addEventListener("click", () => {
+        const ds = row.dataset.date;
+        const dateInput = document.getElementById("rev-date-filter");
+        if (dateInput) {
+          dateInput.value = ds;
+          revDateFilter = ds;
+          renderRevenueDayFilter(buildDailyMap(records.filter((r) => r.paid)));
+        }
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    });
+  }
+
+  function renderRevenueDayFilter(dailyMap) {
+    const totalEl = document.getElementById("rev-day-total");
+    const cashEl = document.getElementById("rev-day-cash");
+    const onlineEl = document.getElementById("rev-day-online");
+    const sessionsWrap = document.getElementById("rev-day-sessions-wrap");
+    const sessionsBody = document.getElementById("rev-day-sessions");
+    const emptyEl = document.getElementById("rev-day-empty");
+
+    if (!revDateFilter) {
+      totalEl.textContent = "—";
+      cashEl.textContent = "—";
+      onlineEl.textContent = "—";
+      sessionsWrap.classList.add("hidden");
+      emptyEl.classList.add("hidden");
+      return;
+    }
+    const day = dailyMap[revDateFilter];
+    if (!day) {
+      totalEl.textContent = inr(0);
+      cashEl.textContent = inr(0);
+      onlineEl.textContent = inr(0);
+      sessionsWrap.classList.add("hidden");
+      emptyEl.classList.remove("hidden");
+      return;
+    }
+    emptyEl.classList.add("hidden");
+    totalEl.textContent = inr(day.total);
+    cashEl.textContent = inr(day.cash);
+    onlineEl.textContent = inr(day.online);
+    sessionsWrap.classList.remove("hidden");
+    sessionsBody.innerHTML = day.sessions
+      .sort((a, b) => new Date(a.paid_at) - new Date(b.paid_at))
+      .map((r) => `
+        <tr class="hover:bg-white/5">
+          <td class="py-2 pr-3">${r.customer_name || "—"}</td>
+          <td class="py-2 pr-3 text-slate-400">${r.station_name || "—"}</td>
+          <td class="py-2 pr-3 text-xs ${r.payment_method === "Cash" ? "text-amber-300" : "text-sky-300"}">${r.payment_method || "—"}</td>
+          <td class="py-2 pr-3 text-slate-400">${r.staff_name || "—"}</td>
+          <td class="py-2 text-right mono font-semibold">${inr(r.amount)}</td>
+        </tr>`).join("");
+  }
+
   function renderRevenue() {
     const paid = records.filter((r) => r.paid);
     const total = paid.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
@@ -2930,6 +3091,41 @@
     const staffEl = document.getElementById("revenue-by-staff");
     document.getElementById("revenue-by-staff-empty").classList.toggle("hidden", staffEntries.length > 0);
     staffEl.innerHTML = staffEntries.map(([name, amount]) => bar(name, amount)).join("");
+
+    // Build daily map and render new sections
+    const dailyMap = buildDailyMap(paid);
+    renderRevenueChart(dailyMap);
+    renderDailyTable(dailyMap);
+    renderRevenueDayFilter(dailyMap);
+
+    // Wire up date filter input (once)
+    const dateInput = document.getElementById("rev-date-filter");
+    if (dateInput && !dateInput.dataset.wired) {
+      dateInput.dataset.wired = "1";
+      dateInput.addEventListener("change", () => {
+        revDateFilter = dateInput.value;
+        renderRevenueDayFilter(buildDailyMap(records.filter((r) => r.paid)));
+      });
+      document.getElementById("rev-date-clear").addEventListener("click", () => {
+        dateInput.value = "";
+        revDateFilter = "";
+        renderRevenueDayFilter(buildDailyMap(records.filter((r) => r.paid)));
+      });
+      // Wire chart range buttons
+      [7, 14, 30].forEach((days) => {
+        const btn = document.getElementById(`rev-chart-${days}`);
+        if (!btn) return;
+        btn.addEventListener("click", () => {
+          revChartDays = days;
+          [7, 14, 30].forEach((d) => {
+            const b = document.getElementById(`rev-chart-${d}`);
+            const active = d === days;
+            b.className = `text-xs px-3 py-1 rounded-lg border transition-colors ${active ? "border-[#d8ff45] text-[#d8ff45] bg-[#d8ff45]/10" : "border-slate-700 text-slate-400"}`;
+          });
+          renderRevenueChart(buildDailyMap(records.filter((r) => r.paid)));
+        });
+      });
+    }
   }
 
   // ---------- staff management (admin) ----------

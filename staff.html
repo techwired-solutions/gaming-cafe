@@ -9,6 +9,7 @@
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,700;1,9..144,900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -510,13 +511,97 @@
 
         <!-- ===================== REVENUE (admin) ===================== -->
         <section id="page-revenue" class="page-view">
+
+          <!-- KPI Cards (all-time) -->
           <div class="dashboard-grid mb-6">
             <article class="panel rounded-2xl p-4 col-span-2"><i data-lucide="banknote" class="text-[#d8ff45]" width="19" height="19"></i><p id="revenue-total" class="mono text-2xl font-bold mt-5">रु 0</p><p class="text-sm text-slate-400 mt-1">Total revenue (all time, paid)</p></article>
-            <article class="panel rounded-2xl p-4"><i data-lucide="wallet" class="text-amber-300" width="19" height="19"></i><p id="revenue-cash" class="mono text-2xl font-bold mt-5">रु 0</p><p class="text-sm text-slate-400 mt-1">Cash</p></article>
-            <article class="panel rounded-2xl p-4"><i data-lucide="credit-card" class="text-sky-300" width="19" height="19"></i><p id="revenue-online" class="mono text-2xl font-bold mt-5">रु 0</p><p class="text-sm text-slate-400 mt-1">Online</p></article>
+            <article class="panel rounded-2xl p-4"><i data-lucide="wallet" class="text-amber-300" width="19" height="19"></i><p id="revenue-cash" class="mono text-2xl font-bold mt-5">रु 0</p><p class="text-sm text-slate-400 mt-1">Cash (all time)</p></article>
+            <article class="panel rounded-2xl p-4"><i data-lucide="credit-card" class="text-sky-300" width="19" height="19"></i><p id="revenue-online" class="mono text-2xl font-bold mt-5">रु 0</p><p class="text-sm text-slate-400 mt-1">Online (all time)</p></article>
             <article class="panel rounded-2xl p-4"><i data-lucide="calendar-check" class="text-[#d8ff45]" width="19" height="19"></i><p id="revenue-today" class="mono text-2xl font-bold mt-5">रु 0</p><p class="text-sm text-slate-400 mt-1">Today</p></article>
             <article class="panel rounded-2xl p-4"><i data-lucide="tag" class="text-orange-300" width="19" height="19"></i><p id="revenue-discounts" class="mono text-2xl font-bold mt-5">रु 0</p><p class="text-sm text-slate-400 mt-1">Discounts given</p></article>
           </div>
+
+          <!-- Day Filter + Filtered KPIs -->
+          <div class="panel rounded-2xl p-5 mb-5">
+            <div class="flex flex-wrap items-center gap-3 mb-5">
+              <i data-lucide="calendar-search" class="text-[#d8ff45] shrink-0" width="18" height="18"></i>
+              <h3 class="font-bold">Filter by day</h3>
+              <input id="rev-date-filter" type="date"
+                class="ml-auto bg-[#111722] border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-[#d8ff45]"
+              >
+              <button id="rev-date-clear" class="text-xs text-slate-400 hover:text-[#d8ff45] transition-colors">Clear filter</button>
+            </div>
+            <div id="rev-day-kpis" class="grid sm:grid-cols-3 gap-4">
+              <div class="bg-[#111722] rounded-xl p-4">
+                <p class="text-xs text-slate-400 mb-1">Revenue</p>
+                <p id="rev-day-total" class="mono text-xl font-bold text-[#d8ff45]">—</p>
+              </div>
+              <div class="bg-[#111722] rounded-xl p-4">
+                <p class="text-xs text-slate-400 mb-1">Cash</p>
+                <p id="rev-day-cash" class="mono text-xl font-bold text-amber-300">—</p>
+              </div>
+              <div class="bg-[#111722] rounded-xl p-4">
+                <p class="text-xs text-slate-400 mb-1">Online</p>
+                <p id="rev-day-online" class="mono text-xl font-bold text-sky-300">—</p>
+              </div>
+            </div>
+            <!-- Filtered sessions table -->
+            <div id="rev-day-sessions-wrap" class="mt-5 hidden">
+              <p class="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-3">Sessions on this day</p>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="text-left text-xs text-slate-500 border-b border-slate-700">
+                      <th class="pb-2 pr-3">Customer</th>
+                      <th class="pb-2 pr-3">Station</th>
+                      <th class="pb-2 pr-3">Method</th>
+                      <th class="pb-2 pr-3">Staff</th>
+                      <th class="pb-2 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody id="rev-day-sessions" class="divide-y divide-slate-800"></tbody>
+                </table>
+              </div>
+            </div>
+            <p id="rev-day-empty" class="text-sm text-slate-500 mt-4 hidden">No paid sessions on this date.</p>
+          </div>
+
+          <!-- Daily Revenue Chart -->
+          <div class="panel rounded-2xl p-5 mb-5">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <h3 class="font-bold">Daily revenue (last 30 days)</h3>
+              <div class="flex gap-2">
+                <button id="rev-chart-30" class="text-xs px-3 py-1 rounded-lg border border-[#d8ff45] text-[#d8ff45] bg-[#d8ff45]/10">30d</button>
+                <button id="rev-chart-14" class="text-xs px-3 py-1 rounded-lg border border-slate-700 text-slate-400">14d</button>
+                <button id="rev-chart-7" class="text-xs px-3 py-1 rounded-lg border border-slate-700 text-slate-400">7d</button>
+              </div>
+            </div>
+            <div class="relative" style="height:240px">
+              <canvas id="rev-daily-chart"></canvas>
+            </div>
+          </div>
+
+          <!-- Daily earnings breakdown table -->
+          <div class="panel rounded-2xl p-5 mb-5">
+            <h3 class="font-bold mb-4">Earnings per day</h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-left text-xs text-slate-500 border-b border-slate-700">
+                    <th class="pb-2 pr-4">Date</th>
+                    <th class="pb-2 pr-4">Sessions</th>
+                    <th class="pb-2 pr-4">Cash</th>
+                    <th class="pb-2 pr-4">Online</th>
+                    <th class="pb-2 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody id="rev-daily-table" class="divide-y divide-slate-800"></tbody>
+              </table>
+            </div>
+            <p id="rev-daily-empty" class="text-sm text-slate-500 mt-3 hidden">No paid sessions yet.</p>
+          </div>
+
+          <!-- Cash vs Online + Staff Breakdown -->
           <div class="grid md:grid-cols-2 gap-5">
             <div class="panel rounded-2xl p-5">
               <h3 class="font-bold mb-4">Cash vs Online</h3>
