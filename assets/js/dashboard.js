@@ -526,20 +526,75 @@
     list.innerHTML = "";
     menuItems.forEach((item) => {
       const line = document.createElement("div");
-      line.className = "flex items-center justify-between rounded-lg border border-slate-700 bg-[#111722] px-3 py-2 text-sm";
-      line.innerHTML = `
-        <div class="flex items-center gap-2">
-          <span class="font-medium">${item.name}</span>
-          ${item.category ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">${item.category}</span>` : ""}
-        </div>
-        <div class="flex items-center gap-3">
-          <span class="mono text-[#d8ff45] font-semibold">${inr(item.price)}</span>
-          <button type="button" aria-label="Remove ${item.name}" class="text-slate-400 hover:text-red-300">×</button>
-        </div>`;
-      line.querySelector("button").addEventListener("click", async () => {
-        const { error } = await window.sb.from("menu_items").delete().eq("id", item.id);
-        if (error) showToast("Could not remove this menu item.");
-      });
+      line.className = "rounded-lg border border-slate-700 bg-[#111722] px-3 py-2 text-sm";
+      line.dataset.menuId = item.id;
+
+      function renderViewMode() {
+        line.innerHTML = `
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="font-medium truncate">${item.name}</span>
+              ${item.category ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 shrink-0">${item.category}</span>` : ""}
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="mono text-[#d8ff45] font-semibold">${inr(item.price)}</span>
+              <button type="button" aria-label="Edit ${item.name}" class="menu-edit-btn text-slate-400 hover:text-[#d8ff45] transition-colors p-0.5 rounded">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+              <button type="button" aria-label="Remove ${item.name}" class="menu-del-btn text-slate-400 hover:text-red-400 transition-colors p-0.5 rounded text-base leading-none">×</button>
+            </div>
+          </div>`;
+        line.querySelector(".menu-edit-btn").addEventListener("click", () => renderEditMode());
+        line.querySelector(".menu-del-btn").addEventListener("click", async () => {
+          const { error } = await window.sb.from("menu_items").delete().eq("id", item.id);
+          if (error) showToast("Could not remove this menu item.");
+        });
+      }
+
+      function renderEditMode() {
+        line.innerHTML = `
+          <div class="flex flex-wrap items-center gap-2">
+            <input class="menu-edit-name form-control text-sm flex-1 min-w-[120px] py-1.5" type="text" value="${item.name.replace(/"/g, '&quot;')}" placeholder="Item name" />
+            <input class="menu-edit-price form-control text-sm w-24 py-1.5 mono" type="number" min="0" value="${item.price}" placeholder="Price" />
+            <div class="flex gap-1.5">
+              <button type="button" class="menu-save-btn rounded-lg px-3 py-1.5 text-xs font-bold" style="background:#d8ff45;color:#10141e;">Save</button>
+              <button type="button" class="menu-cancel-btn rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:text-white">Cancel</button>
+            </div>
+          </div>`;
+        const nameInput = line.querySelector(".menu-edit-name");
+        const priceInput = line.querySelector(".menu-edit-price");
+        nameInput.focus();
+        line.querySelector(".menu-cancel-btn").addEventListener("click", () => renderViewMode());
+        line.querySelector(".menu-save-btn").addEventListener("click", async () => {
+          const newName = nameInput.value.trim();
+          const newPrice = parseFloat(priceInput.value);
+          if (!newName) return showToast("Item name cannot be empty.");
+          if (isNaN(newPrice) || newPrice < 0) return showToast("Please enter a valid price.");
+          const btn = line.querySelector(".menu-save-btn");
+          btn.disabled = true;
+          btn.textContent = "Saving…";
+          const { error } = await window.sb.from("menu_items").update({ name: newName, price: newPrice }).eq("id", item.id);
+          if (error) {
+            showToast("Could not save changes.");
+            btn.disabled = false;
+            btn.textContent = "Save";
+          } else {
+            // Optimistically update local copy so view mode shows new values
+            item.name = newName;
+            item.price = newPrice;
+            renderViewMode();
+          }
+        });
+        // Save on Enter key in inputs
+        [nameInput, priceInput].forEach((inp) => {
+          inp.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") { e.preventDefault(); line.querySelector(".menu-save-btn").click(); }
+            if (e.key === "Escape") renderViewMode();
+          });
+        });
+      }
+
+      renderViewMode();
       list.appendChild(line);
     });
   }
