@@ -1297,19 +1297,48 @@
           <input id="mr-date" type="date" class="form-control font-medium" required>
         </div>
 
+        <!-- Internal Sale / Owner Consumption Toggle Card -->
+        <div class="rounded-xl border border-slate-700/80 bg-[#161d2a] p-3.5 mb-4">
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2.5">
+              <span class="w-8 h-8 rounded-lg bg-[#d8ff45]/15 border border-[#d8ff45]/30 flex items-center justify-center text-[#d8ff45] text-sm font-bold">👑</span>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-slate-200">Internal Sale / Owner Use</span>
+                  <span id="mr-internal-badge" class="hidden text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#d8ff45]/20 text-[#d8ff45] border border-[#d8ff45]/40 uppercase tracking-wider">Active</span>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-0.5">Owner or staff consumption. Station, phone &amp; time are optional. Custom food prices enabled.</p>
+              </div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer shrink-0">
+              <input type="checkbox" id="mr-is-internal-sale" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#d8ff45]"></div>
+            </label>
+          </div>
+
+          <!-- Quick Owner/Internal Chips -->
+          <div id="mr-internal-chips" class="hidden flex flex-wrap items-center gap-1.5 mt-3 pt-2.5 border-t border-slate-700/60">
+            <span class="text-[11px] text-slate-400 font-medium">Quick presets:</span>
+            <button type="button" class="mr-preset-chip rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] cursor-pointer" data-name="Internal Sale (Owner)">👑 Owner Use</button>
+            <button type="button" class="mr-preset-chip rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] cursor-pointer" data-name="Internal Sale (Staff)">👤 Staff Consumption</button>
+            <button type="button" class="mr-preset-chip rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] cursor-pointer" data-name="Internal Sale (Testing/Demo)">🎮 Station Testing/Demo</button>
+            <button type="button" class="mr-preset-chip rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] cursor-pointer" data-name="Internal Sale">🏢 General Internal</button>
+          </div>
+        </div>
+
         <!-- Customer & Station Details -->
         <div class="grid sm:grid-cols-2 gap-3 mb-4">
           <div>
-            <label class="block text-xs text-slate-400 mb-1" for="mr-station">Station / Console *</label>
-            <input id="mr-station" class="form-control" type="text" list="station-list" placeholder="e.g. PS5 - Station 1, Cabin 1" required>
+            <label class="block text-xs text-slate-400 mb-1" for="mr-station">Station / Console <span id="mr-station-req" class="text-rose-400">*</span></label>
+            <input id="mr-station" class="form-control" type="text" list="station-list" placeholder="e.g. PS5 - Station 1, Cabin 1">
           </div>
           <div>
             <label class="block text-xs text-slate-400 mb-1" for="mr-game">Game played (optional)</label>
             <input id="mr-game" class="form-control" type="text" placeholder="e.g. FIFA 24, Tekken 8, COD">
           </div>
           <div>
-            <label class="block text-xs text-slate-400 mb-1" for="mr-customer-name">Customer or Group *</label>
-            <input id="mr-customer-name" class="form-control" type="text" placeholder="e.g. Bibek Subedi" required>
+            <label class="block text-xs text-slate-400 mb-1" for="mr-customer-name">Customer or Group <span class="text-rose-400">*</span></label>
+            <input id="mr-customer-name" class="form-control" type="text" list="records-customer-datalist" placeholder="e.g. Bibek Subedi" required>
           </div>
           <div>
             <label class="block text-xs text-slate-400 mb-1" for="mr-customer-phone">Customer phone</label>
@@ -1324,8 +1353,8 @@
           </h4>
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             <div>
-              <label class="block text-xs text-slate-400 mb-1" for="mr-start-time">Start time *</label>
-              <input id="mr-start-time" class="form-control" type="time" required>
+              <label class="block text-xs text-slate-400 mb-1" for="mr-start-time">Start time <span id="mr-start-time-req" class="text-rose-400">*</span></label>
+              <input id="mr-start-time" class="form-control" type="time">
             </div>
             <div>
               <label class="block text-xs text-slate-400 mb-1" for="mr-end-time">End time</label>
@@ -1345,15 +1374,21 @@
         <!-- Food & Drinks Order (Optional) -->
         <div class="border-t border-slate-700/80 pt-4 mb-4">
           <div class="flex items-center justify-between mb-2">
-            <h4 class="font-semibold text-sm flex items-center gap-1.5">
-              <i data-lucide="sandwich" width="14" height="14" class="text-[#d8ff45]"></i> Food &amp; drinks ordered (optional)
+            <h4 class="font-semibold text-sm flex items-center gap-1.5 flex-wrap">
+              <i data-lucide="sandwich" width="14" height="14" class="text-[#d8ff45]"></i>
+              <span>Food &amp; drinks ordered (optional)</span>
+              <span id="mr-food-header-note" class="text-[11px] font-normal text-slate-400"></span>
             </h4>
             <button id="mr-add-food-row" type="button" class="text-xs font-bold text-[#d8ff45] flex items-center gap-1 cursor-pointer">
               <i data-lucide="plus" width="14" height="14"></i>Add item
             </button>
           </div>
-          <div class="grid grid-cols-[1fr_auto_auto_auto] gap-2 text-xs text-slate-500 mb-2">
-            <span>Menu item</span><span>Qty</span><span>Price</span><span></span>
+          <div id="mr-food-header" class="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 text-xs text-slate-500 mb-2">
+            <span>Menu item</span>
+            <span class="w-14">Qty</span>
+            <span class="w-20 text-right" id="mr-price-col-title">Price (रु)</span>
+            <span class="min-w-14 text-right">Total</span>
+            <span class="w-9"></span>
           </div>
           <div id="mr-food-rows" class="space-y-2 max-h-36 overflow-y-auto"></div>
           <p id="mr-menu-empty" class="hidden text-xs text-slate-400 mt-2">No menu items configured yet.</p>

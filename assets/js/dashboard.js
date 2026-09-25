@@ -315,19 +315,60 @@
     frChangeHandlers[containerId] = onChange;
   }
 
-  function addFrRow(containerId, selectedId = "", qty = 1) {
+  function addFrRow(containerId, selectedId = "", qty = 1, customUnitPrice = null) {
+    const isMr = containerId === "mr-food-rows";
+    const isInternalActive = isMr && !!document.getElementById("mr-is-internal-sale")?.checked;
+
     const row = document.createElement("div");
-    row.className = "fr-row grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center";
-    row.innerHTML = `
-      <select aria-label="Food or drink item" class="form-control fr-select">${menuOptions(selectedId)}</select>
-      <input aria-label="Quantity" type="number" min="1" value="${qty}" class="form-control fr-qty w-16">
-      <span class="fr-price mono min-w-16 text-right text-sm text-[#d8ff45]">रु 0</span>
-      <button type="button" aria-label="Remove item" class="fr-remove h-10 w-10 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400">×</button>`;
+    if (isMr) {
+      row.className = "fr-row grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 items-center";
+      row.innerHTML = `
+        <select aria-label="Food or drink item" class="form-control fr-select text-xs py-2">${menuOptions(selectedId)}</select>
+        <input aria-label="Quantity" type="number" min="1" value="${qty}" class="form-control fr-qty w-14 text-center text-xs py-2">
+        <input aria-label="Unit price" type="number" min="0" step="1" placeholder="Price" class="form-control fr-unit-price w-20 text-right mono text-xs py-2 font-semibold ${isInternalActive ? 'bg-[#101520] border-[#d8ff45]/60 text-[#d8ff45]' : 'bg-slate-900/50 border-slate-700 text-slate-400'}" ${isInternalActive ? '' : 'disabled'} title="${isInternalActive ? 'Custom price for internal sale' : 'Turn on Internal Sale to edit price'}">
+        <span class="fr-price mono min-w-14 text-right text-xs text-[#d8ff45] font-bold">रु 0</span>
+        <button type="button" aria-label="Remove item" class="fr-remove h-9 w-9 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400 text-lg leading-none cursor-pointer">×</button>`;
+    } else {
+      row.className = "fr-row grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center";
+      row.innerHTML = `
+        <select aria-label="Food or drink item" class="form-control fr-select">${menuOptions(selectedId)}</select>
+        <input aria-label="Quantity" type="number" min="1" value="${qty}" class="form-control fr-qty w-16">
+        <span class="fr-price mono min-w-16 text-right text-sm text-[#d8ff45]">रु 0</span>
+        <button type="button" aria-label="Remove item" class="fr-remove h-10 w-10 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400">×</button>`;
+    }
+
     const notify = () => { const cb = frChangeHandlers[containerId]; if (cb) cb(); };
-    row.querySelector(".fr-select").addEventListener("change", () => { updateFrRow(row); notify(); });
-    row.querySelector(".fr-qty").addEventListener("input", () => { updateFrRow(row); notify(); });
+    const unitPriceInput = row.querySelector(".fr-unit-price");
+
+    row.querySelector(".fr-select").addEventListener("change", () => {
+      if (unitPriceInput) {
+        unitPriceInput.dataset.userEdited = "false";
+      }
+      updateFrRow(row);
+      notify();
+    });
+
+    row.querySelector(".fr-qty").addEventListener("input", () => {
+      updateFrRow(row);
+      notify();
+    });
+
+    if (unitPriceInput) {
+      unitPriceInput.addEventListener("input", () => {
+        unitPriceInput.dataset.userEdited = "true";
+        updateFrRow(row);
+        notify();
+      });
+    }
+
     row.querySelector(".fr-remove").addEventListener("click", () => { row.remove(); notify(); });
     document.getElementById(containerId).appendChild(row);
+
+    if (customUnitPrice !== null && unitPriceInput) {
+      unitPriceInput.value = customUnitPrice;
+      unitPriceInput.dataset.userEdited = "true";
+    }
+
     updateFrRow(row);
   }
 
@@ -335,25 +376,37 @@
     const select = row.querySelector(".fr-select");
     const item = menuItems.find((entry) => entry.id === select.value);
     const quantity = Math.max(1, Number(row.querySelector(".fr-qty").value) || 1);
-    const price = item ? item.price * quantity : 0;
+    const unitPriceInput = row.querySelector(".fr-unit-price");
+
+    let unitPrice = item ? item.price : 0;
+    if (unitPriceInput) {
+      if (unitPriceInput.dataset.userEdited === "true") {
+        unitPrice = Math.max(0, Number(unitPriceInput.value) || 0);
+      } else {
+        unitPrice = item ? item.price : 0;
+        unitPriceInput.value = unitPrice;
+      }
+    }
+
+    const price = Math.round(unitPrice * quantity);
     row.dataset.price = price;
     row.dataset.qty = quantity;
     row.dataset.itemId = item ? item.id : "";
     row.dataset.itemName = item ? item.name : "";
-    row.dataset.unitPrice = item ? item.price : 0;
-    row.querySelector(".fr-price").textContent = inr(price);
+    row.dataset.unitPrice = unitPrice;
+
+    const priceEl = row.querySelector(".fr-price");
+    if (priceEl) priceEl.textContent = inr(price);
   }
 
   function collectFrItems(containerId) {
     const raw = [...document.querySelectorAll(`#${containerId} .fr-row`)]
       .filter((row) => row.dataset.itemId)
       .map((row) => ({ id: row.dataset.itemId, name: row.dataset.itemName, price: Number(row.dataset.unitPrice), qty: Number(row.dataset.qty) }));
-    // Merge rows that ended up pointing at the same menu item (e.g. picked
-    // twice in separate rows) so the saved order shows "Item ×2", not two
-    // separate "Item ×1" lines.
+    // Merge rows that ended up pointing at the same menu item and same unit price
     const merged = [];
     raw.forEach((item) => {
-      const existing = merged.find((m) => m.id === item.id);
+      const existing = merged.find((m) => m.id === item.id && m.price === item.price);
       if (existing) existing.qty += item.qty;
       else merged.push({ ...item });
     });
@@ -1931,12 +1984,92 @@
     const breakdownEl = document.getElementById("mr-calc-breakdown");
     const totalEl = document.getElementById("mr-total-display");
     if (breakdownEl) {
-      breakdownEl.textContent = `Play time (${duration}m @ रु ${rate}/h): रु ${timeCost} · Food: रु ${foodTotal}`;
+      if (timeCost === 0 && foodTotal > 0) {
+        breakdownEl.textContent = `Food order: रु ${foodTotal} · Station time: रु 0`;
+      } else if (timeCost === 0 && foodTotal === 0) {
+        breakdownEl.textContent = `No charges selected (रु 0)`;
+      } else {
+        breakdownEl.textContent = `Play time (${duration}m @ रु ${rate}/h): रु ${timeCost} · Food: रु ${foodTotal}`;
+      }
     }
     if (totalEl) {
       totalEl.textContent = inr(total);
     }
     return { total, foodTotal, duration, rate, timeCost };
+  }
+
+  function updateMrInternalSaleState() {
+    const isInternal = !!document.getElementById("mr-is-internal-sale")?.checked;
+    const badge = document.getElementById("mr-internal-badge");
+    const chips = document.getElementById("mr-internal-chips");
+    const stationReq = document.getElementById("mr-station-req");
+    const startTimeReq = document.getElementById("mr-start-time-req");
+    const custInput = document.getElementById("mr-customer-name");
+    const phoneInput = document.getElementById("mr-customer-phone");
+    const stationInput = document.getElementById("mr-station");
+    const durationInput = document.getElementById("mr-duration");
+    const rateInput = document.getElementById("mr-rate");
+    const foodHdrNote = document.getElementById("mr-food-header-note");
+
+    if (badge) badge.classList.toggle("hidden", !isInternal);
+    if (chips) chips.classList.toggle("hidden", !isInternal);
+    if (stationReq) stationReq.classList.toggle("hidden", isInternal);
+    if (startTimeReq) startTimeReq.classList.toggle("hidden", isInternal);
+
+    if (isInternal) {
+      if (!custInput.value || custInput.value === "Bibek Subedi") {
+        custInput.value = "Internal Sale";
+      }
+      if (phoneInput) phoneInput.placeholder = "Optional for internal sale";
+      if (stationInput) stationInput.placeholder = "Optional (e.g. Counter, Lounge, or leave blank)";
+      if (foodHdrNote) {
+        foodHdrNote.textContent = "· 👑 Custom food prices enabled";
+        foodHdrNote.className = "text-[#d8ff45] font-semibold text-xs";
+      }
+      if (durationInput && (durationInput.value === "60" || !durationInput.value)) {
+        durationInput.value = "0";
+      }
+      if (rateInput && durationInput && Number(durationInput.value) === 0) {
+        rateInput.value = "0";
+      }
+    } else {
+      if (custInput.value === "Internal Sale" || custInput.value.startsWith("Internal Sale")) {
+        custInput.value = "";
+      }
+      if (phoneInput) phoneInput.placeholder = "e.g. 98XXXXXXXX";
+      if (stationInput) stationInput.placeholder = "e.g. PS5 - Station 1, Cabin 1";
+      if (foodHdrNote) {
+        foodHdrNote.textContent = "";
+      }
+      if (durationInput && durationInput.value === "0") {
+        durationInput.value = "60";
+      }
+      if (rateInput && rateInput.value === "0") {
+        rateInput.value = "100";
+      }
+    }
+
+    // Toggle unit price input state in all mr-food-rows
+    const rows = document.querySelectorAll("#mr-food-rows .fr-row");
+    rows.forEach((row) => {
+      const pInput = row.querySelector(".fr-unit-price");
+      if (pInput) {
+        pInput.disabled = !isInternal;
+        pInput.classList.toggle("border-[#d8ff45]/60", isInternal);
+        pInput.classList.toggle("text-[#d8ff45]", isInternal);
+        pInput.classList.toggle("bg-[#101520]", isInternal);
+        pInput.classList.toggle("border-slate-700", !isInternal);
+        pInput.classList.toggle("text-slate-400", !isInternal);
+        pInput.classList.toggle("bg-slate-900/50", !isInternal);
+        pInput.title = isInternal ? "Custom price for internal sale" : "Turn on Internal Sale to edit price";
+        if (!isInternal) {
+          pInput.dataset.userEdited = "false";
+          updateFrRow(row);
+        }
+      }
+    });
+
+    recalcMissingRecord();
   }
 
   function openMissingRecordModal() {
@@ -1977,6 +2110,13 @@
     document.getElementById("mr-customer-name").value = "";
     document.getElementById("mr-customer-phone").value = "";
     document.getElementById("mr-notes").value = "";
+
+    // Reset Internal Sale toggle
+    const internalToggle = document.getElementById("mr-is-internal-sale");
+    if (internalToggle) {
+      internalToggle.checked = false;
+      updateMrInternalSaleState();
+    }
 
     // Payment defaults
     document.getElementById("mr-payment-status").value = "Paid";
@@ -2022,6 +2162,34 @@
     modal.addEventListener("click", (e) => {
       if (e.target === modal) closeMissingRecordModal();
     });
+
+    // Internal Sale toggle and preset chips
+    const internalToggle = document.getElementById("mr-is-internal-sale");
+    if (internalToggle) {
+      internalToggle.addEventListener("change", updateMrInternalSaleState);
+    }
+
+    document.querySelectorAll(".mr-preset-chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        const toggle = document.getElementById("mr-is-internal-sale");
+        if (toggle) toggle.checked = true;
+        const custInput = document.getElementById("mr-customer-name");
+        if (custInput) custInput.value = chip.dataset.name || "Internal Sale";
+        updateMrInternalSaleState();
+      });
+    });
+
+    const custNameInput = document.getElementById("mr-customer-name");
+    if (custNameInput) {
+      custNameInput.addEventListener("input", () => {
+        const val = custNameInput.value.trim().toLowerCase();
+        const toggle = document.getElementById("mr-is-internal-sale");
+        if ((val.startsWith("internal") || val.includes("owner")) && toggle && !toggle.checked) {
+          toggle.checked = true;
+          updateMrInternalSaleState();
+        }
+      });
+    }
 
     // Date chips
     const chipToday = document.getElementById("mr-chip-today");
@@ -2085,17 +2253,33 @@
 
     // Form submission helper
     async function submitMissingRecord(printBill = false) {
-      const station = document.getElementById("mr-station").value.trim();
-      const customerName = document.getElementById("mr-customer-name").value.trim();
-      const customerPhone = document.getElementById("mr-customer-phone").value.trim();
+      const internalToggle = document.getElementById("mr-is-internal-sale");
+      const isInternal = !!(internalToggle && internalToggle.checked) ||
+                         document.getElementById("mr-customer-name").value.trim().toLowerCase().includes("internal");
+
+      let station = document.getElementById("mr-station").value.trim();
+      let customerName = document.getElementById("mr-customer-name").value.trim();
+      let customerPhone = document.getElementById("mr-customer-phone").value.trim();
       const dateVal = document.getElementById("mr-date").value;
-      const startTimeStr = document.getElementById("mr-start-time").value;
+      let startTimeStr = document.getElementById("mr-start-time").value;
       const msgEl = document.getElementById("mr-message");
 
-      if (!station || !customerName || !dateVal || !startTimeStr) {
-        msgEl.textContent = "Please fill in Station, Customer name, Date, and Start time.";
-        msgEl.className = "text-sm min-h-5 mb-3 text-red-300";
-        return;
+      if (isInternal) {
+        if (!customerName) customerName = "Internal Sale";
+        if (!station) station = "Internal / Cafe";
+        if (!customerPhone) customerPhone = "Internal";
+        if (!startTimeStr) startTimeStr = "12:00";
+        if (!dateVal) {
+          msgEl.textContent = "Please pick a date for this record.";
+          msgEl.className = "text-sm min-h-5 mb-3 text-red-300";
+          return;
+        }
+      } else {
+        if (!station || !customerName || !dateVal || !startTimeStr) {
+          msgEl.textContent = "Please fill in Station, Customer name, Date, and Start time.";
+          msgEl.className = "text-sm min-h-5 mb-3 text-red-300";
+          return;
+        }
       }
 
       const { total, foodTotal, duration, rate } = recalcMissingRecord();
@@ -2122,7 +2306,8 @@
       }
 
       const notes = document.getElementById("mr-notes").value.trim();
-      const noteWithTag = notes ? `[Paper Register] ${notes}` : "[Paper Register Entry]";
+      const defaultTag = isInternal ? "[Internal Sale]" : "[Paper Register]";
+      const noteWithTag = notes ? `${defaultTag} ${notes}` : (isInternal ? "[Internal Sale Entry]" : "[Paper Register Entry]");
 
       const recordPayload = {
         type: "Walk-in",
@@ -2156,7 +2341,7 @@
       const savePrintBtn = document.getElementById("mr-save-print");
       if (saveOnlyBtn) saveOnlyBtn.disabled = true;
       if (savePrintBtn) savePrintBtn.disabled = true;
-      msgEl.textContent = "Saving missing record...";
+      msgEl.textContent = isInternal ? "Saving internal sale..." : "Saving missing record...";
       msgEl.className = "text-sm min-h-5 mb-3 text-slate-300";
 
       const { data, error } = await window.sb.from("sessions").insert(recordPayload).select();
@@ -2179,10 +2364,10 @@
 
       renderAllLists();
       closeMissingRecordModal();
-      showToast("Missing record added from register successfully!");
+      showToast(isInternal ? "Internal sale record saved successfully!" : "Missing record added from register successfully!");
 
-      // Log visit to LinkyPot CRM & Loyalty if phone number is provided
-      if (savedRecord.customer_phone && (savedRecord.status === "Completed" || savedRecord.paid)) {
+      // Log visit to LinkyPot CRM & Loyalty if real customer phone number is provided (skip for internal sales)
+      if (!isInternal && savedRecord.customer_phone && savedRecord.customer_phone !== "—" && savedRecord.customer_phone !== "Internal" && (savedRecord.status === "Completed" || savedRecord.paid)) {
         const amt = Number(savedRecord.amount || savedRecord.final_amount || 0);
         logVisitToLinkyPot(savedRecord.customer_phone, savedRecord.customer_name, amt, false);
       }
