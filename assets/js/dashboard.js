@@ -3524,6 +3524,9 @@
         <td class="py-2.5 px-3 text-right whitespace-nowrap">
           <div class="flex items-center justify-end gap-1">
             ${reimburseBtnHtml}
+            <button type="button" class="edit-exp-btn text-[10px] px-2 py-1 rounded border border-slate-700 hover:border-[#d8ff45] hover:text-[#d8ff45]" title="Edit expense">
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="inline"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
             <button type="button" class="delete-exp-btn text-[10px] px-2 py-1 rounded border border-slate-700 text-red-400 hover:border-red-500">Delete</button>
           </div>
         </td>`;
@@ -3546,6 +3549,8 @@
         });
       }
 
+      tr.querySelector(".edit-exp-btn").addEventListener("click", () => openExpenseEditModal(exp));
+
       tr.querySelector(".delete-exp-btn").addEventListener("click", async () => {
         if (!confirm(`Delete expense "${exp.title}" (${inr(exp.amount)})?`)) return;
         const { error } = await window.sb.from("expenses").delete().eq("id", exp.id);
@@ -3556,6 +3561,98 @@
       tbody.appendChild(tr);
     });
   }
+
+  // ---------- expense edit modal ----------
+  let expEditTarget = null;
+
+  function openExpenseEditModal(exp) {
+    expEditTarget = exp;
+    document.getElementById("exp-edit-heading").textContent = exp.title;
+    document.getElementById("exp-edit-title").value = exp.title || "";
+    document.getElementById("exp-edit-category").value = exp.category || "Other";
+    document.getElementById("exp-edit-amount").value = exp.amount || "";
+    document.getElementById("exp-edit-source").value = exp.payment_source || "cafe_revenue";
+    document.getElementById("exp-edit-partner-name").value = exp.paid_by_partner_name || "";
+    document.getElementById("exp-edit-notes").value = exp.notes || "";
+
+    // Pre-fill date
+    if (exp.expense_date) {
+      const d = new Date(exp.expense_date);
+      const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      document.getElementById("exp-edit-date").value = local;
+    } else {
+      document.getElementById("exp-edit-date").value = "";
+    }
+
+    // Show/hide partner name field
+    const showPartner = exp.payment_source === "partner_personal";
+    document.getElementById("exp-edit-partner-wrap").classList.toggle("hidden", !showPartner);
+
+    document.getElementById("expense-edit-modal").classList.add("active");
+  }
+
+  function closeExpenseEditModal() {
+    document.getElementById("expense-edit-modal").classList.remove("active");
+    expEditTarget = null;
+  }
+
+  // Wire modal controls (once)
+  document.getElementById("exp-edit-cancel").addEventListener("click", closeExpenseEditModal);
+  document.getElementById("expense-edit-modal").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) closeExpenseEditModal();
+  });
+  document.getElementById("exp-edit-source").addEventListener("change", (e) => {
+    document.getElementById("exp-edit-partner-wrap").classList.toggle("hidden", e.target.value !== "partner_personal");
+  });
+
+  const SETUP_CATEGORIES_EDIT = new Set([
+    "Initial Setup & Build", "TVs & Consoles", "Furniture & Seating",
+    "Kitchen & Cafe Appliances", "Lighting, Design & Decor"
+  ]);
+
+  document.getElementById("expense-edit-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!expEditTarget) return;
+    const title = document.getElementById("exp-edit-title").value.trim();
+    const category = document.getElementById("exp-edit-category").value;
+    const amount = parseFloat(document.getElementById("exp-edit-amount").value);
+    const paymentSource = document.getElementById("exp-edit-source").value;
+    const partnerName = document.getElementById("exp-edit-partner-name").value.trim();
+    const dateVal = document.getElementById("exp-edit-date").value;
+    const notes = document.getElementById("exp-edit-notes").value.trim();
+
+    if (!title) return showToast("Title cannot be empty.");
+    if (isNaN(amount) || amount < 0) return showToast("Please enter a valid amount.");
+    if (paymentSource === "partner_personal" && !partnerName) return showToast("Please enter the partner name.");
+
+    const expenseDateIso = dateVal ? new Date(dateVal).toISOString() : (expEditTarget.expense_date || new Date().toISOString());
+    const update = {
+      type: SETUP_CATEGORIES_EDIT.has(category) ? "setup" : "ongoing",
+      title,
+      category,
+      amount,
+      payment_source: paymentSource,
+      paid_by: paymentSource === "partner_personal" ? partnerName : (currentStaff ? currentStaff.name : "Admin"),
+      paid_by_partner_name: paymentSource === "partner_personal" ? partnerName : null,
+      expense_date: expenseDateIso,
+      date: expenseDateIso.slice(0, 10),
+      notes: notes || null,
+    };
+
+    const submitBtn = e.target.querySelector("[type=submit]");
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Saving…";
+
+    const { error } = await window.sb.from("expenses").update(update).eq("id", expEditTarget.id);
+    if (error) {
+      showToast("Could not save expense: " + error.message);
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Save changes";
+    } else {
+      showToast("Expense updated.");
+      closeExpenseEditModal();
+    }
+  });
 
   async function fetchExpenses() {
     const { data, error } = await window.sb.from("expenses").select("*").order("expense_date", { ascending: false });

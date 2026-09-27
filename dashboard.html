@@ -1277,6 +1277,72 @@
     </div>
   </div>
 
+  <!-- ===================== EXPENSE EDIT MODAL ===================== -->
+  <div id="expense-edit-modal" class="modal-overlay">
+    <div class="panel rounded-2xl p-6 w-full max-w-lg" style="max-height:90vh;overflow-y:auto;">
+      <p class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">EDIT EXPENSE</p>
+      <h3 id="exp-edit-heading" class="font-bold text-xl mt-1 mb-5">—</h3>
+      <form id="expense-edit-form" class="space-y-4">
+        <!-- Title -->
+        <div>
+          <label class="block text-xs text-slate-400 mb-1" for="exp-edit-title">Expense item / description *</label>
+          <input id="exp-edit-title" type="text" class="form-control" required>
+        </div>
+        <!-- Category + Amount -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1" for="exp-edit-category">Category *</label>
+            <select id="exp-edit-category" class="form-control" required>
+              <option value="Initial Setup &amp; Build">Initial Setup &amp; Build</option>
+              <option value="TVs &amp; Consoles">TVs &amp; Consoles (PS5/TV)</option>
+              <option value="Furniture &amp; Seating">Furniture &amp; Seating</option>
+              <option value="Kitchen &amp; Cafe Appliances">Kitchen &amp; Appliances</option>
+              <option value="Lighting, Design &amp; Decor">Lighting, Design &amp; Decor</option>
+              <option value="Cafe Stock &amp; Inventory">Cafe Stock &amp; Supplies</option>
+              <option value="Rent &amp; Utilities">Rent &amp; Utilities</option>
+              <option value="Repairs &amp; Maintenance">Repairs &amp; Maintenance</option>
+              <option value="Marketing &amp; Signage">Marketing &amp; Signage</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1" for="exp-edit-amount">Amount (रु) *</label>
+            <input id="exp-edit-amount" type="number" min="0" step="any" class="form-control" required>
+          </div>
+        </div>
+        <!-- Payment Source -->
+        <div>
+          <label class="block text-xs text-slate-400 mb-1" for="exp-edit-source">Paid From *</label>
+          <select id="exp-edit-source" class="form-control" required>
+            <option value="partner_personal">Partner Personal Money</option>
+            <option value="initial_capital">Initial Seed Capital Pool</option>
+            <option value="cafe_revenue">ChillPill Cafe Revenue</option>
+          </select>
+        </div>
+        <!-- Partner Name (shown only when partner_personal) -->
+        <div id="exp-edit-partner-wrap" class="hidden">
+          <label class="block text-xs text-slate-400 mb-1" for="exp-edit-partner-name">Partner Name *</label>
+          <input id="exp-edit-partner-name" type="text" class="form-control" placeholder="e.g. Partner Name">
+        </div>
+        <!-- Date -->
+        <div>
+          <label class="block text-xs text-slate-400 mb-1" for="exp-edit-date">Date &amp; Time</label>
+          <input id="exp-edit-date" type="datetime-local" class="form-control">
+        </div>
+        <!-- Notes -->
+        <div>
+          <label class="block text-xs text-slate-400 mb-1" for="exp-edit-notes">Notes / Receipt reference</label>
+          <input id="exp-edit-notes" type="text" class="form-control" placeholder="Bill no, vendor, or notes">
+        </div>
+        <!-- Actions -->
+        <div class="flex gap-3 pt-2">
+          <button type="submit" class="flex-1 rounded-xl py-3 font-bold" style="background:#d8ff45;color:#10141e;">Save changes</button>
+          <button type="button" id="exp-edit-cancel" class="flex-1 rounded-xl py-3 font-bold border border-slate-600 text-slate-300">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- ===================== EDIT SESSION MODAL ===================== -->
   <div id="edit-session-modal" class="modal-overlay">
     <div class="panel rounded-2xl p-6 w-full max-w-xl" style="max-height:90vh; overflow-y:auto;">
