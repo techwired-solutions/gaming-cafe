@@ -209,6 +209,8 @@ alter table public.expenses add column if not exists created_by text;
 alter table public.expenses add column if not exists created_at timestamptz not null default now();
 alter table public.expenses add column if not exists type text not null default 'expense';
 alter table public.expenses add column if not exists paid_by text not null default 'Admin';
+-- Drop check constraint on category so any free-text category value is accepted
+alter table public.expenses drop constraint if exists expenses_category_check;
 
 create index if not exists expenses_source_idx on public.expenses (payment_source);
 create index if not exists expenses_reimbursement_idx on public.expenses (reimbursement_status);
