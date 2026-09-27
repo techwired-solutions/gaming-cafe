@@ -3886,6 +3886,7 @@
         category,
         amount,
         payment_source: paymentSource,
+        paid_by: paymentSource === "partner_personal" ? partnerName : (currentStaff ? currentStaff.name : "Admin"),
         paid_by_partner_name: paymentSource === "partner_personal" ? partnerName : null,
         reimbursement_status: paymentSource === "partner_personal" ? "unreimbursed" : "not_applicable",
         expense_date: dateVal ? new Date(dateVal).toISOString() : new Date().toISOString(),
