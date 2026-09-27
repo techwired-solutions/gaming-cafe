@@ -207,6 +207,7 @@ alter table public.expenses add column if not exists notes text;
 alter table public.expenses add column if not exists receipt_url text;
 alter table public.expenses add column if not exists created_by text;
 alter table public.expenses add column if not exists created_at timestamptz not null default now();
+alter table public.expenses add column if not exists type text not null default 'expense';
 
 create index if not exists expenses_source_idx on public.expenses (payment_source);
 create index if not exists expenses_reimbursement_idx on public.expenses (reimbursement_status);

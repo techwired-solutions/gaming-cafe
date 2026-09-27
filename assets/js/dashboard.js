@@ -3881,6 +3881,7 @@
       if (paymentSource === "partner_personal" && !partnerName) return showToast("Please enter the partner name.");
 
       const payload = {
+        type: 'expense',
         title,
         category,
         amount,
