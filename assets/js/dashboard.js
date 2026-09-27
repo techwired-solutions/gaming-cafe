@@ -3880,8 +3880,19 @@
       if (!title || !amount) return showToast("Title and amount are required.");
       if (paymentSource === "partner_personal" && !partnerName) return showToast("Please enter the partner name.");
 
+      // Derive type ('setup' | 'ongoing') from category to satisfy the DB check constraint
+      const SETUP_CATEGORIES = new Set([
+        "Initial Setup & Build",
+        "TVs & Consoles",
+        "Furniture & Seating",
+        "Kitchen & Cafe Appliances",
+        "Lighting, Design & Decor"
+      ]);
+      const expenseType = SETUP_CATEGORIES.has(category) ? "setup" : "ongoing";
+
+      const expenseDateIso = dateVal ? new Date(dateVal).toISOString() : new Date().toISOString();
       const payload = {
-        type: 'expense',
+        type: expenseType,
         title,
         category,
         amount,
@@ -3889,7 +3900,8 @@
         paid_by: paymentSource === "partner_personal" ? partnerName : (currentStaff ? currentStaff.name : "Admin"),
         paid_by_partner_name: paymentSource === "partner_personal" ? partnerName : null,
         reimbursement_status: paymentSource === "partner_personal" ? "unreimbursed" : "not_applicable",
-        expense_date: dateVal ? new Date(dateVal).toISOString() : new Date().toISOString(),
+        expense_date: expenseDateIso,
+        date: expenseDateIso.slice(0, 10), // date column (YYYY-MM-DD)
         notes: notes || null,
         created_by: currentStaff ? currentStaff.name : "Admin"
       };

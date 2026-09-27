@@ -207,8 +207,9 @@ alter table public.expenses add column if not exists notes text;
 alter table public.expenses add column if not exists receipt_url text;
 alter table public.expenses add column if not exists created_by text;
 alter table public.expenses add column if not exists created_at timestamptz not null default now();
-alter table public.expenses add column if not exists type text not null default 'expense';
+alter table public.expenses add column if not exists type text not null default 'ongoing' check (type in ('setup', 'ongoing'));
 alter table public.expenses add column if not exists paid_by text not null default 'Admin';
+alter table public.expenses add column if not exists date date not null default CURRENT_DATE;
 -- Drop check constraint on category so any free-text category value is accepted
 alter table public.expenses drop constraint if exists expenses_category_check;
 
