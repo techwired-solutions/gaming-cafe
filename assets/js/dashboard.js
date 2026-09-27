@@ -3596,63 +3596,70 @@
     expEditTarget = null;
   }
 
-  // Wire modal controls (once)
-  document.getElementById("exp-edit-cancel").addEventListener("click", closeExpenseEditModal);
-  document.getElementById("expense-edit-modal").addEventListener("click", (e) => {
-    if (e.target === e.currentTarget) closeExpenseEditModal();
-  });
-  document.getElementById("exp-edit-source").addEventListener("change", (e) => {
-    document.getElementById("exp-edit-partner-wrap").classList.toggle("hidden", e.target.value !== "partner_personal");
-  });
+  function initExpenseEditModal() {
+    const cancelBtn = document.getElementById("exp-edit-cancel");
+    const overlay = document.getElementById("expense-edit-modal");
+    const sourceSelect = document.getElementById("exp-edit-source");
+    const form = document.getElementById("expense-edit-form");
+    if (!cancelBtn || !overlay || !form) return;
 
-  const SETUP_CATEGORIES_EDIT = new Set([
-    "Initial Setup & Build", "TVs & Consoles", "Furniture & Seating",
-    "Kitchen & Cafe Appliances", "Lighting, Design & Decor"
-  ]);
+    cancelBtn.addEventListener("click", closeExpenseEditModal);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === e.currentTarget) closeExpenseEditModal();
+    });
+    sourceSelect.addEventListener("change", (e) => {
+      document.getElementById("exp-edit-partner-wrap").classList.toggle("hidden", e.target.value !== "partner_personal");
+    });
 
-  document.getElementById("expense-edit-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    if (!expEditTarget) return;
-    const title = document.getElementById("exp-edit-title").value.trim();
-    const category = document.getElementById("exp-edit-category").value;
-    const amount = parseFloat(document.getElementById("exp-edit-amount").value);
-    const paymentSource = document.getElementById("exp-edit-source").value;
-    const partnerName = document.getElementById("exp-edit-partner-name").value.trim();
-    const dateVal = document.getElementById("exp-edit-date").value;
-    const notes = document.getElementById("exp-edit-notes").value.trim();
+    const SETUP_CATS = new Set([
+      "Initial Setup & Build", "TVs & Consoles", "Furniture & Seating",
+      "Kitchen & Cafe Appliances", "Lighting, Design & Decor"
+    ]);
 
-    if (!title) return showToast("Title cannot be empty.");
-    if (isNaN(amount) || amount < 0) return showToast("Please enter a valid amount.");
-    if (paymentSource === "partner_personal" && !partnerName) return showToast("Please enter the partner name.");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!expEditTarget) return;
+      const title = document.getElementById("exp-edit-title").value.trim();
+      const category = document.getElementById("exp-edit-category").value;
+      const amount = parseFloat(document.getElementById("exp-edit-amount").value);
+      const paymentSource = document.getElementById("exp-edit-source").value;
+      const partnerName = document.getElementById("exp-edit-partner-name").value.trim();
+      const dateVal = document.getElementById("exp-edit-date").value;
+      const notes = document.getElementById("exp-edit-notes").value.trim();
 
-    const expenseDateIso = dateVal ? new Date(dateVal).toISOString() : (expEditTarget.expense_date || new Date().toISOString());
-    const update = {
-      type: SETUP_CATEGORIES_EDIT.has(category) ? "setup" : "ongoing",
-      title,
-      category,
-      amount,
-      payment_source: paymentSource,
-      paid_by: paymentSource === "partner_personal" ? partnerName : (currentStaff ? currentStaff.name : "Admin"),
-      paid_by_partner_name: paymentSource === "partner_personal" ? partnerName : null,
-      expense_date: expenseDateIso,
-      date: expenseDateIso.slice(0, 10),
-      notes: notes || null,
-    };
+      if (!title) return showToast("Title cannot be empty.");
+      if (isNaN(amount) || amount < 0) return showToast("Please enter a valid amount.");
+      if (paymentSource === "partner_personal" && !partnerName) return showToast("Please enter the partner name.");
 
-    const submitBtn = e.target.querySelector("[type=submit]");
-    submitBtn.disabled = true;
-    submitBtn.textContent = "Saving…";
+      const expenseDateIso = dateVal ? new Date(dateVal).toISOString() : (expEditTarget.expense_date || new Date().toISOString());
+      const update = {
+        type: SETUP_CATS.has(category) ? "setup" : "ongoing",
+        title,
+        category,
+        amount,
+        payment_source: paymentSource,
+        paid_by: paymentSource === "partner_personal" ? partnerName : (currentStaff ? currentStaff.name : "Admin"),
+        paid_by_partner_name: paymentSource === "partner_personal" ? partnerName : null,
+        expense_date: expenseDateIso,
+        date: expenseDateIso.slice(0, 10),
+        notes: notes || null,
+      };
 
-    const { error } = await window.sb.from("expenses").update(update).eq("id", expEditTarget.id);
-    if (error) {
-      showToast("Could not save expense: " + error.message);
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Save changes";
-    } else {
-      showToast("Expense updated.");
-      closeExpenseEditModal();
-    }
-  });
+      const submitBtn = e.target.querySelector("[type=submit]");
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Saving…";
+
+      const { error } = await window.sb.from("expenses").update(update).eq("id", expEditTarget.id);
+      if (error) {
+        showToast("Could not save expense: " + error.message);
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Save changes";
+      } else {
+        showToast("Expense updated.");
+        closeExpenseEditModal();
+      }
+    });
+  }
 
   async function fetchExpenses() {
     const { data, error } = await window.sb.from("expenses").select("*").order("expense_date", { ascending: false });
@@ -3933,6 +3940,7 @@
     initQuickFoodModal();
     initEditNoticeModal();
     initMissingRecordModal();
+    initExpenseEditModal();
     initRecordsFilter();
     switchPage("page-overview");
 
