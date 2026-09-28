@@ -12,8 +12,13 @@ create table if not exists public.menu_items (
   name text not null,
   price numeric not null default 0,
   category text not null default 'Snacks',
+  supplier text not null default 'chillpill',
   created_at timestamptz not null default now()
 );
+
+-- Backward-compatible migration for menu_items supplier
+alter table public.menu_items add column if not exists supplier text not null default 'chillpill';
+
 
 -- ---------------------------------------------------------------------
 -- staff: login accounts for the owner console. Passwords are hashed
@@ -127,6 +132,11 @@ alter table public.settings add column if not exists pan_number text not null de
 alter table public.settings add column if not exists initial_capital numeric not null default 1500000;
 alter table public.settings add column if not exists google_maps_url text not null default 'https://maps.app.goo.gl/uBQnASzc9W2igYmh6';
 alter table public.settings add column if not exists linkypot_embed_code text;
+alter table public.settings add column if not exists bros_burger_commission numeric not null default 20;
+alter table public.settings add column if not exists bros_burger_whatsapp text not null default '9779841268666';
+alter table public.settings add column if not exists bardali_commission numeric not null default 20;
+alter table public.settings add column if not exists bardali_whatsapp text not null default '';
+
 
 insert into public.settings (id)
 values (1)

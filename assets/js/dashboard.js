@@ -298,11 +298,131 @@
     document.getElementById("current-staff-role").textContent = currentStaff ? currentStaff.role.toUpperCase() + " · @" + currentStaff.username : "";
   }
 
+  // ---------- partner restaurants (Bro's Burger, Bardali, ChillPill) ----------
+  const PARTNER_STORAGE_KEY = "chillpill_partner_settings";
+  const partnerSettings = {
+    bros_burger: { name: "Bro's Burger", commission: 20, whatsapp: "9779841268666" },
+    bardali: { name: "Bardali", commission: 20, whatsapp: "" },
+    get bros_burger_commission() { return this.bros_burger.commission; },
+    set bros_burger_commission(v) { this.bros_burger.commission = Number(v) || 0; },
+    get bros_burger_whatsapp() { return this.bros_burger.whatsapp; },
+    set bros_burger_whatsapp(v) { this.bros_burger.whatsapp = v || ""; },
+    get bardali_commission() { return this.bardali.commission; },
+    set bardali_commission(v) { this.bardali.commission = Number(v) || 0; },
+    get bardali_whatsapp() { return this.bardali.whatsapp; },
+    set bardali_whatsapp(v) { this.bardali.whatsapp = v || ""; }
+  };
+
+  function loadPartnerSettings() {
+    try {
+      const local = localStorage.getItem(PARTNER_STORAGE_KEY);
+      if (local) {
+        const parsed = JSON.parse(local);
+        if (parsed.bros_burger) {
+          if (parsed.bros_burger.commission != null) partnerSettings.bros_burger.commission = Number(parsed.bros_burger.commission);
+          if (parsed.bros_burger.whatsapp != null) partnerSettings.bros_burger.whatsapp = parsed.bros_burger.whatsapp;
+        }
+        if (parsed.bardali) {
+          if (parsed.bardali.commission != null) partnerSettings.bardali.commission = Number(parsed.bardali.commission);
+          if (parsed.bardali.whatsapp != null) partnerSettings.bardali.whatsapp = parsed.bardali.whatsapp;
+        }
+      }
+    } catch (_) {}
+  }
+
+  function syncPartnerSettingsInputs() {
+    const brosComm = document.getElementById("partner-bros-commission");
+    const brosPhone = document.getElementById("partner-bros-phone");
+    const bardaliComm = document.getElementById("partner-bardali-commission");
+    const bardaliPhone = document.getElementById("partner-bardali-phone");
+
+    if (brosComm) brosComm.value = partnerSettings.bros_burger.commission;
+    if (brosPhone) brosPhone.value = partnerSettings.bros_burger.whatsapp || "";
+    if (bardaliComm) bardaliComm.value = partnerSettings.bardali.commission;
+    if (bardaliPhone) bardaliPhone.value = partnerSettings.bardali.whatsapp || "";
+
+    const brosBadge = document.getElementById("rev-bros-comm-rate-badge");
+    const bardaliBadge = document.getElementById("rev-bardali-comm-rate-badge");
+    if (brosBadge) brosBadge.textContent = `${partnerSettings.bros_burger.commission}% Comm`;
+    if (bardaliBadge) bardaliBadge.textContent = `${partnerSettings.bardali.commission}% Comm`;
+  }
+
+  function initPartnerSettingsForm() {
+    const form = document.getElementById("partner-settings-form");
+    if (!form) return;
+    syncPartnerSettingsInputs();
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const brosComm = Math.max(0, Math.min(100, Number(document.getElementById("partner-bros-commission").value) || 20));
+      const brosPhone = (document.getElementById("partner-bros-phone").value || "").trim();
+      const bardaliComm = Math.max(0, Math.min(100, Number(document.getElementById("partner-bardali-commission").value) || 20));
+      const bardaliPhone = (document.getElementById("partner-bardali-phone").value || "").trim();
+
+      partnerSettings.bros_burger.commission = brosComm;
+      partnerSettings.bros_burger.whatsapp = brosPhone;
+      partnerSettings.bardali.commission = bardaliComm;
+      partnerSettings.bardali.whatsapp = bardaliPhone;
+
+      localStorage.setItem(PARTNER_STORAGE_KEY, JSON.stringify(partnerSettings));
+      syncPartnerSettingsInputs();
+
+      const msgEl = document.getElementById("partner-settings-msg");
+      if (msgEl) {
+        msgEl.textContent = "Saving settings...";
+        msgEl.className = "text-xs text-slate-400";
+      }
+
+      if (sdkReady) {
+        try {
+          const { error } = await window.sb.from("settings").update({
+            bros_burger_commission: brosComm,
+            bros_burger_whatsapp: brosPhone,
+            bardali_commission: bardaliComm,
+            bardali_whatsapp: bardaliPhone,
+            updated_at: new Date().toISOString()
+          }).eq("id", 1);
+
+          if (error) {
+            console.warn("Settings cloud update:", error.message);
+            if (msgEl) {
+              msgEl.textContent = "Saved locally! (Run schema migration in Supabase for cloud sync).";
+              msgEl.className = "text-xs text-amber-300";
+            }
+          } else {
+            if (msgEl) {
+              msgEl.textContent = "Partner settings saved successfully!";
+              msgEl.className = "text-xs text-emerald-400";
+            }
+          }
+        } catch (err) {
+          console.warn("Settings error:", err);
+          if (msgEl) {
+            msgEl.textContent = "Saved to local storage.";
+            msgEl.className = "text-xs text-slate-300";
+          }
+        }
+      } else {
+        if (msgEl) {
+          msgEl.textContent = "Saved to local storage.";
+          msgEl.className = "text-xs text-slate-300";
+        }
+      }
+
+      renderMenu();
+      renderRevenue();
+      showToast("Partner restaurant settings updated.");
+    });
+  }
+
   // ---------- menu (food & drinks) ----------
   function menuOptions(selectedId) {
     return (
       '<option value="">Select item</option>' +
-      menuItems.map((item) => `<option value="${item.id}" ${item.id === selectedId ? "selected" : ""}>${item.name} (${inr(item.price)})</option>`).join("")
+      menuItems.map((item) => {
+        const supTag = item.supplier === "bros_burger" ? " [Bro's Burger]" : item.supplier === "bardali" ? " [Bardali]" : "";
+        return `<option value="${item.id}" ${item.id === selectedId ? "selected" : ""}>${item.name}${supTag} (${inr(item.price)})</option>`;
+      }).join("")
     );
   }
 
@@ -332,10 +452,10 @@
     } else {
       row.className = "fr-row grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center";
       row.innerHTML = `
-        <select aria-label="Food or drink item" class="form-control fr-select">${menuOptions(selectedId)}</select>
-        <input aria-label="Quantity" type="number" min="1" value="${qty}" class="form-control fr-qty w-16">
-        <span class="fr-price mono min-w-16 text-right text-sm text-[#d8ff45]">रु 0</span>
-        <button type="button" aria-label="Remove item" class="fr-remove h-10 w-10 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400">×</button>`;
+        <select aria-label="Food or drink item" class="form-control fr-select text-xs py-2">${menuOptions(selectedId)}</select>
+        <input aria-label="Quantity" type="number" min="1" value="${qty}" class="form-control fr-qty w-14 text-center text-xs py-2">
+        <span class="fr-price mono min-w-14 text-right text-xs text-[#d8ff45] font-bold">रु 0</span>
+        <button type="button" aria-label="Remove item" class="fr-remove h-9 w-9 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400 text-lg leading-none cursor-pointer">×</button>`;
     }
 
     const notify = () => { const cb = frChangeHandlers[containerId]; if (cb) cb(); };
@@ -395,6 +515,7 @@
     row.dataset.itemId = item ? item.id : "";
     row.dataset.itemName = item ? item.name : "";
     row.dataset.unitPrice = unitPrice;
+    row.dataset.supplier = item ? (item.supplier || "chillpill") : "";
 
     const priceEl = row.querySelector(".fr-price");
     if (priceEl) priceEl.textContent = inr(price);
@@ -403,11 +524,21 @@
   function collectFrItems(containerId) {
     const raw = [...document.querySelectorAll(`#${containerId} .fr-row`)]
       .filter((row) => row.dataset.itemId)
-      .map((row) => ({ id: row.dataset.itemId, name: row.dataset.itemName, price: Number(row.dataset.unitPrice), qty: Number(row.dataset.qty) }));
-    // Merge rows that ended up pointing at the same menu item and same unit price
+      .map((row) => {
+        const item = menuItems.find((m) => m.id === row.dataset.itemId);
+        const supplier = (item && item.supplier) ? item.supplier : (row.dataset.supplier || "chillpill");
+        return {
+          id: row.dataset.itemId,
+          name: row.dataset.itemName,
+          price: Number(row.dataset.unitPrice),
+          qty: Number(row.dataset.qty),
+          supplier: supplier
+        };
+      });
+    // Merge rows that ended up pointing at the same menu item, supplier and unit price
     const merged = [];
     raw.forEach((item) => {
-      const existing = merged.find((m) => m.id === item.id && m.price === item.price);
+      const existing = merged.find((m) => m.id === item.id && m.price === item.price && m.supplier === item.supplier);
       if (existing) existing.qty += item.qty;
       else merged.push({ ...item });
     });
@@ -523,6 +654,7 @@
 
   function renderMenu() {
     const list = document.getElementById("menu-list");
+    if (!list) return;
     list.innerHTML = "";
     menuItems.forEach((item) => {
       const line = document.createElement("div");
@@ -530,18 +662,28 @@
       line.dataset.menuId = item.id;
 
       function renderViewMode() {
+        const supplier = item.supplier || "chillpill";
+        const brosComm = partnerSettings ? partnerSettings.bros_burger_commission : 20;
+        const bardaliComm = partnerSettings ? partnerSettings.bardali_commission : 20;
+        const supplierBadge = supplier === "bros_burger"
+          ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 font-semibold">🍔 Bro's Burger (${brosComm}%)</span>`
+          : supplier === "bardali"
+          ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 shrink-0 font-semibold">🍽️ Bardali (${bardaliComm}%)</span>`
+          : `<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 shrink-0">ChillPill (Own)</span>`;
+
         line.innerHTML = `
           <div class="flex items-center justify-between gap-2">
-            <div class="flex items-center gap-2 min-w-0">
+            <div class="flex items-center gap-2 min-w-0 flex-wrap">
               <span class="font-medium truncate">${item.name}</span>
+              ${supplierBadge}
               ${item.category ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 shrink-0">${item.category}</span>` : ""}
             </div>
             <div class="flex items-center gap-2 shrink-0">
               <span class="mono text-[#d8ff45] font-semibold">${inr(item.price)}</span>
-              <button type="button" aria-label="Edit ${item.name}" class="menu-edit-btn text-slate-400 hover:text-[#d8ff45] transition-colors p-0.5 rounded">
+              <button type="button" aria-label="Edit ${item.name}" class="menu-edit-btn text-slate-400 hover:text-[#d8ff45] transition-colors p-0.5 rounded cursor-pointer" title="Edit Item">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               </button>
-              <button type="button" aria-label="Remove ${item.name}" class="menu-del-btn text-slate-400 hover:text-red-400 transition-colors p-0.5 rounded text-base leading-none">×</button>
+              <button type="button" aria-label="Remove ${item.name}" class="menu-del-btn text-slate-400 hover:text-red-400 transition-colors p-0.5 rounded text-base leading-none cursor-pointer" title="Delete Item">×</button>
             </div>
           </div>`;
         line.querySelector(".menu-edit-btn").addEventListener("click", () => renderEditMode());
@@ -552,37 +694,52 @@
       }
 
       function renderEditMode() {
+        const curSup = item.supplier || "chillpill";
         line.innerHTML = `
           <div class="flex flex-wrap items-center gap-2">
             <input class="menu-edit-name form-control text-sm flex-1 min-w-[120px] py-1.5" type="text" value="${item.name.replace(/"/g, '&quot;')}" placeholder="Item name" />
-            <input class="menu-edit-price form-control text-sm w-24 py-1.5 mono" type="number" min="0" value="${item.price}" placeholder="Price" />
-            <div class="flex gap-1.5">
-              <button type="button" class="menu-save-btn rounded-lg px-3 py-1.5 text-xs font-bold" style="background:#d8ff45;color:#10141e;">Save</button>
-              <button type="button" class="menu-cancel-btn rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:text-white">Cancel</button>
+            <input class="menu-edit-price form-control text-sm w-20 py-1.5 mono font-semibold" type="number" min="0" value="${item.price}" placeholder="Price" />
+            <select class="menu-edit-supplier form-control text-xs py-1.5 w-36 font-medium">
+              <option value="chillpill" ${curSup === "chillpill" ? "selected" : ""}>ChillPill (Own)</option>
+              <option value="bros_burger" ${curSup === "bros_burger" ? "selected" : ""}>Bro's Burger</option>
+              <option value="bardali" ${curSup === "bardali" ? "selected" : ""}>Bardali</option>
+            </select>
+            <div class="flex gap-1.5 shrink-0">
+              <button type="button" class="menu-save-btn rounded-lg px-3 py-1.5 text-xs font-bold cursor-pointer" style="background:#d8ff45;color:#10141e;">Save</button>
+              <button type="button" class="menu-cancel-btn rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:text-white cursor-pointer">Cancel</button>
             </div>
           </div>`;
         const nameInput = line.querySelector(".menu-edit-name");
         const priceInput = line.querySelector(".menu-edit-price");
+        const supplierInput = line.querySelector(".menu-edit-supplier");
         nameInput.focus();
         line.querySelector(".menu-cancel-btn").addEventListener("click", () => renderViewMode());
         line.querySelector(".menu-save-btn").addEventListener("click", async () => {
           const newName = nameInput.value.trim();
           const newPrice = parseFloat(priceInput.value);
+          const newSupplier = supplierInput.value;
           if (!newName) return showToast("Item name cannot be empty.");
           if (isNaN(newPrice) || newPrice < 0) return showToast("Please enter a valid price.");
           const btn = line.querySelector(".menu-save-btn");
           btn.disabled = true;
           btn.textContent = "Saving…";
-          const { error } = await window.sb.from("menu_items").update({ name: newName, price: newPrice }).eq("id", item.id);
+
+          let updatePayload = { name: newName, price: newPrice, supplier: newSupplier };
+          let { error } = await window.sb.from("menu_items").update(updatePayload).eq("id", item.id);
+          if (error && error.message && error.message.includes("supplier")) {
+            const fallback = await window.sb.from("menu_items").update({ name: newName, price: newPrice }).eq("id", item.id);
+            error = fallback.error;
+          }
           if (error) {
-            showToast("Could not save changes.");
+            showToast("Could not save changes: " + error.message);
             btn.disabled = false;
             btn.textContent = "Save";
           } else {
-            // Optimistically update local copy so view mode shows new values
             item.name = newName;
             item.price = newPrice;
+            item.supplier = newSupplier;
             renderViewMode();
+            showToast("Menu item updated.");
           }
         });
         // Save on Enter key in inputs
@@ -801,7 +958,6 @@
       extendGroup.classList.toggle("hidden", !isActive);
       checkoutBtn.classList.toggle("hidden", !isActive);
       addFoodBtn.classList.toggle("hidden", !isActive);
-      editBtn.classList.toggle("col-span-2", !isActive);
       editBtn.classList.remove("hidden");
       if (printBtn) printBtn.classList.toggle("hidden", !isCompleted && !isActive);
     } else {
@@ -817,6 +973,7 @@
     const fragment = document.getElementById("record-template").content.cloneNode(true);
     const card = fragment.querySelector("article");
     updateCard(card, record);
+    if (window.lucide) window.lucide.createIcons({ root: card });
 
     const custEl = card.querySelector(".record-customer");
     if (custEl) {
@@ -1836,6 +1993,93 @@
     }, 150);
   }
 
+  // ---------- Partner Restaurant WhatsApp Ordering ----------
+  function dispatchPartnerOrderWhatsApp(partnerKey, sessionInfo, containerId) {
+    const rows = collectFrItems(containerId);
+    const partnerItems = rows.filter((item) => {
+      let sup = item.supplier;
+      if (!sup) {
+        const m = menuItems.find((mi) => mi.id === item.id || (item.name && mi.name.toLowerCase() === item.name.toLowerCase()));
+        sup = (m && m.supplier) ? m.supplier : "chillpill";
+      }
+      return sup === partnerKey;
+    });
+
+    if (!partnerItems.length) {
+      showToast("No food items from this restaurant in the order.");
+      return;
+    }
+
+    const partnerName = partnerKey === "bros_burger" ? "Bro's Burger" : "Bardali";
+    const rawPhone = partnerKey === "bros_burger"
+      ? (partnerSettings.bros_burger_whatsapp || "9779841268666")
+      : (partnerSettings.bardali_whatsapp || "");
+    const cleanPhone = String(rawPhone).replace(/[^\d]/g, "");
+
+    if (!cleanPhone) {
+      showToast(`Please set a WhatsApp phone number for ${partnerName} in Admin -> Menu & Pricing.`);
+      return;
+    }
+
+    const station = (sessionInfo && (sessionInfo.station_name || sessionInfo.station)) || "Lounge / Station";
+    const customer = (sessionInfo && (sessionInfo.customer_name || sessionInfo.customer)) || "Walk-in";
+
+    let msg = `*ChillPill Gaming Cafe - Food Order*\n`;
+    msg += `📍 Location: ChillPill Gaming Cafe\n`;
+    msg += `🎮 Station/Table: ${station}\n`;
+    msg += `👤 Customer: ${customer}\n\n`;
+    msg += `*Items to Prepare:*\n`;
+    partnerItems.forEach((it) => {
+      msg += `• ${it.name} × ${it.qty}\n`;
+    });
+    msg += `\nPlease deliver to ChillPill counter. Thank you!`;
+
+    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank");
+  }
+
+  function updateQuickFoodWhatsAppState() {
+    const actions = document.getElementById("quick-food-whatsapp-actions");
+    const brosBtn = document.getElementById("quick-food-wa-bros");
+    const bardaliBtn = document.getElementById("quick-food-wa-bardali");
+    if (!actions || !brosBtn || !bardaliBtn) return;
+
+    const items = collectFrItems("quick-food-rows");
+    const hasBros = items.some((i) => {
+      const sup = i.supplier || (menuItems.find((m) => m.id === i.id)?.supplier);
+      return sup === "bros_burger";
+    });
+    const hasBardali = items.some((i) => {
+      const sup = i.supplier || (menuItems.find((m) => m.id === i.id)?.supplier);
+      return sup === "bardali";
+    });
+
+    brosBtn.classList.toggle("hidden", !hasBros);
+    bardaliBtn.classList.toggle("hidden", !hasBardali);
+    actions.classList.toggle("hidden", !hasBros && !hasBardali);
+  }
+
+  function updateEditSessionWhatsAppState() {
+    const actions = document.getElementById("edit-food-whatsapp-actions");
+    const brosBtn = document.getElementById("edit-food-wa-bros");
+    const bardaliBtn = document.getElementById("edit-food-wa-bardali");
+    if (!actions || !brosBtn || !bardaliBtn) return;
+
+    const items = collectFrItems("edit-food-rows");
+    const hasBros = items.some((i) => {
+      const sup = i.supplier || (menuItems.find((m) => m.id === i.id)?.supplier);
+      return sup === "bros_burger";
+    });
+    const hasBardali = items.some((i) => {
+      const sup = i.supplier || (menuItems.find((m) => m.id === i.id)?.supplier);
+      return sup === "bardali";
+    });
+
+    brosBtn.classList.toggle("hidden", !hasBros);
+    bardaliBtn.classList.toggle("hidden", !hasBardali);
+    actions.classList.toggle("hidden", !hasBros && !hasBardali);
+  }
+
   // ---------- edit an active or booked session (timing, order, table, game) ----------
   let editTarget = null;
   let editBaseDate = new Date(); // the calendar date edit-start-time/edit-end-time apply to
@@ -1846,6 +2090,7 @@
     const foodTotal = frTotal("edit-food-rows");
     const total = Math.round((duration / 60) * rate + foodTotal);
     document.getElementById("edit-new-total").textContent = inr(total);
+    updateEditSessionWhatsAppState();
     return { total, foodTotal, duration, rate };
   }
 
@@ -2120,6 +2365,27 @@
         showToast("Session updated.");
       }
     });
+
+    const editWaBros = document.getElementById("edit-food-wa-bros");
+    if (editWaBros) {
+      editWaBros.addEventListener("click", () => {
+        const sessionInfo = {
+          station_name: document.getElementById("edit-station").value,
+          customer_name: document.getElementById("edit-customer-name").value
+        };
+        dispatchPartnerOrderWhatsApp("bros_burger", sessionInfo, "edit-food-rows");
+      });
+    }
+    const editWaBardali = document.getElementById("edit-food-wa-bardali");
+    if (editWaBardali) {
+      editWaBardali.addEventListener("click", () => {
+        const sessionInfo = {
+          station_name: document.getElementById("edit-station").value,
+          customer_name: document.getElementById("edit-customer-name").value
+        };
+        dispatchPartnerOrderWhatsApp("bardali", sessionInfo, "edit-food-rows");
+      });
+    }
   }
 
   // ---------- Add Missing Record (Paper Register Backfill) ----------
@@ -2145,28 +2411,49 @@
     });
   }
 
+  let mrDiscountMode = "percent";
+
   function recalcMissingRecord() {
     const duration = Math.max(0, Number(document.getElementById("mr-duration").value) || 0);
     const rate = Math.max(0, Number(document.getElementById("mr-rate").value) || 0);
-    const timeCost = Math.round((duration / 60) * rate);
+    const rawTimeCost = Math.round((duration / 60) * rate);
+
+    const discountValInput = document.getElementById("mr-discount-value");
+    const rawDiscountVal = discountValInput ? discountValInput.value : 0;
+    const discount = computeDiscount({ duration_minutes: duration, rate }, mrDiscountMode, rawDiscountVal);
+    if (discountValInput && String(discount.value) !== String(rawDiscountVal)) {
+      discountValInput.value = discount.value;
+    }
+
+    const capEl = document.getElementById("mr-discount-cap");
+    if (capEl) capEl.textContent = discountCapLabel(mrDiscountMode, rawTimeCost, duration);
+
+    const timeCost = Math.max(0, rawTimeCost - discount.amount);
     const foodTotal = frTotal("mr-food-rows");
     const total = timeCost + foodTotal;
 
     const breakdownEl = document.getElementById("mr-calc-breakdown");
     const totalEl = document.getElementById("mr-total-display");
+    const tagEl = document.getElementById("mr-discount-summary-tag");
+
+    if (tagEl) {
+      tagEl.textContent = discount.amount > 0 ? `−${inr(discount.amount)} (${discount.mode === "percent" ? discount.value + "%" : discount.mode === "minutes" ? discount.value + "m" : inr(discount.value)})` : "";
+    }
+
     if (breakdownEl) {
-      if (timeCost === 0 && foodTotal > 0) {
+      if (rawTimeCost === 0 && foodTotal > 0) {
         breakdownEl.textContent = `Food order: रु ${foodTotal} · Station time: रु 0`;
-      } else if (timeCost === 0 && foodTotal === 0) {
+      } else if (rawTimeCost === 0 && foodTotal === 0) {
         breakdownEl.textContent = `No charges selected (रु 0)`;
       } else {
-        breakdownEl.textContent = `Play time (${duration}m @ रु ${rate}/h): रु ${timeCost} · Food: रु ${foodTotal}`;
+        const discPart = discount.amount > 0 ? ` (−${inr(discount.amount)})` : "";
+        breakdownEl.textContent = `Play time (${duration}m @ रु ${rate}/h): रु ${timeCost}${discPart} · Food: रु ${foodTotal}`;
       }
     }
     if (totalEl) {
       totalEl.textContent = inr(total);
     }
-    return { total, foodTotal, duration, rate, timeCost };
+    return { total, foodTotal, duration, rate, timeCost, discount, rawTimeCost };
   }
 
   function updateMrInternalSaleState() {
@@ -2301,6 +2588,17 @@
     const menuEmpty = document.getElementById("mr-menu-empty");
     if (menuEmpty) menuEmpty.classList.toggle("hidden", menuItems.length > 0);
 
+    // Reset discount
+    mrDiscountMode = "percent";
+    document.querySelectorAll(".mr-discount-mode-btn").forEach((b) => {
+      const active = b.dataset.mode === "percent";
+      b.className = active
+        ? "mr-discount-mode-btn active rounded-lg border border-[#d8ff45] bg-[#d8ff45] text-[#10141e] px-2 py-1.5 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition"
+        : "mr-discount-mode-btn rounded-lg border border-slate-600 bg-slate-800/80 px-2 py-1.5 text-xs font-bold text-slate-300 flex items-center justify-center gap-1 cursor-pointer transition";
+    });
+    const discInput = document.getElementById("mr-discount-value");
+    if (discInput) discInput.value = 0;
+
     const msgEl = document.getElementById("mr-message");
     if (msgEl) {
       msgEl.textContent = "";
@@ -2415,6 +2713,24 @@
     });
     document.getElementById("mr-rate").addEventListener("input", recalcMissingRecord);
 
+    // Discount mode buttons & input
+    document.querySelectorAll(".mr-discount-mode-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        mrDiscountMode = btn.dataset.mode;
+        document.querySelectorAll(".mr-discount-mode-btn").forEach((b) => {
+          const active = b.dataset.mode === mrDiscountMode;
+          b.className = active
+            ? "mr-discount-mode-btn active rounded-lg border border-[#d8ff45] bg-[#d8ff45] text-[#10141e] px-2 py-1.5 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition"
+            : "mr-discount-mode-btn rounded-lg border border-slate-600 bg-slate-800/80 px-2 py-1.5 text-xs font-bold text-slate-300 flex items-center justify-center gap-1 cursor-pointer transition";
+        });
+        const discInput = document.getElementById("mr-discount-value");
+        if (discInput) discInput.value = 0;
+        recalcMissingRecord();
+      });
+    });
+    const mrDiscInput = document.getElementById("mr-discount-value");
+    if (mrDiscInput) mrDiscInput.addEventListener("input", recalcMissingRecord);
+
     // Food rows
     registerFoodContainer("mr-food-rows", recalcMissingRecord);
     const addFoodBtn = document.getElementById("mr-add-food-row");
@@ -2453,7 +2769,7 @@
         }
       }
 
-      const { total, foodTotal, duration, rate } = recalcMissingRecord();
+      const { total, foodTotal, duration, rate, discount } = recalcMissingRecord();
       const foodItems = collectFrItems("mr-food-rows");
 
       const [yr, mo, da] = dateVal.split("-").map(Number);
@@ -2494,9 +2810,9 @@
         food_total: foodTotal,
         amount: total,
         overtime_amount: 0,
-        discount_amount: 0,
-        discount_type: null,
-        discount_value: 0,
+        discount_amount: (discount && discount.amount) || 0,
+        discount_type: (discount && discount.amount > 0) ? discount.mode : null,
+        discount_value: (discount && discount.amount > 0) ? (discount.value || 0) : 0,
         status: "Completed",
         notes: noteWithTag,
         notified_5min: true,
@@ -2576,6 +2892,7 @@
     const timeCost = ((Number(quickFoodTarget.duration_minutes) || 0) / 60) * (Number(quickFoodTarget.rate) || 0);
     const total = Math.round(timeCost + frTotal("quick-food-rows"));
     document.getElementById("quick-food-new-total").textContent = inr(total);
+    updateQuickFoodWhatsAppState();
     return total;
   }
 
@@ -2608,6 +2925,19 @@
     document.getElementById("quick-food-add-row").addEventListener("click", () => addFrRow("quick-food-rows"));
     document.getElementById("quick-food-cancel").addEventListener("click", closeQuickFoodModal);
     modal.addEventListener("click", (event) => { if (event.target === modal) closeQuickFoodModal(); });
+
+    const qfWaBros = document.getElementById("quick-food-wa-bros");
+    if (qfWaBros) {
+      qfWaBros.addEventListener("click", () => {
+        dispatchPartnerOrderWhatsApp("bros_burger", quickFoodTarget, "quick-food-rows");
+      });
+    }
+    const qfWaBardali = document.getElementById("quick-food-wa-bardali");
+    if (qfWaBardali) {
+      qfWaBardali.addEventListener("click", () => {
+        dispatchPartnerOrderWhatsApp("bardali", quickFoodTarget, "quick-food-rows");
+      });
+    }
 
     document.getElementById("quick-food-save").addEventListener("click", async () => {
       if (!quickFoodTarget) return;
@@ -2956,7 +3286,10 @@
   // ---------- revenue (admin) ----------
   let revDailyChart = null;
   let revChartDays = 30;
-  let revDateFilter = "";
+  let revSelectedDept = "all";       // "all" | "station" | "food"
+  let revSelectedPeriod = "all";     // "all" | "today" | "yesterday" | "week" | "month" | "quarter" | "custom"
+  let revCustomDate = "";            // "YYYY-MM-DD"
+  let revFiltersWired = false;
 
   function getDateStr(iso) {
     if (!iso) return "";
@@ -2970,21 +3303,160 @@
     return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(d);
   }
 
-  function buildDailyMap(paid) {
+  const isYesterday = (iso) => {
+    if (!iso) return false;
+    const d = new Date(iso), n = new Date();
+    n.setDate(n.getDate() - 1);
+    return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+  };
+
+  const isThisWeek = (iso) => {
+    if (!iso) return false;
+    const d = new Date(iso), now = new Date();
+    const dayOfWeek = (now.getDay() + 6) % 7; // Mon = 0, Sun = 6
+    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek, 0, 0, 0, 0);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(endOfWeek.getDate() + 7);
+    const t = d.getTime();
+    return t >= startOfWeek.getTime() && t < endOfWeek.getTime();
+  };
+
+  const isThisMonth = (iso) => {
+    if (!iso) return false;
+    const d = new Date(iso), n = new Date();
+    return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth();
+  };
+
+  const isThisQuarter = (iso) => {
+    if (!iso) return false;
+    const d = new Date(iso), n = new Date();
+    if (d.getFullYear() !== n.getFullYear()) return false;
+    return Math.floor(n.getMonth() / 3) === Math.floor(d.getMonth() / 3);
+  };
+
+  function filterRecordByPeriod(r, period, customDate) {
+    const iso = r.paid_at || r.created_at;
+    if (!iso) return false;
+    if (period === "today") return isToday(iso);
+    if (period === "yesterday") return isYesterday(iso);
+    if (period === "week") return isThisWeek(iso);
+    if (period === "month") return isThisMonth(iso);
+    if (period === "quarter") return isThisQuarter(iso);
+    if (period === "custom") return getDateStr(iso) === customDate;
+    return true; // "all"
+  }
+
+  function getRevPeriodLabel(period, customDate) {
+    const now = new Date();
+    if (period === "today") return "Today";
+    if (period === "yesterday") return "Yesterday";
+    if (period === "week") return "This Week";
+    if (period === "month") {
+      const monthName = new Intl.DateTimeFormat("en-IN", { month: "long" }).format(now);
+      return `This Month (${monthName})`;
+    }
+    if (period === "quarter") {
+      const q = Math.floor(now.getMonth() / 3) + 1;
+      return `This Quarter (Q${q} ${now.getFullYear()})`;
+    }
+    if (period === "custom" && customDate) {
+      return getFriendlyDate(customDate);
+    }
+    return "All Time";
+  }
+
+  function getRevDeptLabel(dept) {
+    if (dept === "station") return "Station Gameplay Only";
+    if (dept === "food") return "Food & Drinks Only";
+    return "All Revenue";
+  }
+
+  function computeRecordRevenue(record) {
+    const grossAmount = Number(record.amount) || 0;
+    const foodTotal = Number(record.food_total) || 0;
+    const timeRevenue = Math.max(0, grossAmount - foodTotal);
+
+    let chillpillFood = 0;
+    let brosGross = 0;
+    let bardaliGross = 0;
+
+    const items = Array.isArray(record.food_items) ? record.food_items : [];
+    if (items.length > 0) {
+      items.forEach((fi) => {
+        let sup = fi.supplier;
+        if (!sup) {
+          const menuItem = menuItems.find((m) => m.id === fi.id || (fi.name && m.name.toLowerCase() === fi.name.toLowerCase()));
+          sup = (menuItem && menuItem.supplier) ? menuItem.supplier : "chillpill";
+        }
+        const lineTotal = (Number(fi.price) || 0) * (Number(fi.qty) || 1);
+        if (sup === "bros_burger") {
+          brosGross += lineTotal;
+        } else if (sup === "bardali") {
+          bardaliGross += lineTotal;
+        } else {
+          chillpillFood += lineTotal;
+        }
+      });
+    } else if (foodTotal > 0) {
+      chillpillFood += foodTotal;
+    }
+
+    const brosRate = Number(partnerSettings.bros_burger_commission) || 0;
+    const bardaliRate = Number(partnerSettings.bardali_commission) || 0;
+
+    const brosCommission = Math.round((brosGross * brosRate) / 100);
+    const brosPayable = brosGross - brosCommission;
+
+    const bardaliCommission = Math.round((bardaliGross * bardaliRate) / 100);
+    const bardaliPayable = bardaliGross - bardaliCommission;
+
+    const netFoodRevenue = chillpillFood + brosCommission + bardaliCommission;
+    const netRevenue = timeRevenue + netFoodRevenue;
+
+    return {
+      grossAmount,
+      timeRevenue,
+      foodTotal,
+      chillpillFood,
+      brosGross,
+      brosCommission,
+      brosPayable,
+      bardaliGross,
+      bardaliCommission,
+      bardaliPayable,
+      netFoodRevenue,
+      netRevenue
+    };
+  }
+
+  function buildDailyMap(paid, dept = "all") {
     const map = {};
     paid.forEach((r) => {
-      const ds = getDateStr(r.paid_at);
+      const ds = getDateStr(r.paid_at || r.created_at);
       if (!ds) return;
-      if (!map[ds]) map[ds] = { total: 0, cash: 0, online: 0, sessions: [] };
-      map[ds].total += Number(r.amount) || 0;
-      if (r.payment_method === "Cash") map[ds].cash += Number(r.amount) || 0;
-      if (r.payment_method === "Online") map[ds].online += Number(r.amount) || 0;
-      map[ds].sessions.push(r);
+      if (!map[ds]) map[ds] = { total: 0, gross: 0, cash: 0, online: 0, sessions: [] };
+      const rev = computeRecordRevenue(r);
+
+      let effectiveNet = rev.netRevenue;
+      let effectiveGross = rev.grossAmount;
+      if (dept === "station") {
+        effectiveNet = rev.timeRevenue;
+        effectiveGross = rev.timeRevenue;
+      } else if (dept === "food") {
+        effectiveNet = rev.netFoodRevenue;
+        effectiveGross = rev.foodTotal;
+      }
+
+      map[ds].total += effectiveNet;
+      map[ds].gross += effectiveGross;
+      if (r.payment_method === "Cash") map[ds].cash += effectiveGross;
+      if (r.payment_method === "Online") map[ds].online += effectiveGross;
+      map[ds].sessions.push({ ...r, _rev: rev });
     });
     return map;
   }
 
-  function renderRevenueChart(dailyMap) {
+  function renderRevenueChart(dailyMap, dept = "all") {
     const now = new Date();
     const labels = [];
     const data = [];
@@ -2998,15 +3470,20 @@
     const ctx = document.getElementById("rev-daily-chart");
     if (!ctx) return;
     if (revDailyChart) { revDailyChart.destroy(); revDailyChart = null; }
+
+    const chartLabel = dept === "station" ? "Station Revenue (रु)" : dept === "food" ? "Food Net Profit (रु)" : "Revenue (रु)";
+    const barColor = dept === "station" ? "rgba(56,189,248,0.7)" : dept === "food" ? "rgba(251,191,36,0.7)" : "rgba(216,255,69,0.7)";
+    const barBorder = dept === "station" ? "#38bdf8" : dept === "food" ? "#fbbf24" : "#d8ff45";
+
     revDailyChart = new Chart(ctx, {
       type: "bar",
       data: {
         labels,
         datasets: [{
-          label: "Revenue (रु)",
+          label: chartLabel,
           data,
-          backgroundColor: data.map((v) => v > 0 ? "rgba(216,255,69,0.65)" : "rgba(255,255,255,0.05)"),
-          borderColor: data.map((v) => v > 0 ? "#d8ff45" : "rgba(255,255,255,0.1)"),
+          backgroundColor: data.map((v) => v > 0 ? barColor : "rgba(255,255,255,0.05)"),
+          borderColor: data.map((v) => v > 0 ? barBorder : "rgba(255,255,255,0.1)"),
           borderWidth: 1,
           borderRadius: 4,
         }]
@@ -3018,7 +3495,7 @@
           legend: { display: false },
           tooltip: {
             callbacks: {
-              label: (ctx) => ` रु ${ctx.parsed.y.toLocaleString("en-IN")}`
+              label: (c) => ` रु ${c.parsed.y.toLocaleString("en-IN")}`
             }
           }
         },
@@ -3044,143 +3521,337 @@
   function renderDailyTable(dailyMap) {
     const tbody = document.getElementById("rev-daily-table");
     const empty = document.getElementById("rev-daily-empty");
+    if (!tbody) return;
     const sorted = Object.entries(dailyMap).sort((a, b) => b[0].localeCompare(a[0]));
     if (!sorted.length) {
       tbody.innerHTML = "";
-      empty.classList.remove("hidden");
+      if (empty) empty.classList.remove("hidden");
       return;
     }
-    empty.classList.add("hidden");
+    if (empty) empty.classList.add("hidden");
     tbody.innerHTML = sorted.map(([ds, v]) => `
-      <tr class="hover:bg-white/5 cursor-pointer rev-daily-row" data-date="${ds}">
-        <td class="py-2.5 pr-4 font-medium">${getFriendlyDate(ds)}</td>
+      <tr class="hover:bg-white/5 cursor-pointer rev-daily-row" data-date="${ds}" title="Click to filter by ${getFriendlyDate(ds)}">
+        <td class="py-2.5 pr-4 font-medium text-slate-200">${getFriendlyDate(ds)}</td>
         <td class="py-2.5 pr-4 text-slate-400">${v.sessions.length}</td>
         <td class="py-2.5 pr-4 mono text-amber-300">${inr(v.cash)}</td>
         <td class="py-2.5 pr-4 mono text-sky-300">${inr(v.online)}</td>
         <td class="py-2.5 text-right mono font-bold text-[#d8ff45]">${inr(v.total)}</td>
       </tr>`).join("");
+
     tbody.querySelectorAll(".rev-daily-row").forEach((row) => {
       row.addEventListener("click", () => {
         const ds = row.dataset.date;
-        const dateInput = document.getElementById("rev-date-filter");
-        if (dateInput) {
-          dateInput.value = ds;
-          revDateFilter = ds;
-          renderRevenueDayFilter(buildDailyMap(records.filter((r) => r.paid)));
-        }
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        revSelectedPeriod = "custom";
+        revCustomDate = ds;
+        const customDateInput = document.getElementById("rev-custom-date");
+        if (customDateInput) customDateInput.value = ds;
+        // Update period button styles
+        document.querySelectorAll(".rev-period-btn").forEach((b) => {
+          b.className = "rev-period-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-400 hover:border-slate-500 transition cursor-pointer";
+        });
+        renderRevenue();
+        const pageRevenue = document.getElementById("page-revenue");
+        if (pageRevenue) pageRevenue.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     });
   }
 
-  function renderRevenueDayFilter(dailyMap) {
-    const totalEl = document.getElementById("rev-day-total");
-    const cashEl = document.getElementById("rev-day-cash");
-    const onlineEl = document.getElementById("rev-day-online");
-    const sessionsWrap = document.getElementById("rev-day-sessions-wrap");
-    const sessionsBody = document.getElementById("rev-day-sessions");
-    const emptyEl = document.getElementById("rev-day-empty");
+  function initRevenueFiltersOnce() {
+    if (revFiltersWired) return;
+    revFiltersWired = true;
 
-    if (!revDateFilter) {
-      totalEl.textContent = "—";
-      cashEl.textContent = "—";
-      onlineEl.textContent = "—";
-      sessionsWrap.classList.add("hidden");
-      emptyEl.classList.add("hidden");
-      return;
+    // Department / Category filter buttons
+    document.querySelectorAll(".rev-dept-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        revSelectedDept = btn.dataset.dept || "all";
+        document.querySelectorAll(".rev-dept-btn").forEach((b) => {
+          const active = (b.dataset.dept || "all") === revSelectedDept;
+          b.className = `rev-dept-btn px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+            active ? "bg-[#d8ff45] text-[#10141e]" : "text-slate-400 hover:text-white"
+          }`;
+        });
+        renderRevenue();
+      });
+    });
+
+    // Time period filter buttons
+    document.querySelectorAll(".rev-period-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        revSelectedPeriod = btn.dataset.period || "all";
+        revCustomDate = "";
+        const customDateInput = document.getElementById("rev-custom-date");
+        if (customDateInput) customDateInput.value = "";
+        document.querySelectorAll(".rev-period-btn").forEach((b) => {
+          const active = (b.dataset.period || "all") === revSelectedPeriod;
+          b.className = `rev-period-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+            active ? "border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45]" : "border-slate-700 text-slate-400 hover:border-slate-500"
+          }`;
+        });
+        renderRevenue();
+      });
+    });
+
+    // Custom date picker
+    const customDateInput = document.getElementById("rev-custom-date");
+    if (customDateInput) {
+      customDateInput.addEventListener("change", () => {
+        if (customDateInput.value) {
+          revSelectedPeriod = "custom";
+          revCustomDate = customDateInput.value;
+          document.querySelectorAll(".rev-period-btn").forEach((b) => {
+            b.className = "rev-period-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-400 hover:border-slate-500 transition cursor-pointer";
+          });
+          renderRevenue();
+        }
+      });
     }
-    const day = dailyMap[revDateFilter];
-    if (!day) {
-      totalEl.textContent = inr(0);
-      cashEl.textContent = inr(0);
-      onlineEl.textContent = inr(0);
-      sessionsWrap.classList.add("hidden");
-      emptyEl.classList.remove("hidden");
-      return;
-    }
-    emptyEl.classList.add("hidden");
-    totalEl.textContent = inr(day.total);
-    cashEl.textContent = inr(day.cash);
-    onlineEl.textContent = inr(day.online);
-    sessionsWrap.classList.remove("hidden");
-    sessionsBody.innerHTML = day.sessions
-      .sort((a, b) => new Date(a.paid_at) - new Date(b.paid_at))
-      .map((r) => `
-        <tr class="hover:bg-white/5">
-          <td class="py-2 pr-3">${r.customer_name || "—"}</td>
-          <td class="py-2 pr-3 text-slate-400">${r.station_name || "—"}</td>
-          <td class="py-2 pr-3 text-xs ${r.payment_method === "Cash" ? "text-amber-300" : "text-sky-300"}">${r.payment_method || "—"}</td>
-          <td class="py-2 pr-3 text-slate-400">${r.staff_name || "—"}</td>
-          <td class="py-2 text-right mono font-semibold">${inr(r.amount)}</td>
-        </tr>`).join("");
+
+    // Chart 7d/14d/30d buttons
+    [7, 14, 30].forEach((days) => {
+      const btn = document.getElementById(`rev-chart-${days}`);
+      if (!btn) return;
+      btn.addEventListener("click", () => {
+        revChartDays = days;
+        [7, 14, 30].forEach((d) => {
+          const b = document.getElementById(`rev-chart-${d}`);
+          if (!b) return;
+          const active = d === days;
+          b.className = `text-xs px-3 py-1 rounded-lg border transition-colors ${
+            active ? "border-[#d8ff45] text-[#d8ff45] bg-[#d8ff45]/10" : "border-slate-700 text-slate-400"
+          }`;
+        });
+        const paid = records.filter((r) => r.paid);
+        renderRevenueChart(buildDailyMap(paid, revSelectedDept), revSelectedDept);
+      });
+    });
   }
 
   function renderRevenue() {
-    const paid = records.filter((r) => r.paid);
-    const total = paid.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
-    const cash = paid.filter((r) => r.payment_method === "Cash").reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
-    const online = paid.filter((r) => r.payment_method === "Online").reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
-    const today = paid.filter((r) => isToday(r.paid_at)).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
-    const discounts = paid.reduce((sum, r) => sum + (Number(r.discount_amount) || 0), 0);
+    initRevenueFiltersOnce();
 
-    document.getElementById("revenue-total").textContent = inr(total);
-    document.getElementById("revenue-cash").textContent = inr(cash);
-    document.getElementById("revenue-online").textContent = inr(online);
-    document.getElementById("revenue-today").textContent = inr(today);
-    document.getElementById("revenue-discounts").textContent = inr(discounts);
+    const allPaid = records.filter((r) => r.paid);
+    const periodPaid = allPaid.filter((r) => filterRecordByPeriod(r, revSelectedPeriod, revCustomDate));
 
+    let totalGross = 0;
+    let totalNet = 0;
+    let totalTimeRevenue = 0;
+    let totalFoodGross = 0;
+    let totalFoodNet = 0;
+    let totalGamingMinutes = 0;
+    let totalDiscounts = 0;
+    let totalCash = 0;
+    let totalOnline = 0;
+
+    let totalChillpillFood = 0;
+    let totalBrosGross = 0;
+    let totalBrosCommission = 0;
+    let totalBrosPayable = 0;
+    let totalBardaliGross = 0;
+    let totalBardaliCommission = 0;
+    let totalBardaliPayable = 0;
+
+    periodPaid.forEach((r) => {
+      const rev = computeRecordRevenue(r);
+      totalGross += rev.grossAmount;
+      totalNet += rev.netRevenue;
+      totalTimeRevenue += rev.timeRevenue;
+      totalFoodGross += rev.foodTotal;
+      totalFoodNet += rev.netFoodRevenue;
+      totalGamingMinutes += (Number(r.duration_minutes) || 0);
+      totalDiscounts += (Number(r.discount_amount) || 0);
+
+      // Payments breakdown respecting active department
+      const effPayAmount = revSelectedDept === "station" ? rev.timeRevenue : revSelectedDept === "food" ? rev.foodTotal : rev.grossAmount;
+      if (r.payment_method === "Cash") totalCash += effPayAmount;
+      if (r.payment_method === "Online") totalOnline += effPayAmount;
+
+      totalChillpillFood += rev.chillpillFood;
+      totalBrosGross += rev.brosGross;
+      totalBrosCommission += rev.brosCommission;
+      totalBrosPayable += rev.brosPayable;
+      totalBardaliGross += rev.bardaliGross;
+      totalBardaliCommission += rev.bardaliCommission;
+      totalBardaliPayable += rev.bardaliPayable;
+    });
+
+    const totalPartnerPayables = totalBrosPayable + totalBardaliPayable;
+
+    // Primary Top KPI Card (adapts dynamically to department)
+    const totalEl = document.getElementById("revenue-total");
+    const grossEl = document.getElementById("revenue-gross-total");
+    const badgeEl = document.getElementById("rev-kpi-badge");
+    const descEl = document.getElementById("rev-kpi-desc");
+
+    if (revSelectedDept === "station") {
+      if (totalEl) totalEl.textContent = inr(totalTimeRevenue);
+      if (grossEl) grossEl.textContent = inr(totalTimeRevenue);
+      if (badgeEl) badgeEl.textContent = "🎮 Station Gameplay Only";
+      if (descEl) descEl.textContent = "Net earnings from station gaming time";
+    } else if (revSelectedDept === "food") {
+      if (totalEl) totalEl.textContent = inr(totalFoodNet);
+      if (grossEl) grossEl.textContent = inr(totalFoodGross);
+      if (badgeEl) badgeEl.textContent = "🍟 Food Net Cafe Profit";
+      if (descEl) descEl.textContent = "ChillPill Food (100%) + Partner Commissions";
+    } else {
+      if (totalEl) totalEl.textContent = inr(totalNet);
+      if (grossEl) grossEl.textContent = inr(totalGross);
+      if (badgeEl) badgeEl.textContent = "Net Cafe Earnings";
+      if (descEl) descEl.textContent = "Station Time + Own Food + Commissions";
+    }
+
+    // Food Orders Price vs Actual Revenue to ChillPill
+    const foodGrossEl = document.getElementById("rev-kpi-food-gross");
+    if (foodGrossEl) foodGrossEl.textContent = inr(totalFoodGross);
+    const foodNetEl = document.getElementById("rev-kpi-food-net");
+    if (foodNetEl) foodNetEl.textContent = inr(totalFoodNet);
+
+    // Station Playtime Revenue & Hours
+    const stationNetEl = document.getElementById("rev-kpi-station-net");
+    if (stationNetEl) stationNetEl.textContent = inr(totalTimeRevenue);
+    const stationHoursEl = document.getElementById("rev-kpi-station-hours");
+    if (stationHoursEl) {
+      const h = Math.floor(totalGamingMinutes / 60);
+      const m = totalGamingMinutes % 60;
+      stationHoursEl.textContent = h > 0 ? `${h}h ${m}m played` : `${m}m played`;
+    }
+
+    // Partner Restaurant Payables for Period
+    const payablesEl = document.getElementById("rev-kpi-payables");
+    if (payablesEl) payablesEl.textContent = inr(totalPartnerPayables);
+    const brosPayEl = document.getElementById("rev-kpi-bros-payable");
+    if (brosPayEl) brosPayEl.textContent = inr(totalBrosPayable);
+    const bardaliPayEl = document.getElementById("rev-kpi-bardali-payable");
+    if (bardaliPayEl) bardaliPayEl.textContent = inr(totalBardaliPayable);
+
+    // Payment Mix & Discounts
+    const cashEl = document.getElementById("revenue-cash");
+    if (cashEl) cashEl.textContent = inr(totalCash);
+    const onlineEl = document.getElementById("revenue-online");
+    if (onlineEl) onlineEl.textContent = inr(totalOnline);
+    const discEl = document.getElementById("revenue-discounts");
+    if (discEl) discEl.textContent = inr(totalDiscounts);
+
+    // Filter summaries and labels
+    const periodLabel = getRevPeriodLabel(revSelectedPeriod, revCustomDate);
+    const deptLabel = getRevDeptLabel(revSelectedDept);
+
+    const summaryEl = document.getElementById("rev-active-filter-summary");
+    if (summaryEl) {
+      summaryEl.innerHTML = `Showing <strong class="text-white">${deptLabel}</strong> for <strong class="text-[#d8ff45]">${periodLabel}</strong>`;
+    }
+
+    const tablePeriodLabel = document.getElementById("rev-table-period-label");
+    if (tablePeriodLabel) tablePeriodLabel.textContent = periodLabel;
+
+    // Filter sessions to display in table according to department
+    let displayedSessions = periodPaid;
+    if (revSelectedDept === "station") {
+      displayedSessions = periodPaid.filter((r) => {
+        const rev = computeRecordRevenue(r);
+        return rev.timeRevenue > 0;
+      });
+    } else if (revSelectedDept === "food") {
+      displayedSessions = periodPaid.filter((r) => {
+        const rev = computeRecordRevenue(r);
+        return rev.foodTotal > 0;
+      });
+    }
+
+    const countEl = document.getElementById("rev-active-filter-count");
+    if (countEl) countEl.textContent = `${displayedSessions.length} paid session${displayedSessions.length === 1 ? "" : "s"}`;
+    const tableCountEl = document.getElementById("rev-table-session-count");
+    if (tableCountEl) tableCountEl.textContent = `${displayedSessions.length} session${displayedSessions.length === 1 ? "" : "s"}`;
+
+    // Render Filtered Sessions Table
+    const sessionsBody = document.getElementById("rev-day-sessions");
+    const emptyEl = document.getElementById("rev-day-empty");
+    if (sessionsBody) {
+      if (!displayedSessions.length) {
+        sessionsBody.innerHTML = "";
+        if (emptyEl) emptyEl.classList.remove("hidden");
+      } else {
+        if (emptyEl) emptyEl.classList.add("hidden");
+        const sorted = [...displayedSessions].sort((a, b) => new Date(b.paid_at || b.created_at) - new Date(a.paid_at || a.created_at));
+        sessionsBody.innerHTML = sorted.map((r) => {
+          const rev = computeRecordRevenue(r);
+          const profit = revSelectedDept === "station" ? rev.timeRevenue : revSelectedDept === "food" ? rev.netFoodRevenue : rev.netRevenue;
+          const isCash = r.payment_method === "Cash";
+          return `
+            <tr class="hover:bg-white/5 transition-colors">
+              <td class="py-2.5 pr-3 text-xs text-slate-300">${fmtDateTime(r.paid_at || r.created_at)}</td>
+              <td class="py-2.5 pr-3 font-medium">${r.customer_name || "—"}</td>
+              <td class="py-2.5 pr-3 text-slate-400 text-xs">${r.station_name || "—"}</td>
+              <td class="py-2.5 pr-3 mono text-sky-300 text-xs font-semibold">${inr(rev.timeRevenue)}</td>
+              <td class="py-2.5 pr-3 mono text-amber-300 text-xs font-semibold">${inr(rev.foodTotal)}</td>
+              <td class="py-2.5 pr-3 text-xs ${isCash ? "text-amber-300" : "text-sky-300"}">${r.payment_method || "—"}</td>
+              <td class="py-2.5 pr-3 mono text-slate-200 text-xs">${inr(r.amount)}</td>
+              <td class="py-2.5 text-right mono font-bold text-xs text-[#d8ff45]">${inr(profit)}</td>
+            </tr>`;
+        }).join("");
+      }
+    }
+
+    // Cash vs Online Split bar for filtered period
     const splitEl = document.getElementById("revenue-split");
-    const bar = (label, value) => `
-      <div>
-        <div class="flex justify-between text-xs mb-1"><span>${label}</span><span class="mono text-slate-300">${inr(value)}</span></div>
-        <div class="revenue-bar-track"><div class="revenue-bar-fill" style="width:${total > 0 ? Math.round((value / total) * 100) : 0}%"></div></div>
-      </div>`;
-    splitEl.innerHTML = bar("Cash", cash) + bar("Online", online);
+    if (splitEl) {
+      const effTotal = totalCash + totalOnline;
+      const bar = (label, value) => `
+        <div>
+          <div class="flex justify-between text-xs mb-1"><span>${label}</span><span class="mono text-slate-300">${inr(value)}</span></div>
+          <div class="revenue-bar-track"><div class="revenue-bar-fill" style="width:${effTotal > 0 ? Math.round((value / effTotal) * 100) : 0}%"></div></div>
+        </div>`;
+      splitEl.innerHTML = bar("Cash", totalCash) + bar("Online", totalOnline);
+    }
 
+    // Revenue by staff for filtered period
     const byStaff = {};
-    paid.forEach((r) => {
+    periodPaid.forEach((r) => {
       const key = r.staff_name || "Unassigned";
-      byStaff[key] = (byStaff[key] || 0) + (Number(r.amount) || 0);
+      const rev = computeRecordRevenue(r);
+      const val = revSelectedDept === "station" ? rev.timeRevenue : revSelectedDept === "food" ? rev.netFoodRevenue : rev.netRevenue;
+      byStaff[key] = (byStaff[key] || 0) + val;
     });
     const staffEntries = Object.entries(byStaff).sort((a, b) => b[1] - a[1]);
     const staffEl = document.getElementById("revenue-by-staff");
-    document.getElementById("revenue-by-staff-empty").classList.toggle("hidden", staffEntries.length > 0);
-    staffEl.innerHTML = staffEntries.map(([name, amount]) => bar(name, amount)).join("");
-
-    // Build daily map and render new sections
-    const dailyMap = buildDailyMap(paid);
-    renderRevenueChart(dailyMap);
-    renderDailyTable(dailyMap);
-    renderRevenueDayFilter(dailyMap);
-
-    // Wire up date filter input (once)
-    const dateInput = document.getElementById("rev-date-filter");
-    if (dateInput && !dateInput.dataset.wired) {
-      dateInput.dataset.wired = "1";
-      dateInput.addEventListener("change", () => {
-        revDateFilter = dateInput.value;
-        renderRevenueDayFilter(buildDailyMap(records.filter((r) => r.paid)));
-      });
-      document.getElementById("rev-date-clear").addEventListener("click", () => {
-        dateInput.value = "";
-        revDateFilter = "";
-        renderRevenueDayFilter(buildDailyMap(records.filter((r) => r.paid)));
-      });
-      // Wire chart range buttons
-      [7, 14, 30].forEach((days) => {
-        const btn = document.getElementById(`rev-chart-${days}`);
-        if (!btn) return;
-        btn.addEventListener("click", () => {
-          revChartDays = days;
-          [7, 14, 30].forEach((d) => {
-            const b = document.getElementById(`rev-chart-${d}`);
-            const active = d === days;
-            b.className = `text-xs px-3 py-1 rounded-lg border transition-colors ${active ? "border-[#d8ff45] text-[#d8ff45] bg-[#d8ff45]/10" : "border-slate-700 text-slate-400"}`;
-          });
-          renderRevenueChart(buildDailyMap(records.filter((r) => r.paid)));
-        });
-      });
+    const staffEmptyEl = document.getElementById("revenue-by-staff-empty");
+    if (staffEmptyEl) staffEmptyEl.classList.toggle("hidden", staffEntries.length > 0);
+    if (staffEl) {
+      const maxStaffVal = staffEntries.reduce((max, e) => Math.max(max, e[1]), 0);
+      staffEl.innerHTML = staffEntries.map(([name, amount]) => `
+        <div>
+          <div class="flex justify-between text-xs mb-1"><span>${name}</span><span class="mono text-slate-300">${inr(amount)}</span></div>
+          <div class="revenue-bar-track"><div class="revenue-bar-fill" style="width:${maxStaffVal > 0 ? Math.round((amount / maxStaffVal) * 100) : 0}%"></div></div>
+        </div>`).join("");
     }
+
+    // Restaurant partnerships & food revenue breakdown panel (reflects filtered period)
+    const chillEl = document.getElementById("rev-food-chillpill-total");
+    if (chillEl) chillEl.textContent = inr(totalChillpillFood);
+
+    const brosBadge = document.getElementById("rev-bros-comm-rate-badge");
+    if (brosBadge) brosBadge.textContent = `${partnerSettings.bros_burger_commission}% Comm`;
+    const brosCommEl = document.getElementById("rev-bros-commission-total");
+    if (brosCommEl) brosCommEl.textContent = inr(totalBrosCommission);
+    const brosPayEl2 = document.getElementById("rev-bros-payable-total");
+    if (brosPayEl2) brosPayEl2.textContent = inr(totalBrosPayable);
+    const brosGrossEl = document.getElementById("rev-bros-gross-total");
+    if (brosGrossEl) brosGrossEl.textContent = inr(totalBrosGross);
+
+    const bardaliBadge = document.getElementById("rev-bardali-comm-rate-badge");
+    if (bardaliBadge) bardaliBadge.textContent = `${partnerSettings.bardali_commission}% Comm`;
+    const bardaliCommEl = document.getElementById("rev-bardali-commission-total");
+    if (bardaliCommEl) bardaliCommEl.textContent = inr(totalBardaliCommission);
+    const bardaliPayEl2 = document.getElementById("rev-bardali-payable-total");
+    if (bardaliPayEl2) bardaliPayEl2.textContent = inr(totalBardaliPayable);
+    const bardaliGrossEl = document.getElementById("rev-bardali-gross-total");
+    if (bardaliGrossEl) bardaliGrossEl.textContent = inr(totalBardaliGross);
+
+    // Build daily map and render chart + table (responsive to selected department)
+    const dailyMap = buildDailyMap(allPaid, revSelectedDept);
+    renderRevenueChart(dailyMap, revSelectedDept);
+    renderDailyTable(dailyMap);
+
+    if (window.lucide) window.lucide.createIcons();
   }
 
   // ---------- staff management (admin) ----------
@@ -3853,6 +4524,11 @@
     const { data, error } = await window.sb.from("settings").select("*").eq("id", 1).maybeSingle();
     if (error || !data) return;
     cafeSettings = data;
+    if (data.bros_burger_commission != null) partnerSettings.bros_burger_commission = Number(data.bros_burger_commission);
+    if (data.bros_burger_whatsapp != null) partnerSettings.bros_burger_whatsapp = data.bros_burger_whatsapp;
+    if (data.bardali_commission != null) partnerSettings.bardali_commission = Number(data.bardali_commission);
+    if (data.bardali_whatsapp != null) partnerSettings.bardali_whatsapp = data.bardali_whatsapp;
+    syncPartnerSettingsInputs();
     document.getElementById("admin-rate").value = data.default_rate;
     document.getElementById("rate").value = data.default_rate;
     calculateAmount();
@@ -3942,6 +4618,7 @@
     initMissingRecordModal();
     initExpenseEditModal();
     initRecordsFilter();
+    initPartnerSettingsForm();
     switchPage("page-overview");
 
     // LinkyPot: wire bulk historical sync button
@@ -4178,11 +4855,24 @@ notify pgrst, 'reload schema';`;
       const name = document.getElementById("menu-name").value.trim();
       const category = document.getElementById("menu-category").value || "Specialty Coffee (Hot & Cold)";
       const price = Math.max(0, Number(document.getElementById("menu-price").value) || 0);
+      const supplier = document.getElementById("menu-supplier") ? document.getElementById("menu-supplier").value : "chillpill";
       if (!name) return;
       if (!sdkReady) return showToast("Supabase isn't connected yet.");
-      const { error } = await window.sb.from("menu_items").insert({ name, price, category });
-      if (error) showToast("Could not add menu item: " + error.message);
-      else { event.target.reset(); showToast("Menu item added."); }
+
+      let insertPayload = { name, price, category, supplier };
+      let { error } = await window.sb.from("menu_items").insert(insertPayload);
+      if (error && error.message && error.message.includes("supplier")) {
+        const fallback = await window.sb.from("menu_items").insert({ name, price, category });
+        error = fallback.error;
+      }
+      if (error) {
+        showToast("Could not add menu item: " + error.message);
+      } else {
+        event.target.reset();
+        const supInput = document.getElementById("menu-supplier");
+        if (supInput) supInput.value = "chillpill";
+        showToast("Menu item added.");
+      }
     });
 
     const seedMenuBtn = document.getElementById("seed-menu-btn");
