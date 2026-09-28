@@ -416,14 +416,46 @@
   }
 
   // ---------- menu (food & drinks) ----------
-  function menuOptions(selectedId) {
-    return (
-      '<option value="">Select item</option>' +
-      menuItems.map((item) => {
-        const supTag = item.supplier === "bros_burger" ? " [Bro's Burger]" : item.supplier === "bardali" ? " [Bardali]" : "";
-        return `<option value="${item.id}" ${item.id === selectedId ? "selected" : ""}>${item.name}${supTag} (${inr(item.price)})</option>`;
-      }).join("")
-    );
+  function menuOptions(selectedId, supplierFilter = "all") {
+    const supFilter = supplierFilter || "all";
+    const filtered = supFilter === "all"
+      ? menuItems
+      : menuItems.filter((m) => (m.supplier || "chillpill") === supFilter);
+
+    if (!filtered.length) {
+      return '<option value="">No items for this source</option>';
+    }
+
+    if (supFilter !== "all") {
+      return (
+        '<option value="">Select item</option>' +
+        filtered.map((item) => {
+          return `<option value="${item.id}" ${item.id === selectedId ? "selected" : ""}>${item.name} (${inr(item.price)})</option>`;
+        }).join("")
+      );
+    }
+
+    const chillItems = menuItems.filter((m) => !m.supplier || m.supplier === "chillpill");
+    const brosItems = menuItems.filter((m) => m.supplier === "bros_burger");
+    const bardaliItems = menuItems.filter((m) => m.supplier === "bardali");
+
+    let html = '<option value="">Select item</option>';
+    if (chillItems.length) {
+      html += '<optgroup label="🍟 ChillPill (Own Drinks & Snacks)">' +
+        chillItems.map((m) => `<option value="${m.id}" ${m.id === selectedId ? "selected" : ""}>${m.name} (${inr(m.price)}) · ChillPill</option>`).join("") +
+        '</optgroup>';
+    }
+    if (brosItems.length) {
+      html += '<optgroup label="🍔 Bro\'s Burger (Partner)">' +
+        brosItems.map((m) => `<option value="${m.id}" ${m.id === selectedId ? "selected" : ""}>${m.name} (${inr(m.price)}) · Bro\'s</option>`).join("") +
+        '</optgroup>';
+    }
+    if (bardaliItems.length) {
+      html += '<optgroup label="🍽️ Bardali (Partner)">' +
+        bardaliItems.map((m) => `<option value="${m.id}" ${m.id === selectedId ? "selected" : ""}>${m.name} (${inr(m.price)}) · Bardali</option>`).join("") +
+        '</optgroup>';
+    }
+    return html;
   }
 
   // ---------- generic food-order row builder, reused by New Session,
@@ -435,24 +467,42 @@
     frChangeHandlers[containerId] = onChange;
   }
 
-  function addFrRow(containerId, selectedId = "", qty = 1, customUnitPrice = null) {
+  function addFrRow(containerId, selectedId = "", qty = 1, customUnitPrice = null, preselectedSupplier = "all") {
     const hasCustomPriceCol = containerId === "mr-food-rows" || containerId === "edit-food-rows";
     const isInternalActive = (containerId === "mr-food-rows" && !!document.getElementById("mr-is-internal-sale")?.checked) ||
                              (containerId === "edit-food-rows" && !!document.getElementById("edit-is-internal-sale")?.checked);
 
+    let initialSupplier = preselectedSupplier || "all";
+    if (selectedId) {
+      const match = menuItems.find((m) => m.id === selectedId);
+      if (match) initialSupplier = match.supplier || "chillpill";
+    }
+
     const row = document.createElement("div");
     if (hasCustomPriceCol) {
-      row.className = "fr-row grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 items-center";
+      row.className = "fr-row grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-2 items-center";
       row.innerHTML = `
-        <select aria-label="Food or drink item" class="form-control fr-select text-xs py-2">${menuOptions(selectedId)}</select>
+        <select aria-label="Food source" class="form-control fr-source text-xs py-2 w-24 sm:w-28 bg-[#161d2a] border-slate-700 text-slate-300 font-medium">
+          <option value="all" ${initialSupplier === "all" ? "selected" : ""}>🌐 All</option>
+          <option value="chillpill" ${initialSupplier === "chillpill" ? "selected" : ""}>🍟 ChillPill</option>
+          <option value="bros_burger" ${initialSupplier === "bros_burger" ? "selected" : ""}>🍔 Bro's</option>
+          <option value="bardali" ${initialSupplier === "bardali" ? "selected" : ""}>🍽️ Bardali</option>
+        </select>
+        <select aria-label="Food or drink item" class="form-control fr-select text-xs py-2 min-w-0">${menuOptions(selectedId, initialSupplier)}</select>
         <input aria-label="Quantity" type="number" min="1" value="${qty}" class="form-control fr-qty w-14 text-center text-xs py-2">
         <input aria-label="Unit price" type="number" min="0" step="1" placeholder="Price" class="form-control fr-unit-price w-20 text-right mono text-xs py-2 font-semibold ${isInternalActive ? 'bg-[#101520] border-[#d8ff45]/60 text-[#d8ff45]' : 'bg-slate-900/50 border-slate-700 text-slate-400'}" ${isInternalActive ? '' : 'disabled'} title="${isInternalActive ? 'Custom price for internal sale' : 'Turn on Internal Sale to edit price'}">
         <span class="fr-price mono min-w-14 text-right text-xs text-[#d8ff45] font-bold">रु 0</span>
         <button type="button" aria-label="Remove item" class="fr-remove h-9 w-9 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400 text-lg leading-none cursor-pointer">×</button>`;
     } else {
-      row.className = "fr-row grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center";
+      row.className = "fr-row grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 items-center";
       row.innerHTML = `
-        <select aria-label="Food or drink item" class="form-control fr-select text-xs py-2">${menuOptions(selectedId)}</select>
+        <select aria-label="Food source" class="form-control fr-source text-xs py-2 w-24 sm:w-28 bg-[#161d2a] border-slate-700 text-slate-300 font-medium">
+          <option value="all" ${initialSupplier === "all" ? "selected" : ""}>🌐 All</option>
+          <option value="chillpill" ${initialSupplier === "chillpill" ? "selected" : ""}>🍟 ChillPill</option>
+          <option value="bros_burger" ${initialSupplier === "bros_burger" ? "selected" : ""}>🍔 Bro's</option>
+          <option value="bardali" ${initialSupplier === "bardali" ? "selected" : ""}>🍽️ Bardali</option>
+        </select>
+        <select aria-label="Food or drink item" class="form-control fr-select text-xs py-2 min-w-0">${menuOptions(selectedId, initialSupplier)}</select>
         <input aria-label="Quantity" type="number" min="1" value="${qty}" class="form-control fr-qty w-14 text-center text-xs py-2">
         <span class="fr-price mono min-w-14 text-right text-xs text-[#d8ff45] font-bold">रु 0</span>
         <button type="button" aria-label="Remove item" class="fr-remove h-9 w-9 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400 text-lg leading-none cursor-pointer">×</button>`;
@@ -460,10 +510,24 @@
 
     const notify = () => { const cb = frChangeHandlers[containerId]; if (cb) cb(); };
     const unitPriceInput = row.querySelector(".fr-unit-price");
+    const sourceSelect = row.querySelector(".fr-source");
+    const itemSelect = row.querySelector(".fr-select");
 
-    row.querySelector(".fr-select").addEventListener("change", () => {
+    sourceSelect.addEventListener("change", () => {
+      const chosenSource = sourceSelect.value;
+      const currentVal = itemSelect.value;
+      itemSelect.innerHTML = menuOptions(currentVal, chosenSource);
+      updateFrRow(row);
+      notify();
+    });
+
+    itemSelect.addEventListener("change", () => {
       if (unitPriceInput) {
         unitPriceInput.dataset.userEdited = "false";
+      }
+      const item = menuItems.find((entry) => entry.id === itemSelect.value);
+      if (item && item.supplier && sourceSelect.value === "all") {
+        sourceSelect.value = item.supplier;
       }
       updateFrRow(row);
       notify();
@@ -495,6 +559,7 @@
 
   function updateFrRow(row) {
     const select = row.querySelector(".fr-select");
+    const sourceSelect = row.querySelector(".fr-source");
     const item = menuItems.find((entry) => entry.id === select.value);
     const quantity = Math.max(1, Number(row.querySelector(".fr-qty").value) || 1);
     const unitPriceInput = row.querySelector(".fr-unit-price");
@@ -515,7 +580,9 @@
     row.dataset.itemId = item ? item.id : "";
     row.dataset.itemName = item ? item.name : "";
     row.dataset.unitPrice = unitPrice;
-    row.dataset.supplier = item ? (item.supplier || "chillpill") : "";
+
+    const chosenSupplier = item ? (item.supplier || "chillpill") : (sourceSelect && sourceSelect.value !== "all" ? sourceSelect.value : "chillpill");
+    row.dataset.supplier = chosenSupplier;
 
     const priceEl = row.querySelector(".fr-price");
     if (priceEl) priceEl.textContent = inr(price);
@@ -554,14 +621,34 @@
   }
 
   function refreshFoodMenus() {
-    document.querySelectorAll(".fr-select").forEach((select) => {
+    document.querySelectorAll(".fr-row").forEach((row) => {
+      const select = row.querySelector(".fr-select");
+      const sourceSelect = row.querySelector(".fr-source");
+      if (!select) return;
       const current = select.value;
-      select.innerHTML = menuOptions(current);
-      updateFrRow(select.closest(".fr-row"));
+      const curSource = sourceSelect ? sourceSelect.value : "all";
+      select.innerHTML = menuOptions(current, curSource);
+      updateFrRow(row);
     });
-    document.getElementById("menu-empty-note").classList.toggle("hidden", menuItems.length > 0);
-    document.getElementById("waiting-menu-empty").classList.toggle("hidden", menuItems.length > 0);
+    const emptyNote = document.getElementById("menu-empty-note");
+    if (emptyNote) emptyNote.classList.toggle("hidden", menuItems.length > 0);
+    const waitingEmpty = document.getElementById("waiting-menu-empty");
+    if (waitingEmpty) waitingEmpty.classList.toggle("hidden", menuItems.length > 0);
     Object.values(frChangeHandlers).forEach((cb) => cb && cb());
+  }
+
+  function initFoodQuickAddChips() {
+    document.querySelectorAll(".quick-add-source-chip").forEach((btn) => {
+      if (btn.dataset.wired) return;
+      btn.dataset.wired = "1";
+      btn.addEventListener("click", () => {
+        const target = btn.dataset.target;
+        const source = btn.dataset.source;
+        if (target) {
+          addFrRow(target, "", 1, null, source);
+        }
+      });
+    });
   }
 
   function calculateAmount() {
@@ -652,108 +739,266 @@
     return { conflict: null, blocked: false };
   }
 
-  function renderMenu() {
-    const list = document.getElementById("menu-list");
-    if (!list) return;
-    list.innerHTML = "";
-    menuItems.forEach((item) => {
-      const line = document.createElement("div");
-      line.className = "rounded-lg border border-slate-700 bg-[#111722] px-3 py-2 text-sm";
-      line.dataset.menuId = item.id;
+  let menuActiveSource = "all";  // "all" | "chillpill" | "bros_burger" | "bardali"
+  let menuLayoutMode = "tabs";    // "tabs" | "columns"
+  let menuSearchQuery = "";
+  let menuNavWired = false;
 
-      function renderViewMode() {
-        const supplier = item.supplier || "chillpill";
-        const brosComm = partnerSettings ? partnerSettings.bros_burger_commission : 20;
-        const bardaliComm = partnerSettings ? partnerSettings.bardali_commission : 20;
-        const supplierBadge = supplier === "bros_burger"
-          ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 font-semibold">🍔 Bro's Burger (${brosComm}%)</span>`
-          : supplier === "bardali"
-          ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 shrink-0 font-semibold">🍽️ Bardali (${bardaliComm}%)</span>`
-          : `<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 shrink-0">ChillPill (Own)</span>`;
+  function initMenuNavOnce() {
+    if (menuNavWired) return;
+    menuNavWired = true;
 
-        line.innerHTML = `
-          <div class="flex items-center justify-between gap-2">
-            <div class="flex items-center gap-2 min-w-0 flex-wrap">
-              <span class="font-medium truncate">${item.name}</span>
-              ${supplierBadge}
-              ${item.category ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 shrink-0">${item.category}</span>` : ""}
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-              <span class="mono text-[#d8ff45] font-semibold">${inr(item.price)}</span>
-              <button type="button" aria-label="Edit ${item.name}" class="menu-edit-btn text-slate-400 hover:text-[#d8ff45] transition-colors p-0.5 rounded cursor-pointer" title="Edit Item">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              </button>
-              <button type="button" aria-label="Remove ${item.name}" class="menu-del-btn text-slate-400 hover:text-red-400 transition-colors p-0.5 rounded text-base leading-none cursor-pointer" title="Delete Item">×</button>
-            </div>
-          </div>`;
-        line.querySelector(".menu-edit-btn").addEventListener("click", () => renderEditMode());
-        line.querySelector(".menu-del-btn").addEventListener("click", async () => {
-          const { error } = await window.sb.from("menu_items").delete().eq("id", item.id);
-          if (error) showToast("Could not remove this menu item.");
+    // Source navigation tabs
+    document.querySelectorAll(".menu-source-tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        menuActiveSource = tab.dataset.source || "all";
+        document.querySelectorAll(".menu-source-tab").forEach((t) => {
+          const active = (t.dataset.source || "all") === menuActiveSource;
+          t.className = `menu-source-tab px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+            active ? "border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45]" : "border-slate-700 text-slate-300 hover:border-slate-500"
+          }`;
         });
-      }
-
-      function renderEditMode() {
-        const curSup = item.supplier || "chillpill";
-        line.innerHTML = `
-          <div class="flex flex-wrap items-center gap-2">
-            <input class="menu-edit-name form-control text-sm flex-1 min-w-[120px] py-1.5" type="text" value="${item.name.replace(/"/g, '&quot;')}" placeholder="Item name" />
-            <input class="menu-edit-price form-control text-sm w-20 py-1.5 mono font-semibold" type="number" min="0" value="${item.price}" placeholder="Price" />
-            <select class="menu-edit-supplier form-control text-xs py-1.5 w-36 font-medium">
-              <option value="chillpill" ${curSup === "chillpill" ? "selected" : ""}>ChillPill (Own)</option>
-              <option value="bros_burger" ${curSup === "bros_burger" ? "selected" : ""}>Bro's Burger</option>
-              <option value="bardali" ${curSup === "bardali" ? "selected" : ""}>Bardali</option>
-            </select>
-            <div class="flex gap-1.5 shrink-0">
-              <button type="button" class="menu-save-btn rounded-lg px-3 py-1.5 text-xs font-bold cursor-pointer" style="background:#d8ff45;color:#10141e;">Save</button>
-              <button type="button" class="menu-cancel-btn rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:text-white cursor-pointer">Cancel</button>
-            </div>
-          </div>`;
-        const nameInput = line.querySelector(".menu-edit-name");
-        const priceInput = line.querySelector(".menu-edit-price");
-        const supplierInput = line.querySelector(".menu-edit-supplier");
-        nameInput.focus();
-        line.querySelector(".menu-cancel-btn").addEventListener("click", () => renderViewMode());
-        line.querySelector(".menu-save-btn").addEventListener("click", async () => {
-          const newName = nameInput.value.trim();
-          const newPrice = parseFloat(priceInput.value);
-          const newSupplier = supplierInput.value;
-          if (!newName) return showToast("Item name cannot be empty.");
-          if (isNaN(newPrice) || newPrice < 0) return showToast("Please enter a valid price.");
-          const btn = line.querySelector(".menu-save-btn");
-          btn.disabled = true;
-          btn.textContent = "Saving…";
-
-          let updatePayload = { name: newName, price: newPrice, supplier: newSupplier };
-          let { error } = await window.sb.from("menu_items").update(updatePayload).eq("id", item.id);
-          if (error && error.message && error.message.includes("supplier")) {
-            const fallback = await window.sb.from("menu_items").update({ name: newName, price: newPrice }).eq("id", item.id);
-            error = fallback.error;
-          }
-          if (error) {
-            showToast("Could not save changes: " + error.message);
-            btn.disabled = false;
-            btn.textContent = "Save";
-          } else {
-            item.name = newName;
-            item.price = newPrice;
-            item.supplier = newSupplier;
-            renderViewMode();
-            showToast("Menu item updated.");
-          }
-        });
-        // Save on Enter key in inputs
-        [nameInput, priceInput].forEach((inp) => {
-          inp.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") { e.preventDefault(); line.querySelector(".menu-save-btn").click(); }
-            if (e.key === "Escape") renderViewMode();
-          });
-        });
-      }
-
-      renderViewMode();
-      list.appendChild(line);
+        renderMenu();
+      });
     });
+
+    // Layout toggle (Tabs vs 3 Columns)
+    document.querySelectorAll(".menu-layout-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        menuLayoutMode = btn.dataset.layout || "tabs";
+        document.querySelectorAll(".menu-layout-btn").forEach((b) => {
+          const active = (b.dataset.layout || "tabs") === menuLayoutMode;
+          b.className = `menu-layout-btn px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+            active ? "bg-[#d8ff45] text-[#10141e]" : "text-slate-400 hover:text-white"
+          }`;
+        });
+        const tabView = document.getElementById("menu-tab-view");
+        const colsView = document.getElementById("menu-columns-view");
+        const sourceNav = document.getElementById("menu-source-nav");
+        if (menuLayoutMode === "columns") {
+          if (tabView) tabView.classList.add("hidden");
+          if (colsView) colsView.classList.remove("hidden");
+          if (sourceNav) sourceNav.classList.add("hidden");
+        } else {
+          if (tabView) tabView.classList.remove("hidden");
+          if (colsView) colsView.classList.add("hidden");
+          if (sourceNav) sourceNav.classList.remove("hidden");
+        }
+        renderMenu();
+      });
+    });
+
+    // Real-time Search input
+    const searchInp = document.getElementById("menu-search-input");
+    if (searchInp) {
+      searchInp.addEventListener("input", () => {
+        menuSearchQuery = searchInp.value.trim().toLowerCase();
+        renderMenu();
+      });
+    }
+  }
+
+  function createMenuItemCard(item) {
+    const line = document.createElement("div");
+    line.className = "rounded-xl border border-slate-700/80 bg-[#111722] p-3 text-sm transition hover:border-slate-600";
+    line.dataset.menuId = item.id;
+
+    function renderViewMode() {
+      const supplier = item.supplier || "chillpill";
+      const brosComm = partnerSettings ? partnerSettings.bros_burger_commission : 20;
+      const bardaliComm = partnerSettings ? partnerSettings.bardali_commission : 20;
+      const supplierBadge = supplier === "bros_burger"
+        ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 font-semibold">🍔 Bro's Burger (${brosComm}%)</span>`
+        : supplier === "bardali"
+        ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 shrink-0 font-semibold">🍽️ Bardali (${bardaliComm}%)</span>`
+        : `<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 shrink-0 font-semibold">🍟 ChillPill (Own · 100%)</span>`;
+
+      line.innerHTML = `
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0 flex-wrap">
+            <span class="font-bold text-slate-100 truncate">${item.name}</span>
+            ${supplierBadge}
+            ${item.category ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800/80 text-slate-400 border border-slate-700 shrink-0">${item.category}</span>` : ""}
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="mono text-[#d8ff45] font-bold text-sm">${inr(item.price)}</span>
+            <button type="button" aria-label="Edit ${item.name}" class="menu-edit-btn text-slate-400 hover:text-[#d8ff45] transition-colors p-1 rounded cursor-pointer" title="Edit Item">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <button type="button" aria-label="Remove ${item.name}" class="menu-del-btn text-slate-400 hover:text-red-400 transition-colors p-1 rounded text-lg leading-none cursor-pointer" title="Delete Item">×</button>
+          </div>
+        </div>`;
+      line.querySelector(".menu-edit-btn").addEventListener("click", () => renderEditMode());
+      line.querySelector(".menu-del-btn").addEventListener("click", async () => {
+        if (!confirm(`Delete "${item.name}" from menu?`)) return;
+        const { error } = await window.sb.from("menu_items").delete().eq("id", item.id);
+        if (error) {
+          showToast("Could not remove this menu item.");
+        } else {
+          menuItems = menuItems.filter((m) => m.id !== item.id);
+          renderMenu();
+          refreshFoodMenus();
+          showToast("Menu item deleted.");
+        }
+      });
+    }
+
+    function renderEditMode() {
+      const curSup = item.supplier || "chillpill";
+      line.innerHTML = `
+        <div class="flex flex-wrap items-center gap-2">
+          <input class="menu-edit-name form-control text-xs flex-1 min-w-[120px] py-1.5" type="text" value="${item.name.replace(/"/g, '&quot;')}" placeholder="Item name" />
+          <input class="menu-edit-price form-control text-xs w-20 py-1.5 mono font-semibold" type="number" min="0" value="${item.price}" placeholder="Price" />
+          <select class="menu-edit-supplier form-control text-xs py-1.5 w-32 font-medium">
+            <option value="chillpill" ${curSup === "chillpill" ? "selected" : ""}>🍟 ChillPill</option>
+            <option value="bros_burger" ${curSup === "bros_burger" ? "selected" : ""}>🍔 Bro's Burger</option>
+            <option value="bardali" ${curSup === "bardali" ? "selected" : ""}>🍽️ Bardali</option>
+          </select>
+          <div class="flex gap-1.5 shrink-0">
+            <button type="button" class="menu-save-btn rounded-lg px-2.5 py-1.5 text-xs font-bold cursor-pointer" style="background:#d8ff45;color:#10141e;">Save</button>
+            <button type="button" class="menu-cancel-btn rounded-lg border border-slate-600 px-2.5 py-1.5 text-xs text-slate-300 hover:text-white cursor-pointer">Cancel</button>
+          </div>
+        </div>`;
+      const nameInput = line.querySelector(".menu-edit-name");
+      const priceInput = line.querySelector(".menu-edit-price");
+      const supplierInput = line.querySelector(".menu-edit-supplier");
+      nameInput.focus();
+      line.querySelector(".menu-cancel-btn").addEventListener("click", () => renderViewMode());
+      line.querySelector(".menu-save-btn").addEventListener("click", async () => {
+        const newName = nameInput.value.trim();
+        const newPrice = parseFloat(priceInput.value);
+        const newSupplier = supplierInput.value;
+        if (!newName) return showToast("Item name cannot be empty.");
+        if (isNaN(newPrice) || newPrice < 0) return showToast("Please enter a valid price.");
+        const btn = line.querySelector(".menu-save-btn");
+        btn.disabled = true;
+        btn.textContent = "Saving…";
+
+        let updatePayload = { name: newName, price: newPrice, supplier: newSupplier };
+        let { error } = await window.sb.from("menu_items").update(updatePayload).eq("id", item.id);
+        if (error && error.message && error.message.includes("supplier")) {
+          const fallback = await window.sb.from("menu_items").update({ name: newName, price: newPrice }).eq("id", item.id);
+          error = fallback.error;
+        }
+        if (error) {
+          showToast("Could not save changes: " + error.message);
+          btn.disabled = false;
+          btn.textContent = "Save";
+        } else {
+          item.name = newName;
+          item.price = newPrice;
+          item.supplier = newSupplier;
+          renderMenu();
+          refreshFoodMenus();
+          showToast("Menu item updated.");
+        }
+      });
+      [nameInput, priceInput].forEach((inp) => {
+        inp.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") { e.preventDefault(); line.querySelector(".menu-save-btn").click(); }
+          if (e.key === "Escape") renderViewMode();
+        });
+      });
+    }
+
+    renderViewMode();
+    return line;
+  }
+
+  function renderMenu() {
+    initMenuNavOnce();
+
+    const allCount = menuItems.length;
+    const chillCount = menuItems.filter((m) => !m.supplier || m.supplier === "chillpill").length;
+    const brosCount = menuItems.filter((m) => m.supplier === "bros_burger").length;
+    const bardaliCount = menuItems.filter((m) => m.supplier === "bardali").length;
+
+    // Update count badges
+    const cAll = document.getElementById("menu-count-all");
+    if (cAll) cAll.textContent = allCount;
+    const cChill = document.getElementById("menu-count-chillpill");
+    if (cChill) cChill.textContent = chillCount;
+    const cBros = document.getElementById("menu-count-bros");
+    if (cBros) cBros.textContent = brosCount;
+    const cBardali = document.getElementById("menu-count-bardali");
+    if (cBardali) cBardali.textContent = bardaliCount;
+
+    const colChill = document.getElementById("col-count-chillpill");
+    if (colChill) colChill.textContent = `${chillCount} items`;
+    const colBros = document.getElementById("col-count-bros");
+    if (colBros) colBros.textContent = `${brosCount} items`;
+    const colBardali = document.getElementById("col-count-bardali");
+    if (colBardali) colBardali.textContent = `${bardaliCount} items`;
+
+    // Filter by search query
+    const filterBySearch = (item) => {
+      if (!menuSearchQuery) return true;
+      const n = (item.name || "").toLowerCase();
+      const c = (item.category || "").toLowerCase();
+      const s = (item.supplier || "").toLowerCase();
+      return n.includes(menuSearchQuery) || c.includes(menuSearchQuery) || s.includes(menuSearchQuery);
+    };
+
+    if (menuLayoutMode === "columns") {
+      // 3-Column View
+      const colChillList = document.getElementById("menu-col-chillpill");
+      const colBrosList = document.getElementById("menu-col-bros");
+      const colBardaliList = document.getElementById("menu-col-bardali");
+
+      if (colChillList) {
+        colChillList.innerHTML = "";
+        const items = menuItems.filter((m) => (!m.supplier || m.supplier === "chillpill") && filterBySearch(m));
+        if (!items.length) {
+          colChillList.innerHTML = '<p class="text-xs text-slate-500 py-3 text-center">No ChillPill items found.</p>';
+        } else {
+          items.forEach((item) => colChillList.appendChild(createMenuItemCard(item)));
+        }
+      }
+
+      if (colBrosList) {
+        colBrosList.innerHTML = "";
+        const items = menuItems.filter((m) => m.supplier === "bros_burger" && filterBySearch(m));
+        if (!items.length) {
+          colBrosList.innerHTML = '<p class="text-xs text-slate-500 py-3 text-center">No Bro\'s Burger items found.</p>';
+        } else {
+          items.forEach((item) => colBrosList.appendChild(createMenuItemCard(item)));
+        }
+      }
+
+      if (colBardaliList) {
+        colBardaliList.innerHTML = "";
+        const items = menuItems.filter((m) => m.supplier === "bardali" && filterBySearch(m));
+        if (!items.length) {
+          colBardaliList.innerHTML = '<p class="text-xs text-slate-500 py-3 text-center">No Bardali items found.</p>';
+        } else {
+          items.forEach((item) => colBardaliList.appendChild(createMenuItemCard(item)));
+        }
+      }
+    } else {
+      // Tabbed View
+      const list = document.getElementById("menu-list");
+      const emptyEl = document.getElementById("menu-list-empty");
+      if (list) {
+        list.innerHTML = "";
+        let items = menuItems.filter(filterBySearch);
+        if (menuActiveSource !== "all") {
+          items = items.filter((m) => (m.supplier || "chillpill") === menuActiveSource);
+        }
+
+        if (!items.length) {
+          if (emptyEl) {
+            emptyEl.classList.remove("hidden");
+            const srcName = menuActiveSource === "bros_burger" ? "Bro's Burger" : menuActiveSource === "bardali" ? "Bardali" : menuActiveSource === "chillpill" ? "ChillPill" : "";
+            emptyEl.textContent = srcName ? `No menu items found for ${srcName}.` : "No menu items match your search.";
+          }
+        } else {
+          if (emptyEl) emptyEl.classList.add("hidden");
+          items.forEach((item) => list.appendChild(createMenuItemCard(item)));
+        }
+      }
+    }
+
+    if (window.lucide) window.lucide.createIcons();
   }
 
   // ---------- bookings ----------
@@ -5537,6 +5782,7 @@ notify pgrst, 'reload schema';`;
     setInterval(updateClock, 1000);
     setInterval(checkTimeAlerts, 5000);
     lucide.createIcons();
+    initFoodQuickAddChips();
 
     initStaffResetPwModal();
 
