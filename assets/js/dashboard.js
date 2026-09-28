@@ -1836,8 +1836,24 @@
     }
   }
 
+  /**
+   * Returns true only for real customer phone numbers.
+   * Rejects: blank, "Internal", "—", "-", or anything that isn't
+   * mostly digits (at least 7 numeric digits required).
+   */
+  function isRealCustomerPhone(phone) {
+    if (!phone) return false;
+    const p = phone.trim();
+    if (!p || p === "—" || p === "-") return false;
+    // Must not be the literal placeholder used for internal sales
+    if (/^internal$/i.test(p)) return false;
+    // Must contain at least 7 digits
+    const digits = p.replace(/\D/g, "");
+    return digits.length >= 7;
+  }
+
   async function logVisitToLinkyPot(phone, name, amount, redeemed = false) {
-    if (!phone) return;
+    if (!isRealCustomerPhone(phone)) return;
     try {
       const res = await fetch(getLinkyPotApiUrl(), {
         method: "POST",
@@ -1875,14 +1891,21 @@
     syncBtn.disabled = true;
     syncText.textContent = "Checking records...";
 
-    let completedSessions = records.filter((r) => r.status === "Completed" && r.customer_phone && r.customer_phone.trim().length >= 7);
+    // Filter to real paying customers only — exclude internal sales, staff sessions, and placeholder phones
+    const isEligible = (r) =>
+      r.status === "Completed" &&
+      isRealCustomerPhone(r.customer_phone) &&
+      !(r.notes && r.notes.includes("[Internal Sale]")) &&
+      !(r.customer_name && /^internal/i.test(r.customer_name.trim()));
+
+    let completedSessions = records.filter(isEligible);
 
     // Also pull directly from Supabase if connected to ensure all historical records are included
     if (window.sb) {
       try {
         const { data: dbSessions } = await window.sb.from("sessions").select("*").eq("status", "Completed");
         if (dbSessions && dbSessions.length) {
-          const dbFiltered = dbSessions.filter((r) => r.customer_phone && r.customer_phone.trim().length >= 7);
+          const dbFiltered = dbSessions.filter(isEligible);
           if (dbFiltered.length >= completedSessions.length) {
             completedSessions = dbFiltered;
           }
@@ -1962,7 +1985,7 @@
     const lpBtn = document.getElementById("btn-apply-linkypot-reward");
 
     if (lpBadge) {
-      if (record.customer_phone && record.customer_phone.trim()) {
+      if (isRealCustomerPhone(record.customer_phone)) {
         lpBadge.classList.remove("hidden");
         lpText.textContent = "Checking LinkyPot loyalty...";
         if (lpBtn) lpBtn.classList.add("hidden");
