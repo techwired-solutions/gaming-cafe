@@ -5163,6 +5163,260 @@ notify pgrst, 'reload schema';`;
       });
     }
 
+    // ── BULK MENU IMPORT MODAL ──
+    (function initBulkImport() {
+      const modal      = document.getElementById("bulk-import-modal");
+      const closeBtn   = document.getElementById("bulk-import-modal-close");
+      const tabPrompt  = document.getElementById("bim-tab-prompt");
+      const tabImport  = document.getElementById("bim-tab-import");
+      const panelPrompt  = document.getElementById("bim-panel-prompt");
+      const panelImport  = document.getElementById("bim-panel-import");
+      const supplierSel  = document.getElementById("bim-supplier-select");
+      const promptText   = document.getElementById("bim-prompt-text");
+      const copyPromptBtn = document.getElementById("bim-copy-prompt-btn");
+      const importSupplier = document.getElementById("bim-import-supplier");
+      const jsonInput    = document.getElementById("bim-json-input");
+      const parseBtn     = document.getElementById("bim-parse-btn");
+      const parseError   = document.getElementById("bim-parse-error");
+      const previewArea  = document.getElementById("bim-preview-area");
+      const previewList  = document.getElementById("bim-preview-list");
+      const previewCount = document.getElementById("bim-preview-count");
+      const skipCount    = document.getElementById("bim-skip-count");
+      const clearBtn     = document.getElementById("bim-clear-btn");
+      const confirmBtn   = document.getElementById("bim-confirm-btn");
+      const confirmLabel = document.getElementById("bim-confirm-label");
+      const importMsg    = document.getElementById("bim-import-msg");
+
+      if (!modal) return;
+
+      const SUPPLIER_LABELS = {
+        chillpill:   "ChillPill Cafe",
+        bros_burger: "Bro's Burger",
+        bardali:     "Bardali"
+      };
+
+      const CATEGORIES = [
+        "Specialty Coffee (Hot & Cold)",
+        "Chilled Drinks & Refreshers",
+        "Bakery & Desserts",
+        "Hot Snacks & Bites",
+        "Burgers & Fast Food",
+        "Add-ons"
+      ];
+
+      function buildPrompt(supplier) {
+        const label = SUPPLIER_LABELS[supplier] || supplier;
+        return `You are a menu digitization assistant for a gaming cafe management system.
+
+I will attach a photo of the menu from "${label}". Please read it carefully and extract every item with its name, price, and category.
+
+Return ONLY a valid JSON array — no explanations, no markdown code fences, no extra text. Each object must have exactly these three keys:
+  • "name"     — the item name as written (string)
+  • "price"    — the price as a plain integer in Nepali Rupees (NPR), no currency symbol
+  • "category" — choose the closest match from this list:
+      "${CATEGORIES.join('"\n      "')}"
+
+Example output format:
+[
+  { "name": "Crispy Chicken Burger", "price": 320, "category": "Burgers & Fast Food" },
+  { "name": "Cheese Fries", "price": 180, "category": "Hot Snacks & Bites" },
+  { "name": "Cold Coffee", "price": 170, "category": "Specialty Coffee (Hot & Cold)" }
+]
+
+Rules:
+- If an item has multiple sizes/variants (e.g. "Small / Large"), create one entry per variant with the variant name appended, e.g. "Cold Coffee (Small)" and "Cold Coffee (Large)".
+- If a price is unclear or missing, set price to 0.
+- Do not include section headings, decorative text, or items that are clearly not food/drink.
+- Do not include any text outside the JSON array.
+
+Here is the menu image:`;
+      }
+
+      function updatePrompt() {
+        if (promptText) promptText.value = buildPrompt(supplierSel.value);
+      }
+
+      function openModal(presetSupplier) {
+        if (presetSupplier) {
+          supplierSel.value = presetSupplier;
+          importSupplier.value = presetSupplier;
+        }
+        updatePrompt();
+        switchTab("prompt");
+        resetImportPanel();
+        modal.classList.remove("hidden");
+        document.body.style.overflow = "hidden";
+      }
+
+      function closeModal() {
+        modal.classList.add("hidden");
+        document.body.style.overflow = "";
+      }
+
+      function switchTab(which) {
+        const isPrompt = which === "prompt";
+        panelPrompt.classList.toggle("hidden", !isPrompt);
+        panelImport.classList.toggle("hidden", isPrompt);
+
+        [tabPrompt, tabImport].forEach((btn, i) => {
+          const active = (i === 0) === isPrompt;
+          btn.classList.toggle("border-sky-400", active);
+          btn.classList.toggle("text-sky-300", active);
+          btn.classList.toggle("border-transparent", !active);
+          btn.classList.toggle("text-slate-400", !active);
+        });
+      }
+
+      function resetImportPanel() {
+        jsonInput.value = "";
+        parseError.classList.add("hidden");
+        previewArea.classList.add("hidden");
+        previewList.innerHTML = "";
+        importMsg.textContent = "";
+      }
+
+      // Open from main "Bulk Import" button
+      const mainBtn = document.getElementById("bulk-import-menu-btn");
+      if (mainBtn) mainBtn.addEventListener("click", () => openModal(null));
+
+      // Open from partner card buttons
+      document.querySelectorAll(".bulk-import-partner-btn").forEach(btn => {
+        btn.addEventListener("click", () => openModal(btn.dataset.supplier));
+      });
+
+      closeBtn.addEventListener("click", closeModal);
+      modal.addEventListener("click", e => { if (e.target === modal) closeModal(); });
+
+      tabPrompt.addEventListener("click", () => switchTab("prompt"));
+      tabImport.addEventListener("click", () => switchTab("import"));
+
+      supplierSel.addEventListener("change", updatePrompt);
+
+      copyPromptBtn.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(promptText.value);
+          copyPromptBtn.innerHTML = `<i data-lucide="check" width="11" height="11"></i>Copied!`;
+          lucide.createIcons({ nodes: [copyPromptBtn] });
+          setTimeout(() => {
+            copyPromptBtn.innerHTML = `<i data-lucide="copy" width="11" height="11"></i>Copy`;
+            lucide.createIcons({ nodes: [copyPromptBtn] });
+          }, 2000);
+        } catch (_) {
+          promptText.select();
+          document.execCommand("copy");
+          showToast("Prompt copied!");
+        }
+      });
+
+      clearBtn.addEventListener("click", resetImportPanel);
+
+      // Sync import-supplier when prompt supplier changes (convenience)
+      supplierSel.addEventListener("change", () => { importSupplier.value = supplierSel.value; });
+
+      let parsedItems = [];
+
+      parseBtn.addEventListener("click", () => {
+        parseError.classList.add("hidden");
+        previewArea.classList.add("hidden");
+        previewList.innerHTML = "";
+        parsedItems = [];
+
+        const raw = jsonInput.value.trim();
+        if (!raw) { parseError.textContent = "Please paste the JSON from the AI first."; parseError.classList.remove("hidden"); return; }
+
+        let arr;
+        try {
+          // Strip markdown code fences if AI wrapped in ```json ... ```
+          const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+          arr = JSON.parse(cleaned);
+        } catch (err) {
+          parseError.textContent = "Could not parse JSON: " + err.message + ". Make sure you copied only the JSON array from the AI.";
+          parseError.classList.remove("hidden");
+          return;
+        }
+
+        if (!Array.isArray(arr)) {
+          parseError.textContent = "Expected a JSON array (starting with [). Got something else.";
+          parseError.classList.remove("hidden");
+          return;
+        }
+
+        const supplier = importSupplier.value;
+        let skipped = 0;
+
+        parsedItems = arr.filter(item => {
+          if (!item || typeof item.name !== "string" || !item.name.trim()) return false;
+          const alreadyExists = menuItems.some(
+            m => m.name.trim().toLowerCase() === item.name.trim().toLowerCase() && m.supplier === supplier
+          );
+          if (alreadyExists) { skipped++; return false; }
+          return true;
+        }).map(item => ({
+          name: item.name.trim(),
+          price: Math.max(0, Math.round(Number(item.price) || 0)),
+          category: CATEGORIES.includes(item.category) ? item.category : "Hot Snacks & Bites",
+          supplier
+        }));
+
+        if (parsedItems.length === 0 && skipped === 0) {
+          parseError.textContent = "No valid items found in the JSON. Each item needs at least a \"name\" field.";
+          parseError.classList.remove("hidden");
+          return;
+        }
+
+        // Build preview
+        previewCount.textContent = parsedItems.length;
+        skipCount.textContent = skipped > 0 ? `(${skipped} already in system — will skip)` : "";
+        previewList.innerHTML = parsedItems.map(item => `
+          <div class="grid grid-cols-[1fr_auto_auto] gap-3 px-3 py-2 text-xs items-center">
+            <span class="text-slate-200 font-medium truncate">${item.name}</span>
+            <span class="mono font-bold text-[#d8ff45] text-right pr-4">${item.price}</span>
+            <span class="text-slate-500 text-[11px] truncate max-w-[120px]">${item.category}</span>
+          </div>`).join("");
+
+        confirmLabel.textContent = `Import ${parsedItems.length} Item${parsedItems.length !== 1 ? "s" : ""}`;
+        previewArea.classList.remove("hidden");
+        importMsg.textContent = "";
+      });
+
+      confirmBtn.addEventListener("click", async () => {
+        if (!parsedItems.length) return;
+        if (!sdkReady) return showToast("Supabase isn't connected yet.");
+
+        confirmBtn.disabled = true;
+        importMsg.textContent = "Importing…";
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const item of parsedItems) {
+          const { error } = await window.sb.from("menu_items").insert(item);
+          if (error) {
+            // Try fallback without supplier column
+            const { error: e2 } = await window.sb.from("menu_items").insert({ name: item.name, price: item.price, category: item.category });
+            if (e2) failCount++; else successCount++;
+          } else {
+            successCount++;
+          }
+        }
+
+        confirmBtn.disabled = false;
+        const msg = successCount > 0
+          ? `✅ Imported ${successCount} item${successCount !== 1 ? "s" : ""}!${failCount > 0 ? ` (${failCount} failed)` : ""}`
+          : `❌ Import failed for all items.`;
+        importMsg.textContent = msg;
+        confirmLabel.textContent = "Import All Items";
+
+        if (successCount > 0) {
+          fetchMenu();
+          parsedItems = [];
+          setTimeout(() => {
+            closeModal();
+            showToast(`Bulk import: ${successCount} menu item${successCount !== 1 ? "s" : ""} added.`);
+          }, 1200);
+        }
+      });
+    })();
+
     document.getElementById("content-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!sdkReady) return;

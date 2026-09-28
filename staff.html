@@ -1180,9 +1180,14 @@
             <div class="panel rounded-2xl p-5">
               <div class="flex items-center justify-between mb-3">
                 <h3 class="font-semibold text-lg">Add a menu item</h3>
-                <button id="seed-menu-btn" type="button" class="text-xs font-bold text-[#d8ff45] border border-[#d8ff45]/40 rounded-lg px-2.5 py-1 hover:bg-[#d8ff45]/10">
-                  <i data-lucide="sparkles" width="12" height="12" class="inline mr-1"></i>Seed Full Cafe Menu
-                </button>
+                <div class="flex items-center gap-2">
+                  <button id="bulk-import-menu-btn" type="button" class="text-xs font-bold text-sky-300 border border-sky-500/40 rounded-lg px-2.5 py-1 hover:bg-sky-500/10 flex items-center gap-1 transition" title="Bulk import menu items using AI">
+                    <i data-lucide="upload" width="12" height="12"></i>Bulk Import
+                  </button>
+                  <button id="seed-menu-btn" type="button" class="text-xs font-bold text-[#d8ff45] border border-[#d8ff45]/40 rounded-lg px-2.5 py-1 hover:bg-[#d8ff45]/10 flex items-center gap-1 transition">
+                    <i data-lucide="sparkles" width="12" height="12"></i>Seed Defaults
+                  </button>
+                </div>
               </div>
               <form id="menu-form" class="space-y-3">
                 <div class="grid sm:grid-cols-2 gap-3">
@@ -1240,7 +1245,12 @@
                   <div class="rounded-xl border border-amber-500/30 bg-[#161d2a] p-4">
                     <div class="flex items-center justify-between mb-2">
                       <span class="font-bold text-sm text-amber-300 flex items-center gap-1.5">🍔 Bro's Burger</span>
-                      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">20% Partner Discount</span>
+                      <div class="flex items-center gap-1.5">
+                        <button type="button" class="bulk-import-partner-btn text-[11px] font-bold text-sky-300 border border-sky-500/40 rounded-lg px-2 py-0.5 hover:bg-sky-500/10 flex items-center gap-1 transition" data-supplier="bros_burger" title="Bulk import Bro's Burger menu">
+                          <i data-lucide="upload" width="11" height="11"></i>Import Menu
+                        </button>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">20% Partner Discount</span>
+                      </div>
                     </div>
                     <div class="grid grid-cols-2 gap-2 text-xs">
                       <div>
@@ -1259,7 +1269,12 @@
                   <div class="rounded-xl border border-purple-500/30 bg-[#161d2a] p-4">
                     <div class="flex items-center justify-between mb-2">
                       <span class="font-bold text-sm text-purple-300 flex items-center gap-1.5">🍽️ Bardali</span>
-                      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40">Default 20%</span>
+                      <div class="flex items-center gap-1.5">
+                        <button type="button" class="bulk-import-partner-btn text-[11px] font-bold text-sky-300 border border-sky-500/40 rounded-lg px-2 py-0.5 hover:bg-sky-500/10 flex items-center gap-1 transition" data-supplier="bardali" title="Bulk import Bardali menu">
+                          <i data-lucide="upload" width="11" height="11"></i>Import Menu
+                        </button>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40">Default 20%</span>
+                      </div>
                     </div>
                     <div class="grid grid-cols-2 gap-2 text-xs">
                       <div>
@@ -2393,5 +2408,138 @@
   <script src="assets/js/supabaseClient.js"></script>
   <script src="assets/js/passwordHash.js"></script>
   <script src="assets/js/dashboard.js?v=20260916"></script>
+
+  <!-- ===================== BULK MENU IMPORT MODAL ===================== -->
+  <div id="bulk-import-modal" class="modal-overlay hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="modal-box rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden" style="background:#131b27;border:1px solid #1e293b;">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-700/60 shrink-0">
+        <div>
+          <h2 class="font-bold text-lg flex items-center gap-2">
+            <i data-lucide="upload" width="20" height="20" class="text-sky-400"></i>
+            Bulk Menu Import
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">Use AI to extract your menu from a photo, then paste the result here to import all items at once.</p>
+        </div>
+        <button id="bulk-import-modal-close" type="button" class="h-8 w-8 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400 text-lg leading-none cursor-pointer flex items-center justify-center">×</button>
+      </div>
+
+      <!-- Tab bar -->
+      <div class="flex border-b border-slate-700/60 shrink-0 px-6">
+        <button type="button" id="bim-tab-prompt" class="bim-tab py-3 mr-6 text-sm font-bold border-b-2 border-sky-400 text-sky-300 transition">
+          <i data-lucide="wand-sparkles" width="14" height="14" class="inline mr-1.5"></i>1. Get AI Prompt
+        </button>
+        <button type="button" id="bim-tab-import" class="bim-tab py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">
+          <i data-lucide="clipboard-paste" width="14" height="14" class="inline mr-1.5"></i>2. Paste &amp; Import
+        </button>
+      </div>
+
+      <!-- Scrollable body -->
+      <div class="overflow-y-auto flex-1 px-6 py-5 space-y-4">
+
+        <!-- ── TAB 1: GET AI PROMPT ── -->
+        <div id="bim-panel-prompt">
+          <div class="rounded-xl bg-[#0f1520] border border-sky-500/30 p-4 mb-4">
+            <p class="text-xs font-bold text-sky-300 mb-1 flex items-center gap-1.5">
+              <i data-lucide="lightbulb" width="13" height="13"></i>How it works
+            </p>
+            <ol class="text-xs text-slate-300 space-y-1.5 list-decimal list-inside">
+              <li>Copy the prompt below.</li>
+              <li>Open <strong>ChatGPT, Gemini, Claude</strong> (or any AI) and attach your menu photo.</li>
+              <li>Paste the prompt and send. The AI will return a JSON list of menu items.</li>
+              <li>Copy that JSON, go to the <strong>"Paste &amp; Import"</strong> tab, paste it, preview, and confirm.</li>
+            </ol>
+          </div>
+
+          <!-- Supplier selector -->
+          <div class="mb-3">
+            <label class="block text-xs text-slate-400 mb-1.5" for="bim-supplier-select">Which restaurant is this menu for?</label>
+            <select id="bim-supplier-select" class="form-control text-sm font-semibold w-full sm:w-72">
+              <option value="chillpill">🍟 ChillPill Cafe (Own)</option>
+              <option value="bros_burger">🍔 Bro's Burger (Partner)</option>
+              <option value="bardali">🍽️ Bardali (Partner)</option>
+            </select>
+          </div>
+
+          <!-- Prompt box -->
+          <div class="relative">
+            <label class="block text-xs text-slate-400 mb-1.5">AI Prompt (copy this)</label>
+            <textarea id="bim-prompt-text" readonly rows="14"
+              class="w-full rounded-xl bg-[#0a0e17] border border-slate-700 text-slate-200 text-xs font-mono p-4 resize-none focus:outline-none leading-relaxed"></textarea>
+            <button id="bim-copy-prompt-btn" type="button"
+              class="absolute top-8 right-3 text-[11px] font-bold text-sky-300 border border-sky-500/40 rounded-lg px-2.5 py-1 bg-[#0a0e17] hover:bg-sky-500/10 flex items-center gap-1 transition">
+              <i data-lucide="copy" width="11" height="11"></i>Copy
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-2">Tip: for best results, take a clear, well-lit photo of the full menu and make sure all prices are visible.</p>
+        </div>
+
+        <!-- ── TAB 2: PASTE & IMPORT ── -->
+        <div id="bim-panel-import" class="hidden space-y-4">
+          <!-- Paste area -->
+          <div>
+            <label class="block text-xs text-slate-400 mb-1.5">Paste the JSON from AI here</label>
+            <textarea id="bim-json-input" rows="8" placeholder='Paste the AI-generated JSON here, e.g.:
+[
+  { "name": "Crispy Burger", "price": 320, "category": "Burgers & Fast Food" },
+  { "name": "Cheese Fries",  "price": 180, "category": "Hot Snacks & Bites" }
+]'
+              class="w-full rounded-xl bg-[#0a0e17] border border-slate-700 text-slate-200 text-xs font-mono p-4 resize-none focus:outline-none focus:border-sky-500 leading-relaxed transition placeholder-slate-600"></textarea>
+          </div>
+
+          <!-- Parse controls -->
+          <div class="flex flex-wrap items-center gap-3">
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="bim-import-supplier">Import as supplier</label>
+              <select id="bim-import-supplier" class="form-control text-xs py-1.5 font-semibold">
+                <option value="chillpill">🍟 ChillPill Cafe</option>
+                <option value="bros_burger">🍔 Bro's Burger</option>
+                <option value="bardali">🍽️ Bardali</option>
+              </select>
+            </div>
+            <button id="bim-parse-btn" type="button"
+              class="self-end rounded-xl px-4 py-2 text-sm font-bold border border-sky-500/60 text-sky-300 hover:bg-sky-500/10 flex items-center gap-1.5 transition cursor-pointer">
+              <i data-lucide="search" width="14" height="14"></i>Preview Items
+            </button>
+          </div>
+
+          <!-- Parse error -->
+          <p id="bim-parse-error" class="text-xs text-red-400 hidden"></p>
+
+          <!-- Preview table -->
+          <div id="bim-preview-area" class="hidden">
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-xs font-bold text-slate-300">
+                Preview — <span id="bim-preview-count">0</span> items found
+                <span id="bim-skip-count" class="text-slate-500 font-normal ml-2"></span>
+              </p>
+              <button id="bim-clear-btn" type="button" class="text-[11px] text-slate-400 hover:text-red-300 transition">Clear</button>
+            </div>
+            <div class="rounded-xl border border-slate-700 overflow-hidden">
+              <div class="grid grid-cols-[1fr_auto_auto] text-[11px] text-slate-500 font-semibold px-3 py-2 bg-[#0f1520] border-b border-slate-700/60">
+                <span>Item Name</span><span class="text-right pr-4">Price (रु)</span><span>Category</span>
+              </div>
+              <div id="bim-preview-list" class="divide-y divide-slate-800 max-h-48 overflow-y-auto"></div>
+            </div>
+            <p class="text-[11px] text-slate-500 mt-1.5">Items already in the system (same name + supplier) will be skipped automatically.</p>
+
+            <!-- Confirm import button -->
+            <div class="flex items-center gap-3 pt-2">
+              <button id="bim-confirm-btn" type="button"
+                class="flex-1 rounded-xl py-2.5 font-bold text-sm flex items-center justify-center gap-2 cursor-pointer hover:brightness-110 transition"
+                style="background:#d8ff45;color:#10141e;">
+                <i data-lucide="check-circle" width="16" height="16"></i>
+                <span id="bim-confirm-label">Import All Items</span>
+              </button>
+              <span id="bim-import-msg" class="text-xs min-h-4 text-slate-400"></span>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /scroll body -->
+    </div>
+  </div>
+  <!-- ===================== / BULK MENU IMPORT MODAL ===================== -->
+
 </body>
 </html>
