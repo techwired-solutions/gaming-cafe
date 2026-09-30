@@ -177,6 +177,7 @@
         <a href="#" data-page="page-revenue" class="sidebar-link admin-only"><i data-lucide="banknote" width="16" height="16"></i>Revenue</a>
         <a href="#" data-page="page-expenses" class="sidebar-link admin-only"><i data-lucide="receipt" width="16" height="16"></i>Expenses &amp; Capital</a>
         <a href="#" data-page="page-notices" class="sidebar-link admin-only"><i data-lucide="megaphone" width="16" height="16"></i>Notices &amp; Events</a>
+        <a href="#" data-page="page-tournaments" class="sidebar-link admin-only"><i data-lucide="trophy" width="16" height="16"></i>Tournaments</a>
         <a href="#" data-page="page-menu" class="sidebar-link admin-only"><i data-lucide="utensils" width="16" height="16"></i>Menu &amp; pricing</a>
         <a href="#" data-page="page-content" class="sidebar-link admin-only"><i data-lucide="pencil-line" width="16" height="16"></i>Cafe content</a>
         <a href="#" data-page="page-linkypot" class="sidebar-link admin-only"><i data-lucide="share-2" width="16" height="16"></i>LinkyPot</a>
@@ -1162,6 +1163,152 @@
               <h3 class="font-bold text-lg mb-3">Published Notices</h3>
               <div id="admin-notices-list" class="space-y-3 max-h-[550px] overflow-y-auto"></div>
               <p id="admin-notices-empty" class="text-sm text-slate-400">No notices published yet.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== TOURNAMENTS (admin) ===================== -->
+        <section id="page-tournaments" class="page-view">
+          <!-- Header + Create button -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+            <div>
+              <p class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">ESPORTS</p>
+              <h2 class="font-bold text-xl mt-0.5">Tournament Management</h2>
+              <p class="text-sm text-slate-400 mt-0.5">Create and manage FC tournaments, brackets, schedules, and results.</p>
+            </div>
+            <button id="btn-create-tournament" type="button"
+              class="rounded-xl px-4 py-2.5 font-bold text-sm flex items-center gap-2 shrink-0 cursor-pointer hover:brightness-110 transition"
+              style="background:#d8ff45;color:#10141e;">
+              <i data-lucide="plus" width="16" height="16"></i> New Tournament
+            </button>
+          </div>
+
+          <!-- Tournament list -->
+          <div id="tournament-list" class="space-y-3 mb-6">
+            <p class="text-sm text-slate-400 italic">No tournaments yet — create one to get started.</p>
+          </div>
+
+          <!-- ── TOURNAMENT DETAIL PANEL (shown when one is selected) ── -->
+          <div id="tournament-detail-panel" class="hidden">
+            <!-- Detail header -->
+            <div class="panel rounded-2xl p-5 mb-4">
+              <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                <div class="flex-1">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <h3 id="td-name" class="font-bold text-xl"></h3>
+                    <span id="td-status-badge" class="text-[11px] font-bold px-2.5 py-0.5 rounded-full"></span>
+                    <span id="td-format-badge" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-700 text-slate-300"></span>
+                  </div>
+                  <p id="td-game" class="text-sm text-slate-400 mt-1"></p>
+                  <div id="td-meta" class="flex flex-wrap gap-4 mt-2 text-xs text-slate-400"></div>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap shrink-0">
+                  <button id="td-toggle-homepage" type="button" class="rounded-lg px-3 py-1.5 text-xs font-bold border border-slate-600 text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] transition">Show on Homepage</button>
+                  <button id="td-edit-btn" type="button" class="rounded-lg px-3 py-1.5 text-xs font-bold border border-slate-600 text-slate-300 hover:border-sky-400 hover:text-sky-300 transition">
+                    <i data-lucide="pencil" width="12" height="12" class="inline mr-1"></i>Edit
+                  </button>
+                  <button id="td-back-btn" type="button" class="rounded-lg px-3 py-1.5 text-xs font-bold border border-slate-600 text-slate-400 hover:text-white transition">← Back</button>
+                </div>
+              </div>
+              <!-- Status control buttons -->
+              <div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-700/60">
+                <span class="text-xs text-slate-500 self-center mr-1">Status:</span>
+                <button data-tstatus="registration_open" class="td-status-btn rounded-lg px-3 py-1 text-xs font-bold border border-green-500/40 text-green-300 hover:bg-green-500/10 transition">Open Registration</button>
+                <button data-tstatus="registration_closed" class="td-status-btn rounded-lg px-3 py-1 text-xs font-bold border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 transition">Close Registration</button>
+                <button data-tstatus="ongoing" class="td-status-btn rounded-lg px-3 py-1 text-xs font-bold border border-sky-500/40 text-sky-300 hover:bg-sky-500/10 transition">Set Ongoing</button>
+                <button data-tstatus="completed" class="td-status-btn rounded-lg px-3 py-1 text-xs font-bold border border-[#d8ff45]/40 text-[#d8ff45] hover:bg-[#d8ff45]/10 transition">Mark Completed</button>
+                <button data-tstatus="cancelled" class="td-status-btn rounded-lg px-3 py-1 text-xs font-bold border border-red-500/40 text-red-300 hover:bg-red-500/10 transition">Cancel</button>
+              </div>
+            </div>
+
+            <!-- Tab bar -->
+            <div class="flex flex-wrap gap-1 mb-4 border-b border-slate-700/60 pb-0">
+              <button type="button" data-ttab="registrations" class="tournament-tab px-4 py-2.5 text-sm font-bold border-b-2 border-[#d8ff45] text-[#d8ff45] transition -mb-px">
+                <i data-lucide="users" width="14" height="14" class="inline mr-1.5"></i>Registrations <span id="td-reg-count" class="ml-1 mono text-[11px]">(0)</span>
+              </button>
+              <button type="button" data-ttab="bracket" class="tournament-tab px-4 py-2.5 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition -mb-px">
+                <i data-lucide="git-merge" width="14" height="14" class="inline mr-1.5"></i>Bracket / Draw
+              </button>
+              <button type="button" data-ttab="matches" class="tournament-tab px-4 py-2.5 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition -mb-px">
+                <i data-lucide="swords" width="14" height="14" class="inline mr-1.5"></i>Matches
+              </button>
+              <button type="button" data-ttab="standings" class="tournament-tab px-4 py-2.5 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition -mb-px">
+                <i data-lucide="bar-chart-3" width="14" height="14" class="inline mr-1.5"></i>Standings
+              </button>
+              <button type="button" data-ttab="prizes" class="tournament-tab px-4 py-2.5 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition -mb-px">
+                <i data-lucide="trophy" width="14" height="14" class="inline mr-1.5"></i>Prizes &amp; Rules
+              </button>
+            </div>
+
+            <!-- ── TAB: REGISTRATIONS ── -->
+            <div id="ttab-registrations" class="space-y-4">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <p class="text-sm text-slate-400"><span id="td-reg-summary"></span></p>
+                <div class="flex gap-2">
+                  <input id="td-reg-search" type="text" placeholder="Search player..." class="bg-[#111722] border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-[#d8ff45] w-40">
+                  <button id="td-export-registrations" type="button" class="rounded-xl px-3 py-1.5 text-xs font-bold border border-slate-600 text-slate-300 hover:border-slate-400 transition flex items-center gap-1">
+                    <i data-lucide="download" width="12" height="12"></i>Export CSV
+                  </button>
+                </div>
+              </div>
+              <div class="panel rounded-2xl overflow-hidden">
+                <div class="grid grid-cols-[auto_1fr_auto_auto_auto] text-[11px] text-slate-500 font-semibold px-4 py-2.5 border-b border-slate-700/60 bg-[#0f1520]">
+                  <span class="mr-3">#</span><span>Player</span><span class="text-center px-3">Status</span><span class="text-center px-3">Entry</span><span></span>
+                </div>
+                <div id="td-registrations-list" class="divide-y divide-slate-800 max-h-[480px] overflow-y-auto"></div>
+                <p id="td-reg-empty" class="text-sm text-slate-500 text-center py-8 hidden">No registrations yet.</p>
+              </div>
+            </div>
+
+            <!-- ── TAB: BRACKET / DRAW ── -->
+            <div id="ttab-bracket" class="hidden space-y-4">
+              <div class="panel rounded-2xl p-5">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                  <div>
+                    <h4 class="font-bold">Tournament Draw</h4>
+                    <p class="text-xs text-slate-400 mt-0.5">Randomly assign players to groups or bracket slots. This will overwrite any existing draw.</p>
+                  </div>
+                  <button id="td-generate-draw" type="button" class="rounded-xl px-4 py-2 font-bold text-sm border border-[#d8ff45]/60 text-[#d8ff45] hover:bg-[#d8ff45]/10 flex items-center gap-2 transition shrink-0">
+                    <i data-lucide="shuffle" width="16" height="16"></i> Generate Draw
+                  </button>
+                </div>
+                <div id="td-bracket-view" class="space-y-4">
+                  <p class="text-sm text-slate-500 italic text-center py-6">No draw generated yet. Confirm at least 4 players first, then click Generate Draw.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── TAB: MATCHES ── -->
+            <div id="ttab-matches" class="hidden space-y-3">
+              <div class="flex items-center justify-between">
+                <p class="text-sm text-slate-400">Schedule matches and enter results.</p>
+                <select id="td-match-round-filter" class="bg-[#111722] border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-[#d8ff45]">
+                  <option value="all">All Rounds</option>
+                </select>
+              </div>
+              <div id="td-matches-list" class="space-y-2"></div>
+              <p id="td-matches-empty" class="text-sm text-slate-500 text-center py-8 hidden">No matches yet — generate the draw first.</p>
+            </div>
+
+            <!-- ── TAB: STANDINGS ── -->
+            <div id="ttab-standings" class="hidden">
+              <div id="td-standings-view">
+                <p class="text-sm text-slate-500 italic text-center py-8">Standings will appear once matches start.</p>
+              </div>
+            </div>
+
+            <!-- ── TAB: PRIZES & RULES ── -->
+            <div id="ttab-prizes" class="hidden">
+              <div id="td-prizes-view" class="grid sm:grid-cols-2 gap-4">
+                <div class="panel rounded-2xl p-5">
+                  <h4 class="font-bold mb-3 flex items-center gap-2"><i data-lucide="trophy" width="16" height="16" class="text-[#d8ff45]"></i>Prize Pool</h4>
+                  <div id="td-prize-list" class="space-y-2"></div>
+                </div>
+                <div class="panel rounded-2xl p-5">
+                  <h4 class="font-bold mb-3 flex items-center gap-2"><i data-lucide="scroll-text" width="16" height="16" class="text-[#d8ff45]"></i>Tournament Rules</h4>
+                  <pre id="td-rules-text" class="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed"></pre>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -2408,6 +2555,162 @@
   <script src="assets/js/supabaseClient.js"></script>
   <script src="assets/js/passwordHash.js"></script>
   <script src="assets/js/dashboard.js?v=20260916"></script>
+  <script src="assets/js/tournament.js?v=20260930"></script>
+
+  <!-- ===================== CREATE / EDIT TOURNAMENT MODAL ===================== -->
+  <div id="tournament-modal" class="modal-overlay hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="modal-box rounded-2xl w-full max-w-2xl max-h-[94vh] flex flex-col overflow-hidden" style="background:#131b27;border:1px solid #1e293b;">
+      <div class="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-700/60 shrink-0">
+        <h2 id="tournament-modal-title" class="font-bold text-lg flex items-center gap-2">
+          <i data-lucide="trophy" width="20" height="20" class="text-[#d8ff45]"></i> Create Tournament
+        </h2>
+        <button id="tournament-modal-close" type="button" class="h-8 w-8 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400 text-lg leading-none cursor-pointer flex items-center justify-center">×</button>
+      </div>
+      <div class="overflow-y-auto flex-1 px-6 py-5">
+        <form id="tournament-form" class="space-y-4">
+          <input type="hidden" id="tm-id">
+          <div class="grid sm:grid-cols-2 gap-4">
+            <div class="sm:col-span-2">
+              <label class="block text-xs text-slate-400 mb-1" for="tm-name">Tournament Name *</label>
+              <input id="tm-name" type="text" class="form-control" placeholder="e.g. ChillPill FC Cup Season 1" required>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="tm-game">Game *</label>
+              <select id="tm-game" class="form-control">
+                <option value="EA FC 25">EA FC 25</option>
+                <option value="EA FC 24">EA FC 24</option>
+                <option value="FIFA 23">FIFA 23</option>
+                <option value="eFootball">eFootball</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="tm-format">Format *</label>
+              <select id="tm-format" class="form-control">
+                <option value="knockout">Direct Knockout</option>
+                <option value="group_stage">Group Stage + Knockout</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="tm-max-players">Max Players *</label>
+              <select id="tm-max-players" class="form-control">
+                <option value="8">8 Players</option>
+                <option value="16" selected>16 Players</option>
+                <option value="32">32 Players</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="tm-entry-fee">Entry Fee (रु)</label>
+              <input id="tm-entry-fee" type="number" min="0" class="form-control mono" placeholder="0">
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="tm-reg-deadline">Registration Deadline</label>
+              <input id="tm-reg-deadline" type="datetime-local" class="form-control text-xs">
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="tm-start-date">Tournament Start Date</label>
+              <input id="tm-start-date" type="datetime-local" class="form-control text-xs">
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block text-xs text-slate-400 mb-1" for="tm-description">Description</label>
+              <textarea id="tm-description" class="form-control min-h-[60px]" rows="2" placeholder="Brief tournament description shown on homepage..."></textarea>
+            </div>
+          </div>
+
+          <!-- Prize Pool -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs text-slate-400 font-medium">Prize Pool</label>
+              <button type="button" id="tm-add-prize" class="text-xs font-bold text-[#d8ff45] flex items-center gap-1">
+                <i data-lucide="plus" width="13" height="13"></i>Add Prize
+              </button>
+            </div>
+            <div id="tm-prize-rows" class="space-y-2">
+              <div class="tm-prize-row grid grid-cols-[120px_1fr_auto] gap-2 items-center">
+                <input type="text" placeholder="1st Place" class="form-control text-xs py-2 tm-prize-place" value="1st Place">
+                <input type="text" placeholder="e.g. रु 5,000 + Trophy" class="form-control text-xs py-2 tm-prize-reward">
+                <button type="button" class="tm-prize-remove h-8 w-8 rounded-lg border border-slate-600 text-slate-400 hover:text-red-300 hover:border-red-400 text-lg leading-none">×</button>
+              </div>
+              <div class="tm-prize-row grid grid-cols-[120px_1fr_auto] gap-2 items-center">
+                <input type="text" placeholder="2nd Place" class="form-control text-xs py-2 tm-prize-place" value="2nd Place">
+                <input type="text" placeholder="e.g. रु 2,000" class="form-control text-xs py-2 tm-prize-reward">
+                <button type="button" class="tm-prize-remove h-8 w-8 rounded-lg border border-slate-600 text-slate-400 hover:text-red-300 hover:border-red-400 text-lg leading-none">×</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rules -->
+          <div>
+            <label class="block text-xs text-slate-400 mb-1" for="tm-rules">Tournament Rules</label>
+            <textarea id="tm-rules" class="form-control font-mono text-xs min-h-[100px]" rows="5"
+              placeholder="e.g.
+• 5 min halves
+• Classic difficulty
+• No switching during match
+• Coin toss for side selection
+• Admin decision is final"></textarea>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-2 cursor-pointer select-none">
+              <input id="tm-show-homepage" type="checkbox" class="accent-[#d8ff45] w-4 h-4">
+              <span class="text-xs text-slate-300">Show on homepage immediately</span>
+            </label>
+          </div>
+
+          <p id="tournament-form-msg" class="text-xs min-h-4 text-slate-400"></p>
+          <div class="flex gap-3 pt-1">
+            <button type="submit" class="flex-1 rounded-xl py-2.5 font-bold text-sm flex items-center justify-center gap-2 cursor-pointer hover:brightness-110 transition" style="background:#d8ff45;color:#10141e;">
+              <i data-lucide="save" width="16" height="16"></i>
+              <span id="tm-submit-label">Create Tournament</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <!-- ===================== / CREATE / EDIT TOURNAMENT MODAL ===================== -->
+
+  <!-- ===================== MATCH SCORE MODAL ===================== -->
+  <div id="match-score-modal" class="modal-overlay hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="modal-box rounded-2xl w-full max-w-md" style="background:#131b27;border:1px solid #1e293b;">
+      <div class="flex items-center justify-between px-5 pt-5 pb-4 border-b border-slate-700/60">
+        <h2 class="font-bold flex items-center gap-2"><i data-lucide="swords" width="18" height="18" class="text-sky-400"></i>Enter Match Result</h2>
+        <button id="match-score-modal-close" type="button" class="h-8 w-8 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400 text-lg leading-none cursor-pointer flex items-center justify-center">×</button>
+      </div>
+      <div class="px-5 py-5 space-y-4">
+        <input type="hidden" id="ms-match-id">
+        <div class="flex items-center gap-3">
+          <div class="flex-1 text-center">
+            <p id="ms-player1-name" class="font-bold text-sm mb-2">Player 1</p>
+            <input id="ms-player1-score" type="number" min="0" max="99" class="form-control text-center text-3xl font-bold mono py-3 w-full" placeholder="0">
+          </div>
+          <div class="text-slate-400 font-bold text-xl">VS</div>
+          <div class="flex-1 text-center">
+            <p id="ms-player2-name" class="font-bold text-sm mb-2">Player 2</p>
+            <input id="ms-player2-score" type="number" min="0" max="99" class="form-control text-center text-3xl font-bold mono py-3 w-full" placeholder="0">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1" for="ms-station">Station</label>
+          <input id="ms-station" type="text" class="form-control text-sm" placeholder="PS5 #1">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1" for="ms-scheduled">Scheduled Time</label>
+          <input id="ms-scheduled" type="datetime-local" class="form-control text-xs">
+        </div>
+        <p id="ms-msg" class="text-xs text-slate-400 min-h-4"></p>
+        <div class="flex gap-3">
+          <button id="ms-save-result" type="button" class="flex-1 rounded-xl py-2.5 font-bold text-sm flex items-center justify-center gap-2 cursor-pointer hover:brightness-110 transition" style="background:#d8ff45;color:#10141e;">
+            <i data-lucide="check" width="16" height="16"></i>Save Result
+          </button>
+          <button id="ms-save-schedule" type="button" class="rounded-xl px-4 py-2 text-xs font-bold border border-slate-600 text-slate-300 hover:border-sky-400 hover:text-sky-300 transition">
+            Schedule Only
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ===================== / MATCH SCORE MODAL ===================== -->
 
   <!-- ===================== BULK MENU IMPORT MODAL ===================== -->
   <div id="bulk-import-modal" class="modal-overlay hidden fixed inset-0 z-50 flex items-center justify-center p-4">

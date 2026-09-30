@@ -558,6 +558,85 @@
     <p id="menu-fallback" class="hidden text-sm text-slate-400 mt-2">Menu will appear here once connected — ask our staff for today's food &amp; drinks list.</p>
   </section>
 
+  <!-- ===================== TOURNAMENTS (public) ===================== -->
+  <section id="tournaments" class="max-w-6xl mx-auto px-5 lg:px-8 py-16 border-t border-slate-700/60 hidden" aria-label="Tournaments">
+    <p class="mono text-xs font-bold tracking-[.2em] text-[#d8ff45] mb-2">ESPORTS</p>
+    <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+      <div>
+        <h2 id="trn-title" class="text-3xl font-bold mb-1">FC Tournament</h2>
+        <p id="trn-subtitle" class="text-slate-400"></p>
+      </div>
+      <span id="trn-status-badge" class="text-sm font-bold px-3 py-1 rounded-full self-start sm:self-auto"></span>
+    </div>
+
+    <!-- Meta: dates, entry fee, format -->
+    <div id="trn-meta" class="flex flex-wrap gap-5 text-sm text-slate-400 mb-8"></div>
+
+    <!-- Prize Pool -->
+    <div id="trn-prizes-section" class="hidden mb-8">
+      <h3 class="font-bold text-lg mb-4 flex items-center gap-2"><span class="text-xl">&#127942;</span> Prize Pool</h3>
+      <div id="trn-prizes" class="grid sm:grid-cols-3 gap-4"></div>
+    </div>
+
+    <!-- REGISTRATION FORM (shown when registration_open) -->
+    <div id="trn-registration-section" class="hidden">
+      <div class="grid lg:grid-cols-2 gap-8">
+        <div>
+          <h3 class="font-bold text-xl mb-2">Register Now</h3>
+          <p class="text-slate-400 text-sm mb-6">Spots fill up fast — secure your place in the tournament today.</p>
+          <form id="tournament-register-form" class="space-y-3" novalidate>
+            <input type="hidden" id="trn-tournament-id">
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="trn-player-name">Full Name *</label>
+              <input id="trn-player-name" type="text" class="w-full rounded-xl bg-[#111722] border border-slate-700 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-[#d8ff45] transition" placeholder="Your name" required>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="trn-gamertag">PSN ID / Gamertag *</label>
+              <input id="trn-gamertag" type="text" class="w-full rounded-xl bg-[#111722] border border-slate-700 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-[#d8ff45] transition" placeholder="e.g. ChillPill_FC25" required>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="trn-phone">Phone Number *</label>
+              <input id="trn-phone" type="tel" class="w-full rounded-xl bg-[#111722] border border-slate-700 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-[#d8ff45] transition" placeholder="98XXXXXXXX" required>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="trn-team">Team / Club Name <span class="text-slate-600">(optional)</span></label>
+              <input id="trn-team" type="text" class="w-full rounded-xl bg-[#111722] border border-slate-700 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-[#d8ff45] transition" placeholder="e.g. Kathmandu FC">
+            </div>
+            <p id="trn-form-msg" class="text-sm min-h-5"></p>
+            <button type="submit" id="trn-submit-btn" class="btn-acid rounded-xl px-6 py-3.5 w-full font-bold text-base flex items-center justify-center gap-2">
+              <i data-lucide="user-plus" width="18" height="18"></i>
+              <span id="trn-submit-label">Register for Tournament</span>
+            </button>
+          </form>
+        </div>
+        <!-- Rules card -->
+        <div id="trn-rules-card" class="hidden">
+          <div class="panel rounded-2xl p-6 h-full">
+            <h4 class="font-bold mb-3 flex items-center gap-2"><i data-lucide="scroll-text" width="16" height="16" class="text-[#d8ff45]"></i>Tournament Rules</h4>
+            <pre id="trn-rules-text" class="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed font-sans"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BRACKET / FIXTURES (shown when ongoing or registration_closed) -->
+    <div id="trn-bracket-section" class="hidden">
+      <!-- Point Table for group stage -->
+      <div id="trn-standings-section" class="hidden mb-8">
+        <h3 class="font-bold text-xl mb-4">Standings</h3>
+        <div id="trn-standings-public" class="space-y-6"></div>
+      </div>
+      <!-- Fixtures -->
+      <h3 class="font-bold text-xl mb-4">Fixtures &amp; Results</h3>
+      <div id="trn-fixtures-public" class="space-y-2"></div>
+    </div>
+
+    <!-- WINNERS (shown when completed) -->
+    <div id="trn-winners-section" class="hidden">
+      <div id="trn-winners-display" class="grid sm:grid-cols-3 gap-5 mb-8"></div>
+    </div>
+  </section>
+
   <!-- ===================== CONTACT & LOCATION ===================== -->
   <section id="contact" class="max-w-6xl mx-auto px-5 lg:px-8 py-16 border-t border-slate-700/60">
     <p class="mono text-xs font-bold tracking-[.2em] text-[#d8ff45] mb-2">FIND US</p>

@@ -4853,7 +4853,8 @@
       fetchTables(),
       fetchExpenses(),
       fetchNotices(),
-      fetchCapitalContributions()
+      fetchCapitalContributions(),
+      typeof window._fetchTournaments === "function" ? window._fetchTournaments() : Promise.resolve()
     ]);
   }
 

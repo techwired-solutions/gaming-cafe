@@ -465,3 +465,97 @@ grant all on all routines in schema public to anon, authenticated, service_role;
 -- Instruct PostgREST to reload its schema cache immediately
 notify pgrst, 'reload schema';
 
+
+
+-- =====================================================================
+-- TOURNAMENT MANAGEMENT SYSTEM
+-- Run this block in Supabase SQL Editor to enable tournaments.
+-- =====================================================================
+
+-- tournaments: one row per tournament event
+create table if not exists public.tournaments (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  game text not null default 'EA FC 25',
+  description text,
+  format text not null default 'knockout' check (format in ('knockout', 'group_stage')),
+  status text not null default 'draft'
+    check (status in ('draft','registration_open','registration_closed','ongoing','completed','cancelled')),
+  max_players integer not null default 16,
+  entry_fee numeric not null default 0,
+  prize_pool jsonb not null default '[]'::jsonb,
+  rules text,
+  registration_deadline timestamptz,
+  start_date timestamptz,
+  show_on_homepage boolean not null default false,
+  created_by text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- tournament_players: registered participants
+create table if not exists public.tournament_players (
+  id uuid primary key default gen_random_uuid(),
+  tournament_id uuid not null references public.tournaments(id) on delete cascade,
+  player_name text not null,
+  team_name text,
+  phone text not null,
+  email text,
+  gamertag text,
+  status text not null default 'registered'
+    check (status in ('registered','confirmed','eliminated','winner','runner_up')),
+  group_name text,
+  seed integer,
+  points integer not null default 0,
+  wins integer not null default 0,
+  draws integer not null default 0,
+  losses integer not null default 0,
+  goals_for integer not null default 0,
+  goals_against integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+-- tournament_matches: schedule + results
+create table if not exists public.tournament_matches (
+  id uuid primary key default gen_random_uuid(),
+  tournament_id uuid not null references public.tournaments(id) on delete cascade,
+  round_name text not null,
+  round_number integer not null default 1,
+  match_number integer not null default 1,
+  player1_id uuid references public.tournament_players(id) on delete set null,
+  player2_id uuid references public.tournament_players(id) on delete set null,
+  player1_score integer,
+  player2_score integer,
+  winner_id uuid references public.tournament_players(id) on delete set null,
+  status text not null default 'scheduled'
+    check (status in ('scheduled','ongoing','completed','bye')),
+  scheduled_at timestamptz,
+  station_name text,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_tournament_players_tid on public.tournament_players(tournament_id);
+create index if not exists idx_tournament_matches_tid on public.tournament_matches(tournament_id);
+
+alter table public.tournaments enable row level security;
+alter table public.tournament_players enable row level security;
+alter table public.tournament_matches enable row level security;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where tablename='tournaments' and policyname='tournaments_all') then
+    create policy tournaments_all on public.tournaments for all using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='tournament_players' and policyname='tplayers_all') then
+    create policy tplayers_all on public.tournament_players for all using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='tournament_matches' and policyname='tmatches_all') then
+    create policy tmatches_all on public.tournament_matches for all using (true) with check (true);
+  end if;
+end $$;
+
+grant all on public.tournaments to anon, authenticated, service_role;
+grant all on public.tournament_players to anon, authenticated, service_role;
+grant all on public.tournament_matches to anon, authenticated, service_role;
+
+notify pgrst, 'reload schema';

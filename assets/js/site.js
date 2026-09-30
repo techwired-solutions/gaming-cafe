@@ -371,6 +371,269 @@
     });
   }
 
+  // ── TOURNAMENTS (public homepage) ───────────────────────────────────────
+  async function loadTournament() {
+    if (!window.SUPABASE_CONFIGURED || !window.sb) return;
+
+    try {
+      // Fetch the first tournament that should be shown on the homepage
+      const { data: t } = await window.sb.from("tournaments")
+        .select("*")
+        .eq("show_on_homepage", true)
+        .not("status", "eq", "cancelled")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!t) return; // Nothing to show
+
+      // Fetch players and matches
+      const [{ data: players }, { data: matches }] = await Promise.all([
+        window.sb.from("tournament_players").select("*").eq("tournament_id", t.id).order("created_at"),
+        window.sb.from("tournament_matches").select("*").eq("tournament_id", t.id).order("round_number").order("match_number")
+      ]);
+
+      renderTournamentSection(t, players || [], matches || []);
+    } catch (err) {
+      console.warn("[ChillPill] Tournament load error:", err);
+    }
+  }
+
+  function renderTournamentSection(t, players, matches) {
+    const section = document.getElementById("tournaments");
+    if (!section) return;
+    section.classList.remove("hidden");
+
+    // Title + status
+    const titleEl = document.getElementById("trn-title");
+    if (titleEl) titleEl.textContent = t.name;
+    const subtitleEl = document.getElementById("trn-subtitle");
+    if (subtitleEl) subtitleEl.textContent = t.description || (t.game + " · " + (t.format === "knockout" ? "Direct Knockout" : "Group Stage"));
+
+    const statusMap = {
+      registration_open: { label: "Registration Open", cls: "bg-green-500/20 text-green-300 border border-green-500/40" },
+      registration_closed: { label: "Registration Closed", cls: "bg-amber-500/20 text-amber-300 border border-amber-500/40" },
+      ongoing: { label: "Ongoing", cls: "bg-sky-500/20 text-sky-300 border border-sky-500/40" },
+      completed: { label: "Completed", cls: "bg-[#d8ff45]/20 text-[#d8ff45] border border-[#d8ff45]/40" },
+      draft: { label: "Coming Soon", cls: "bg-slate-700 text-slate-300" }
+    };
+    const statusInfo = statusMap[t.status] || { label: t.status, cls: "bg-slate-700 text-slate-300" };
+    const badge = document.getElementById("trn-status-badge");
+    if (badge) { badge.textContent = statusInfo.label; badge.className = `text-sm font-bold px-3 py-1 rounded-full self-start sm:self-auto ${statusInfo.cls}`; }
+
+    // Meta
+    const meta = document.getElementById("trn-meta");
+    if (meta) {
+      meta.innerHTML = [
+        t.start_date ? `<span>📅 ${new Date(t.start_date).toLocaleDateString("en-IN", { dateStyle: "medium" })}</span>` : "",
+        t.registration_deadline && t.status === "registration_open" ? `<span>⏰ Register by ${new Date(t.registration_deadline).toLocaleDateString("en-IN", { dateStyle: "medium" })}</span>` : "",
+        t.max_players ? `<span>👥 ${players.length}/${t.max_players} registered</span>` : "",
+        t.entry_fee > 0 ? `<span>🎟️ Entry: रु ${t.entry_fee}</span>` : `<span>🆓 Free Entry</span>`,
+        `<span>${t.format === "knockout" ? "🏆 Knockout" : "⚔️ Group Stage + Knockout"}</span>`
+      ].filter(Boolean).join("");
+    }
+
+    // Prize pool
+    const prizes = Array.isArray(t.prize_pool) ? t.prize_pool : [];
+    const prizesSection = document.getElementById("trn-prizes-section");
+    const prizesEl = document.getElementById("trn-prizes");
+    if (prizes.length && prizesSection && prizesEl) {
+      prizesSection.classList.remove("hidden");
+      const medals = ["🥇", "🥈", "🥉", "🏅"];
+      prizesEl.innerHTML = prizes.map((p, i) => `
+        <div class="panel rounded-2xl p-5 text-center">
+          <p class="text-3xl mb-2">${medals[i] || "🏅"}</p>
+          <p class="font-bold">${esc(p.place || `#${i + 1}`)}</p>
+          <p class="text-[#d8ff45] font-bold text-sm mt-1">${esc(p.reward || "TBD")}</p>
+        </div>`).join("");
+    }
+
+    // Show/hide sections based on status
+    const regSection = document.getElementById("trn-registration-section");
+    const bracketSection = document.getElementById("trn-bracket-section");
+    const winnersSection = document.getElementById("trn-winners-section");
+
+    [regSection, bracketSection, winnersSection].forEach(el => el?.classList.add("hidden"));
+
+    if (t.status === "registration_open") {
+      regSection?.classList.remove("hidden");
+      document.getElementById("trn-tournament-id").value = t.id;
+      if (t.rules) {
+        document.getElementById("trn-rules-card")?.classList.remove("hidden");
+        const rt = document.getElementById("trn-rules-text");
+        if (rt) rt.textContent = t.rules;
+      }
+      initRegistrationForm(t, players);
+    } else if (["registration_closed", "ongoing"].includes(t.status)) {
+      bracketSection?.classList.remove("hidden");
+      renderPublicBracket(t, players, matches);
+    } else if (t.status === "completed") {
+      bracketSection?.classList.remove("hidden");
+      renderPublicBracket(t, players, matches);
+      winnersSection?.classList.remove("hidden");
+      renderPublicWinners(players);
+    }
+  }
+
+  function esc(str) {
+    return String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function renderPublicBracket(t, players, matches) {
+    // Group standings for group stage
+    if (t.format === "group_stage") {
+      const standingsSection = document.getElementById("trn-standings-section");
+      const standingsEl = document.getElementById("trn-standings-public");
+      const groups = [...new Set(players.map(p => p.group_name).filter(Boolean))].sort();
+      if (groups.length && standingsSection && standingsEl) {
+        standingsSection.classList.remove("hidden");
+        standingsEl.innerHTML = groups.map(g => {
+          const gp = [...players.filter(p => p.group_name === g)]
+            .sort((a, b) => b.points - a.points || (b.goals_for - b.goals_against) - (a.goals_for - a.goals_against));
+          return `
+            <div>
+              <p class="text-xs font-bold text-[#d8ff45] uppercase tracking-wider mb-2">Group ${esc(g)}</p>
+              <div class="panel rounded-2xl overflow-hidden">
+                <div class="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto] text-[11px] text-slate-500 font-semibold px-4 py-2 bg-[#0f1520] border-b border-slate-700/60 gap-2">
+                  <span>Player</span><span class="text-center">P</span><span class="text-center">W</span><span class="text-center">D</span><span class="text-center">L</span><span class="text-center">GD</span><span class="text-center text-[#d8ff45]">Pts</span>
+                </div>
+                <div class="divide-y divide-slate-800/60">
+                  ${gp.map((p, i) => `
+                    <div class="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto] px-4 py-2.5 items-center text-sm gap-2 ${i < 2 ? "bg-sky-500/5" : ""}">
+                      <span class="truncate flex items-center gap-2">
+                        <span class="text-slate-500 text-xs">${i + 1}.</span>
+                        ${esc(p.player_name)}
+                      </span>
+                      <span class="text-center text-xs text-slate-400">${p.wins + p.draws + p.losses}</span>
+                      <span class="text-center text-xs">${p.wins}</span>
+                      <span class="text-center text-xs">${p.draws}</span>
+                      <span class="text-center text-xs">${p.losses}</span>
+                      <span class="text-center text-xs">${p.goals_for - p.goals_against > 0 ? "+" : ""}${p.goals_for - p.goals_against}</span>
+                      <span class="text-center font-bold text-[#d8ff45]">${p.points}</span>
+                    </div>`).join("")}
+                </div>
+              </div>
+            </div>`;
+        }).join("");
+      }
+    }
+
+    // Fixtures
+    const fixturesEl = document.getElementById("trn-fixtures-public");
+    if (!fixturesEl || !matches.length) return;
+    const rounds = [...new Set(matches.map(m => m.round_name))];
+    fixturesEl.innerHTML = rounds.map(rn => {
+      const rMatches = matches.filter(m => m.round_name === rn);
+      return `
+        <div class="mb-5">
+          <p class="text-xs font-bold text-[#d8ff45] uppercase tracking-wider mb-2">${esc(rn)}</p>
+          <div class="space-y-2">
+            ${rMatches.map(m => {
+              const p1 = players.find(p => p.id === m.player1_id);
+              const p2 = players.find(p => p.id === m.player2_id);
+              const sched = m.scheduled_at ? new Date(m.scheduled_at).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }) : "";
+              return `
+                <div class="panel rounded-xl px-4 py-3 flex items-center gap-4">
+                  <div class="flex-1 flex items-center gap-3 min-w-0">
+                    <span class="font-bold text-sm truncate ${m.winner_id === m.player1_id ? "text-[#d8ff45]" : ""}">${p1 ? esc(p1.player_name) : "TBD"}</span>
+                    <span class="mono font-black text-base shrink-0 ${m.status === "completed" ? "text-white" : "text-slate-600"}">
+                      ${m.status === "completed" ? `${m.player1_score ?? 0} – ${m.player2_score ?? 0}` : "vs"}
+                    </span>
+                    <span class="font-bold text-sm truncate ${m.winner_id === m.player2_id ? "text-[#d8ff45]" : ""}">${p2 ? esc(p2.player_name) : m.status === "bye" ? "BYE" : "TBD"}</span>
+                  </div>
+                  ${sched ? `<span class="text-xs text-slate-500 shrink-0 hidden sm:block">${sched}</span>` : ""}
+                  <span class="text-[11px] px-2 py-0.5 rounded-full shrink-0 ${m.status === "completed" ? "bg-[#d8ff45]/20 text-[#d8ff45]" : "bg-slate-700 text-slate-400"}">${m.status}</span>
+                </div>`;
+            }).join("")}
+          </div>
+        </div>`;
+    }).join("");
+  }
+
+  function renderPublicWinners(players) {
+    const el = document.getElementById("trn-winners-display");
+    if (!el) return;
+    const winner = players.find(p => p.status === "winner");
+    const runnerUp = players.find(p => p.status === "runner_up");
+    const medals = [
+      { label: "🥇 Champion", player: winner },
+      { label: "🥈 Runner Up", player: runnerUp }
+    ].filter(x => x.player);
+    if (!medals.length) { el.innerHTML = '<p class="text-slate-400 text-sm col-span-3">Winners will be announced soon.</p>'; return; }
+    el.innerHTML = medals.map(({ label, player }) => `
+      <div class="panel rounded-2xl p-6 text-center">
+        <p class="text-4xl mb-3">${label.split(" ")[0]}</p>
+        <p class="font-bold text-lg">${esc(player.player_name)}</p>
+        ${player.gamertag ? `<p class="text-sm text-slate-400">${esc(player.gamertag)}</p>` : ""}
+        ${player.team_name ? `<p class="text-xs text-slate-500 mt-1">${esc(player.team_name)}</p>` : ""}
+        <p class="text-xs font-bold text-slate-400 mt-2">${label.split(" ").slice(1).join(" ")}</p>
+      </div>`).join("");
+  }
+
+  function initRegistrationForm(t, players) {
+    const form = document.getElementById("tournament-register-form");
+    if (!form) return;
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const msg = document.getElementById("trn-form-msg");
+      const btn = document.getElementById("trn-submit-btn");
+      const label = document.getElementById("trn-submit-label");
+      const name = document.getElementById("trn-player-name").value.trim();
+      const gamertag = document.getElementById("trn-gamertag").value.trim();
+      const phone = document.getElementById("trn-phone").value.trim();
+      const team = document.getElementById("trn-team").value.trim();
+
+      if (!name || !gamertag || !phone) {
+        msg.textContent = "Please fill all required fields.";
+        msg.className = "text-sm text-red-400";
+        return;
+      }
+
+      // Duplicate check
+      const duplicate = players.find(p =>
+        p.phone === phone || p.gamertag?.toLowerCase() === gamertag.toLowerCase()
+      );
+      if (duplicate) {
+        msg.textContent = "You're already registered! We'll contact you with match details.";
+        msg.className = "text-sm text-amber-400";
+        return;
+      }
+
+      if (players.length >= t.max_players) {
+        msg.textContent = "Sorry, all slots are filled. You can ask staff to be added to the waitlist.";
+        msg.className = "text-sm text-red-400";
+        return;
+      }
+
+      btn.disabled = true;
+      label.textContent = "Registering...";
+      msg.textContent = "";
+
+      try {
+        if (!window.sb) throw new Error("Not connected to database.");
+        const { error } = await window.sb.from("tournament_players").insert({
+          tournament_id: t.id,
+          player_name: name,
+          gamertag,
+          phone,
+          team_name: team || null,
+          status: "registered"
+        });
+        if (error) throw error;
+        msg.textContent = "🎉 You're registered! We'll contact you with match schedule details.";
+        msg.className = "text-sm text-green-400 font-semibold";
+        label.textContent = "Registered ✓";
+        form.reset();
+        players.push({ player_name: name, gamertag, phone }); // Prevent double-submit
+      } catch (err) {
+        msg.textContent = "Registration failed: " + (err.message || "Please try again.");
+        msg.className = "text-sm text-red-400";
+        btn.disabled = false;
+        label.textContent = "Register for Tournament";
+      }
+    };
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     fillCafeInfo();
     wireWhatsappLinks();
@@ -379,6 +642,7 @@
     loadSettings();
     loadMenu();
     loadNotices();
+    loadTournament();
     initFaqAccordion();
     if (window.lucide) lucide.createIcons();
   });
