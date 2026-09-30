@@ -2550,13 +2550,6 @@
     </div>
   </div>
 
-  <script src="assets/js/config.js"></script>
-  <script src="assets/js/config.local.js" onerror="console.info('[ChillPill] No config.local.js override found — using assets/js/config.js placeholders.')"></script>
-  <script src="assets/js/supabaseClient.js"></script>
-  <script src="assets/js/passwordHash.js"></script>
-  <script src="assets/js/dashboard.js?v=20260916"></script>
-  <script src="assets/js/tournament.js?v=20260930"></script>
-
   <!-- ===================== CREATE / EDIT TOURNAMENT MODAL ===================== -->
   <div id="tournament-modal" class="modal-overlay hidden fixed inset-0 z-50 flex items-center justify-center p-4">
     <div class="modal-box rounded-2xl w-full max-w-2xl max-h-[94vh] flex flex-col overflow-hidden" style="background:#131b27;border:1px solid #1e293b;">
@@ -2623,20 +2616,20 @@
           <div>
             <div class="flex items-center justify-between mb-2">
               <label class="text-xs text-slate-400 font-medium">Prize Pool</label>
-              <button type="button" id="tm-add-prize" class="text-xs font-bold text-[#d8ff45] flex items-center gap-1">
+              <button type="button" id="tm-add-prize" class="text-xs font-bold text-[#d8ff45] flex items-center gap-1 cursor-pointer hover:underline">
                 <i data-lucide="plus" width="13" height="13"></i>Add Prize
               </button>
             </div>
             <div id="tm-prize-rows" class="space-y-2">
-              <div class="tm-prize-row grid grid-cols-[120px_1fr_auto] gap-2 items-center">
+              <div class="tm-prize-row grid grid-cols-[140px_1fr_auto] gap-2 items-center">
                 <input type="text" placeholder="1st Place" class="form-control text-xs py-2 tm-prize-place" value="1st Place">
                 <input type="text" placeholder="e.g. रु 5,000 + Trophy" class="form-control text-xs py-2 tm-prize-reward">
-                <button type="button" class="tm-prize-remove h-8 w-8 rounded-lg border border-slate-600 text-slate-400 hover:text-red-300 hover:border-red-400 text-lg leading-none">×</button>
+                <button type="button" class="tm-prize-remove h-8 w-8 rounded-lg border border-slate-600 text-slate-400 hover:text-red-300 hover:border-red-400 text-lg leading-none flex items-center justify-center cursor-pointer" title="Remove prize">×</button>
               </div>
-              <div class="tm-prize-row grid grid-cols-[120px_1fr_auto] gap-2 items-center">
+              <div class="tm-prize-row grid grid-cols-[140px_1fr_auto] gap-2 items-center">
                 <input type="text" placeholder="2nd Place" class="form-control text-xs py-2 tm-prize-place" value="2nd Place">
                 <input type="text" placeholder="e.g. रु 2,000" class="form-control text-xs py-2 tm-prize-reward">
-                <button type="button" class="tm-prize-remove h-8 w-8 rounded-lg border border-slate-600 text-slate-400 hover:text-red-300 hover:border-red-400 text-lg leading-none">×</button>
+                <button type="button" class="tm-prize-remove h-8 w-8 rounded-lg border border-slate-600 text-slate-400 hover:text-red-300 hover:border-red-400 text-lg leading-none flex items-center justify-center cursor-pointer" title="Remove prize">×</button>
               </div>
             </div>
           </div>
@@ -2847,5 +2840,11 @@
   </div>
   <!-- ===================== / BULK MENU IMPORT MODAL ===================== -->
 
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/config.local.js" onerror="console.info('[ChillPill] No config.local.js override found — using assets/js/config.js placeholders.')"></script>
+  <script src="assets/js/supabaseClient.js"></script>
+  <script src="assets/js/passwordHash.js"></script>
+  <script src="assets/js/dashboard.js?v=20260916"></script>
+  <script src="assets/js/tournament.js?v=20260930"></script>
 </body>
 </html>

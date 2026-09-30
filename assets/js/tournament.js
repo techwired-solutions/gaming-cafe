@@ -1,3 +1,4 @@
+
 /**
  * ChillPill Gaming Cafe — Tournament Management System
  * Handles: create/edit tournaments, registrations, draw generation,
@@ -624,13 +625,21 @@
   function addPrizeRow(place = "", reward = "") {
     const container = document.getElementById("tm-prize-rows");
     if (!container) return;
+    if (!place) {
+      const currentCount = container.querySelectorAll(".tm-prize-row").length;
+      if (currentCount === 0) place = "1st Place";
+      else if (currentCount === 1) place = "2nd Place";
+      else if (currentCount === 2) place = "3rd Place";
+      else if (currentCount === 3) place = "Semi-Finalist";
+      else if (currentCount === 4) place = "Semi-Finalist";
+      else place = `${currentCount + 1}th Place`;
+    }
     const row = document.createElement("div");
-    row.className = "tm-prize-row grid grid-cols-[120px_1fr_auto] gap-2 items-center";
+    row.className = "tm-prize-row grid grid-cols-[140px_1fr_auto] gap-2 items-center";
     row.innerHTML = `
-      <input type="text" placeholder="e.g. 1st Place" class="form-control text-xs py-2 tm-prize-place" value="${esc(place)}">
+      <input type="text" placeholder="e.g. 1st Place, Semi-Finalist" class="form-control text-xs py-2 tm-prize-place" value="${esc(place)}">
       <input type="text" placeholder="e.g. Rs 5,000 + Trophy" class="form-control text-xs py-2 tm-prize-reward" value="${esc(reward)}">
-      <button type="button" class="tm-prize-remove h-8 w-8 rounded-lg border border-slate-600 text-slate-400 hover:text-red-300 hover:border-red-400 text-lg leading-none flex items-center justify-center">&#215;</button>`;
-    row.querySelector(".tm-prize-remove").addEventListener("click", () => row.remove());
+      <button type="button" class="tm-prize-remove h-8 w-8 rounded-lg border border-slate-600 text-slate-400 hover:text-red-300 hover:border-red-400 text-lg leading-none flex items-center justify-center cursor-pointer" title="Remove prize">&#215;</button>`;
     container.appendChild(row);
   }
 
@@ -671,10 +680,37 @@
     openModal("tournament-modal");
   }
 
-  document.getElementById("tm-add-prize")?.addEventListener("click", () => addPrizeRow());
+  // Delegated click handling on document for prize rows and modal triggers
+  document.addEventListener("click", (e) => {
+    const addPrizeBtn = e.target.closest("#tm-add-prize");
+    if (addPrizeBtn) {
+      e.preventDefault();
+      addPrizeRow();
+      return;
+    }
+    const removePrizeBtn = e.target.closest(".tm-prize-remove");
+    if (removePrizeBtn) {
+      e.preventDefault();
+      const row = removePrizeBtn.closest(".tm-prize-row");
+      if (row) row.remove();
+      return;
+    }
+    const closeTournamentBtn = e.target.closest("#tournament-modal-close");
+    if (closeTournamentBtn) {
+      e.preventDefault();
+      closeModal("tournament-modal");
+      return;
+    }
+    const closeMatchBtn = e.target.closest("#match-score-modal-close");
+    if (closeMatchBtn) {
+      e.preventDefault();
+      closeModal("match-score-modal");
+      return;
+    }
+  });
+
   document.getElementById("btn-create-tournament")?.addEventListener("click", () => openTournamentModal(null));
   document.getElementById("td-edit-btn")?.addEventListener("click", () => { if (currentTournament) openTournamentModal(currentTournament); });
-  document.getElementById("tournament-modal-close")?.addEventListener("click", () => closeModal("tournament-modal"));
   document.getElementById("tournament-modal")?.addEventListener("click", e => { if (e.target === e.currentTarget) closeModal("tournament-modal"); });
 
   document.getElementById("tournament-form")?.addEventListener("submit", async e => {
