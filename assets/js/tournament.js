@@ -663,6 +663,7 @@
       title.textContent = "New Tournament";
       label.textContent = "Create Tournament";
       document.getElementById("tm-id").value = "";
+      document.getElementById("tm-game").value = "EA FC 25";
       addPrizeRow("1st Place", "");
       addPrizeRow("2nd Place", "");
     }
