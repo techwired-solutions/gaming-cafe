@@ -57,7 +57,7 @@
 
   function wireWhatsappLinks() {
     const url = whatsappUrl();
-    const ids = ["nav-whatsapp", "nav-whatsapp-mobile", "hero-whatsapp", "pricing-whatsapp", "contact-whatsapp", "fab-whatsapp"];
+    const ids = ["nav-whatsapp", "nav-whatsapp-mobile", "hero-whatsapp", "pricing-whatsapp", "contact-whatsapp", "fab-whatsapp", "trn-empty-whatsapp"];
     ids.forEach((id) => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -385,7 +385,15 @@
         .limit(1)
         .maybeSingle();
 
-      if (!t) return; // Nothing to show
+      if (!t) {
+        document.getElementById("trn-empty-state")?.classList.remove("hidden");
+        document.getElementById("trn-active-content")?.classList.add("hidden");
+        return;
+      }
+
+      document.getElementById("trn-empty-state")?.classList.add("hidden");
+      document.getElementById("trn-active-content")?.classList.remove("hidden");
+      updateNavTournamentBadge(t);
 
       // Fetch players and matches
       const [{ data: players }, { data: matches }] = await Promise.all([
@@ -394,15 +402,50 @@
       ]);
 
       renderTournamentSection(t, players || [], matches || []);
+      if (window.lucide) lucide.createIcons();
     } catch (err) {
       console.warn("[ChillPill] Tournament load error:", err);
+    }
+  }
+
+  function updateNavTournamentBadge(t) {
+    const badgeEl = document.getElementById("nav-trn-badge");
+    const mobileBadge = document.getElementById("nav-trn-badge-mobile");
+    if (!t) return;
+
+    if (t.status === "registration_open") {
+      if (badgeEl) {
+        badgeEl.className = "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-green-500/20 text-green-300 border border-green-500/40 leading-none";
+        badgeEl.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block"></span> Register';
+      }
+      if (mobileBadge) {
+        mobileBadge.className = "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/20 text-green-300 border border-green-500/40";
+        mobileBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block"></span> Register Open';
+      }
+    } else if (t.status === "ongoing") {
+      if (badgeEl) {
+        badgeEl.className = "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 leading-none";
+        badgeEl.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse inline-block"></span> Live';
+      }
+      if (mobileBadge) {
+        mobileBadge.className = "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40";
+        mobileBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse inline-block"></span> Live';
+      }
+    } else if (t.status === "completed") {
+      if (badgeEl) {
+        badgeEl.className = "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-[#d8ff45]/20 text-[#d8ff45] border border-[#d8ff45]/40 leading-none";
+        badgeEl.innerHTML = '🏆 Results';
+      }
+      if (mobileBadge) {
+        mobileBadge.className = "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#d8ff45]/20 text-[#d8ff45] border border-[#d8ff45]/40";
+        mobileBadge.innerHTML = 'Results';
+      }
     }
   }
 
   function renderTournamentSection(t, players, matches) {
     const section = document.getElementById("tournaments");
     if (!section) return;
-    section.classList.remove("hidden");
 
     // Title + status
     const titleEl = document.getElementById("trn-title");
