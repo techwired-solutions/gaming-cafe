@@ -4122,7 +4122,8 @@
               bros_burger: { label: "Bro's",     cls: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
               bardali:    { label: "Bardali",    cls: "bg-purple-500/15 text-purple-300 border-purple-500/30" }
             };
-            const sources = [...new Set((r.food_items || []).map(i => i.source || "chillpill"))];
+            // Items are saved with 'supplier' field; fall back to 'source' for older records
+            const sources = [...new Set((r.food_items || []).map(i => i.supplier || i.source || "chillpill"))];
             const badges = sources.map(s => {
               const m = sourceMeta[s] || { label: s, cls: "bg-slate-700 text-slate-300 border-slate-600" };
               return `<span class="inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-bold ${m.cls}">${m.label}</span>`;
@@ -4262,7 +4263,9 @@
         displayedSessions.forEach((r) => {
           (r.food_items || []).forEach((item) => {
             const key = item.name || "Unknown Item";
-            if (!itemMap[key]) itemMap[key] = { qty: 0, gross: 0, source: item.source || "chillpill" };
+            // Items are saved with 'supplier' field; fall back to 'source' for older records
+            const supplier = item.supplier || item.source || "chillpill";
+            if (!itemMap[key]) itemMap[key] = { qty: 0, gross: 0, source: supplier };
             itemMap[key].qty += Number(item.qty) || 1;
             itemMap[key].gross += (Number(item.qty) || 1) * (Number(item.price) || 0);
           });
