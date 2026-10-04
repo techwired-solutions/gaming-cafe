@@ -1334,8 +1334,13 @@
         if (recordsFilterStatus !== "all" && r.status !== recordsFilterStatus) return false;
 
         if (recordsFilterPay !== "all") {
-          const m = (r.payment_method || "").trim().toLowerCase();
-          if (recordsFilterPay.toLowerCase() !== m) return false;
+          if (recordsFilterPay === "unpaid") {
+            // Show only records that are not marked paid (due/credit)
+            if (r.paid) return false;
+          } else {
+            const m = (r.payment_method || "").trim().toLowerCase();
+            if (recordsFilterPay.toLowerCase() !== m) return false;
+          }
         }
 
         if (recordsFilterDate) {
@@ -2611,7 +2616,10 @@
         notified_5min: false
       };
       if (isPaid) {
-        updatePayload.paid_at = editTarget.paid_at || endIso || startIso || new Date().toISOString();
+        // Always update paid_at to reflect the corrected end_time.
+        // Using the old paid_at would keep the revenue on the wrong date
+        // when staff fix an AM/PM mistake (e.g. 11:30 PM → 11:30 AM).
+        updatePayload.paid_at = endIso || editTarget.paid_at || startIso || new Date().toISOString();
       } else {
         updatePayload.paid_at = null;
       }
@@ -2726,6 +2734,7 @@
 
   function updateMrInternalSaleState() {
     const isInternal = !!document.getElementById("mr-is-internal-sale")?.checked;
+    const isFoodOnly = !!document.getElementById("mr-is-food-only")?.checked;
     const badge = document.getElementById("mr-internal-badge");
     const chips = document.getElementById("mr-internal-chips");
     const stationReq = document.getElementById("mr-station-req");
@@ -2739,8 +2748,8 @@
 
     if (badge) badge.classList.toggle("hidden", !isInternal);
     if (chips) chips.classList.toggle("hidden", !isInternal);
-    if (stationReq) stationReq.classList.toggle("hidden", isInternal);
-    if (startTimeReq) startTimeReq.classList.toggle("hidden", isInternal);
+    if (stationReq) stationReq.classList.toggle("hidden", isInternal || isFoodOnly);
+    if (startTimeReq) startTimeReq.classList.toggle("hidden", isInternal || isFoodOnly);
 
     if (isInternal) {
       if (!custInput.value || custInput.value === "Bibek Subedi") {
@@ -2763,14 +2772,15 @@
         custInput.value = "";
       }
       if (phoneInput) phoneInput.placeholder = "e.g. 98XXXXXXXX";
-      if (stationInput) stationInput.placeholder = "e.g. PS5 - Station 1, Cabin 1";
+      if (stationInput) stationInput.placeholder = isFoodOnly ? "Counter / Cafe" : "e.g. PS5 - Station 1, Cabin 1";
       if (foodHdrNote) {
-        foodHdrNote.textContent = "";
+        foodHdrNote.textContent = isFoodOnly ? "· 🍽️ Food-only — no station time" : "";
+        if (isFoodOnly) foodHdrNote.className = "text-amber-400 font-semibold text-xs";
       }
-      if (durationInput && durationInput.value === "0") {
+      if (durationInput && durationInput.value === "0" && !isFoodOnly) {
         durationInput.value = "60";
       }
-      if (rateInput && rateInput.value === "0") {
+      if (rateInput && rateInput.value === "0" && !isFoodOnly) {
         rateInput.value = "100";
       }
     }
@@ -2796,6 +2806,36 @@
     });
 
     recalcMissingRecord();
+  }
+
+  function updateMrFoodOnlyState() {
+    const isFoodOnly = !!document.getElementById("mr-is-food-only")?.checked;
+    const timeSection = document.getElementById("mr-time-section");
+    const discountSection = document.getElementById("mr-discount-section");
+    const stationInput = document.getElementById("mr-station");
+    const durationInput = document.getElementById("mr-duration");
+    const rateInput = document.getElementById("mr-rate");
+    const foodOnlyBadge = document.getElementById("mr-food-only-badge");
+    const internalToggle = document.getElementById("mr-is-internal-sale");
+    const isInternal = !!(internalToggle && internalToggle.checked);
+
+    if (timeSection) timeSection.classList.toggle("hidden", isFoodOnly);
+    if (discountSection) discountSection.classList.toggle("hidden", isFoodOnly);
+    if (foodOnlyBadge) foodOnlyBadge.classList.toggle("hidden", !isFoodOnly);
+
+    if (isFoodOnly) {
+      if (stationInput && !stationInput.value) stationInput.value = "Counter / Cafe";
+      if (durationInput) durationInput.value = "0";
+      if (rateInput) rateInput.value = "0";
+    } else {
+      if (stationInput && stationInput.value === "Counter / Cafe" && !isInternal) stationInput.value = "";
+      if (durationInput && durationInput.value === "0") durationInput.value = "60";
+      if (rateInput && rateInput.value === "0") {
+        const defaultRate = Number(document.getElementById("admin-rate")?.value) || 100;
+        rateInput.value = defaultRate;
+      }
+    }
+    updateMrInternalSaleState();
   }
 
   function openMissingRecordModal() {
@@ -2841,8 +2881,20 @@
     const internalToggle = document.getElementById("mr-is-internal-sale");
     if (internalToggle) {
       internalToggle.checked = false;
-      updateMrInternalSaleState();
     }
+    // Reset Food-Only toggle
+    const foodOnlyToggle = document.getElementById("mr-is-food-only");
+    if (foodOnlyToggle) {
+      foodOnlyToggle.checked = false;
+    }
+    // Show time/discount sections in case they were hidden
+    const timeSection = document.getElementById("mr-time-section");
+    const discountSection = document.getElementById("mr-discount-section");
+    if (timeSection) timeSection.classList.remove("hidden");
+    if (discountSection) discountSection.classList.remove("hidden");
+    const foodOnlyBadge = document.getElementById("mr-food-only-badge");
+    if (foodOnlyBadge) foodOnlyBadge.classList.add("hidden");
+    updateMrInternalSaleState();
 
     // Payment defaults
     document.getElementById("mr-payment-status").value = "Paid";
@@ -2904,6 +2956,12 @@
     const internalToggle = document.getElementById("mr-is-internal-sale");
     if (internalToggle) {
       internalToggle.addEventListener("change", updateMrInternalSaleState);
+    }
+
+    // Food-only sale toggle
+    const foodOnlyToggle = document.getElementById("mr-is-food-only");
+    if (foodOnlyToggle) {
+      foodOnlyToggle.addEventListener("change", updateMrFoodOnlyState);
     }
 
     document.querySelectorAll(".mr-preset-chip").forEach((chip) => {
@@ -3030,11 +3088,19 @@
           return;
         }
       } else {
-        if (!station || !customerName || !dateVal || !startTimeStr) {
-          msgEl.textContent = "Please fill in Station, Customer name, Date, and Start time.";
+        const isFoodOnly = !!document.getElementById("mr-is-food-only")?.checked;
+        if (!customerName || !dateVal) {
+          msgEl.textContent = "Please fill in Customer name and Date.";
           msgEl.className = "text-sm min-h-5 mb-3 text-red-300";
           return;
         }
+        if (!isFoodOnly && (!station || !startTimeStr)) {
+          msgEl.textContent = "Please fill in Station and Start time (or enable Food-Only Sale).";
+          msgEl.className = "text-sm min-h-5 mb-3 text-red-300";
+          return;
+        }
+        // For food-only: default station to counter if blank
+        if (isFoodOnly && !station) station = "Counter / Cafe";
       }
 
       const { total, foodTotal, duration, rate, discount } = recalcMissingRecord();
@@ -3060,9 +3126,10 @@
         selectedStaffName = currentStaff.name;
       }
 
+      const isFoodOnly = !!document.getElementById("mr-is-food-only")?.checked;
       const notes = document.getElementById("mr-notes").value.trim();
-      const defaultTag = isInternal ? "[Internal Sale]" : "[Paper Register]";
-      const noteWithTag = notes ? `${defaultTag} ${notes}` : (isInternal ? "[Internal Sale Entry]" : "[Paper Register Entry]");
+      const defaultTag = isInternal ? "[Internal Sale]" : isFoodOnly ? "[Food Only Sale]" : "[Paper Register]";
+      const noteWithTag = notes ? `${defaultTag} ${notes}` : (isInternal ? "[Internal Sale Entry]" : isFoodOnly ? "[Food Only Sale]" : "[Paper Register Entry]");
 
       const recordPayload = {
         type: "Walk-in",
