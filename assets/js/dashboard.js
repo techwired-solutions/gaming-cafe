@@ -4113,12 +4113,30 @@
           const isCash = r.payment_method === "Cash";
           const foodCell = revSelectedDept === "station" ? "" : `<td class="py-2.5 pr-3 mono text-amber-300 text-xs font-semibold">${inr(rev.foodTotal)}</td>`;
           const playCell = revSelectedDept === "food" ? "" : `<td class="py-2.5 pr-3 mono text-sky-300 text-xs font-semibold">${inr(rev.timeRevenue)}</td>`;
+
+          // Food source badges (only in food mode)
+          let sourceCell = "";
+          if (revSelectedDept === "food") {
+            const sourceMeta = {
+              chillpill:  { label: "ChillPill",  cls: "bg-[#d8ff45]/15 text-[#d8ff45] border-[#d8ff45]/30" },
+              bros_burger: { label: "Bro's",     cls: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
+              bardali:    { label: "Bardali",    cls: "bg-purple-500/15 text-purple-300 border-purple-500/30" }
+            };
+            const sources = [...new Set((r.food_items || []).map(i => i.source || "chillpill"))];
+            const badges = sources.map(s => {
+              const m = sourceMeta[s] || { label: s, cls: "bg-slate-700 text-slate-300 border-slate-600" };
+              return `<span class="inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-bold ${m.cls}">${m.label}</span>`;
+            }).join(" ");
+            sourceCell = `<td class="py-2.5 pr-3"><div class="flex flex-wrap gap-1">${badges || '<span class="text-slate-600 text-xs">—</span>'}</div></td>`;
+          }
+
           return `
             <tr class="hover:bg-white/5 transition-colors">
               <td class="py-2.5 pr-3 text-xs text-slate-300">${fmtDateTime(r.paid_at || r.created_at)}</td>
               <td class="py-2.5 pr-3 font-medium">${r.customer_name || "—"}</td>
               <td class="py-2.5 pr-3 text-slate-400 text-xs">${r.station_name || "—"}</td>
               ${playCell}
+              ${sourceCell}
               ${foodCell}
               <td class="py-2.5 pr-3 text-xs ${isCash ? "text-amber-300" : "text-sky-300"}">${r.payment_method || "—"}</td>
               <td class="py-2.5 pr-3 mono text-slate-200 text-xs">${inr(r.amount)}</td>
@@ -4274,9 +4292,12 @@
     // Adapt the sessions table header labels based on dept
     const thPlayTime = document.getElementById("rev-th-playtime");
     const thFoodGross = document.getElementById("rev-th-food-gross");
+    const thSource = document.getElementById("rev-th-source");
     const thNetProfit = document.getElementById("rev-th-net-profit");
     if (thPlayTime) thPlayTime.classList.toggle("hidden", revSelectedDept === "food");
     if (thFoodGross) thFoodGross.classList.toggle("hidden", revSelectedDept === "station");
+    // Source column only appears in food mode
+    if (thSource) thSource.classList.toggle("hidden", revSelectedDept !== "food");
     if (thNetProfit) {
       thNetProfit.textContent = revSelectedDept === "station" ? "Play Earnings" : revSelectedDept === "food" ? "Food Net Profit" : "Net Cafe Profit";
     }
