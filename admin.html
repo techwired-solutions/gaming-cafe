@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -709,11 +709,11 @@
                     <th class="pb-2.5 pr-3">Date &amp; Time</th>
                     <th class="pb-2.5 pr-3">Customer</th>
                     <th class="pb-2.5 pr-3">Station</th>
-                    <th class="pb-2.5 pr-3 text-sky-300">Play Time (रु)</th>
-                    <th class="pb-2.5 pr-3 text-amber-300">Food Orders Gross (रु)</th>
+                    <th id="rev-th-playtime" class="pb-2.5 pr-3 text-sky-300">Play Time (रु)</th>
+                    <th id="rev-th-food-gross" class="pb-2.5 pr-3 text-amber-300">Food Orders Gross (रु)</th>
                     <th class="pb-2.5 pr-3">Method</th>
                     <th class="pb-2.5 pr-3">Total Paid</th>
-                    <th class="pb-2.5 text-right font-bold text-[#d8ff45]">Net Cafe Profit</th>
+                    <th id="rev-th-net-profit" class="pb-2.5 text-right font-bold text-[#d8ff45]">Net Cafe Profit</th>
                   </tr>
                 </thead>
                 <tbody id="rev-day-sessions" class="divide-y divide-slate-800"></tbody>
@@ -771,7 +771,7 @@
           </div>
 
           <!-- Partner Restaurant Food Sales & Settlements -->
-          <div class="panel rounded-2xl p-5 mt-5">
+          <div id="rev-restaurant-partnerships" class="panel rounded-2xl p-5 mt-5 transition-all">
             <div class="flex items-center justify-between mb-4">
               <div>
                 <h3 class="font-bold text-lg flex items-center gap-2">
@@ -825,6 +825,62 @@
               </div>
             </div>
           </div>
+
+          <!-- Station Breakdown Panel (visible only in Station mode) -->
+          <div id="rev-station-breakdown" class="hidden panel rounded-2xl p-5 mb-5 mt-5">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 class="font-bold text-base flex items-center gap-2">
+                  <i data-lucide="gamepad-2" width="16" height="16" class="text-sky-300"></i>
+                  Revenue per Station
+                </h3>
+                <p class="text-xs text-slate-400 mt-0.5">Gaming time revenue broken down by individual station for the selected period.</p>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-left text-xs text-slate-400 border-b border-slate-700">
+                    <th class="pb-2.5 pr-3">Station</th>
+                    <th class="pb-2.5 pr-3">Sessions</th>
+                    <th class="pb-2.5 pr-3">Total Time</th>
+                    <th class="pb-2.5 pr-4">Share</th>
+                    <th class="pb-2.5 text-right text-sky-300">Revenue</th>
+                  </tr>
+                </thead>
+                <tbody id="rev-station-breakdown-body" class="divide-y divide-slate-800"></tbody>
+              </table>
+            </div>
+            <p id="rev-station-breakdown-empty" class="hidden text-sm text-slate-500 mt-4 text-center py-4">No gaming sessions found for this period.</p>
+          </div>
+
+          <!-- Food Items Breakdown Panel (visible only in Food mode) -->
+          <div id="rev-food-dept-breakdown" class="hidden panel rounded-2xl p-5 mb-5 mt-5">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 class="font-bold text-base flex items-center gap-2">
+                  <i data-lucide="sandwich" width="16" height="16" class="text-amber-300"></i>
+                  Food Items Ordered
+                </h3>
+                <p class="text-xs text-slate-400 mt-0.5">All food and drink items ordered in the period, grouped by menu item with source and gross value.</p>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-left text-xs text-slate-400 border-b border-slate-700">
+                    <th class="pb-2.5 pr-3">Item</th>
+                    <th class="pb-2.5 pr-3">Source</th>
+                    <th class="pb-2.5 pr-3">Qty Ordered</th>
+                    <th class="pb-2.5 text-right text-amber-300">Gross Value</th>
+                  </tr>
+                </thead>
+                <tbody id="rev-food-items-body" class="divide-y divide-slate-800"></tbody>
+              </table>
+            </div>
+            <p id="rev-food-items-empty" class="hidden text-sm text-slate-500 mt-4 text-center py-4">No food orders found for this period.</p>
+          </div>
+
         </section>
 
         <!-- ===================== EXPENSES & CAPITAL (admin) ===================== -->

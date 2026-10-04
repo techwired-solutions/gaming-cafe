@@ -4111,13 +4111,15 @@
           const rev = computeRecordRevenue(r);
           const profit = revSelectedDept === "station" ? rev.timeRevenue : revSelectedDept === "food" ? rev.netFoodRevenue : rev.netRevenue;
           const isCash = r.payment_method === "Cash";
+          const foodCell = revSelectedDept === "station" ? "" : `<td class="py-2.5 pr-3 mono text-amber-300 text-xs font-semibold">${inr(rev.foodTotal)}</td>`;
+          const playCell = revSelectedDept === "food" ? "" : `<td class="py-2.5 pr-3 mono text-sky-300 text-xs font-semibold">${inr(rev.timeRevenue)}</td>`;
           return `
             <tr class="hover:bg-white/5 transition-colors">
               <td class="py-2.5 pr-3 text-xs text-slate-300">${fmtDateTime(r.paid_at || r.created_at)}</td>
               <td class="py-2.5 pr-3 font-medium">${r.customer_name || "—"}</td>
               <td class="py-2.5 pr-3 text-slate-400 text-xs">${r.station_name || "—"}</td>
-              <td class="py-2.5 pr-3 mono text-sky-300 text-xs font-semibold">${inr(rev.timeRevenue)}</td>
-              <td class="py-2.5 pr-3 mono text-amber-300 text-xs font-semibold">${inr(rev.foodTotal)}</td>
+              ${playCell}
+              ${foodCell}
               <td class="py-2.5 pr-3 text-xs ${isCash ? "text-amber-300" : "text-sky-300"}">${r.payment_method || "—"}</td>
               <td class="py-2.5 pr-3 mono text-slate-200 text-xs">${inr(r.amount)}</td>
               <td class="py-2.5 text-right mono font-bold text-xs text-[#d8ff45]">${inr(profit)}</td>
@@ -4180,6 +4182,112 @@
     if (bardaliPayEl2) bardaliPayEl2.textContent = inr(totalBardaliPayable);
     const bardaliGrossEl = document.getElementById("rev-bardali-gross-total");
     if (bardaliGrossEl) bardaliGrossEl.textContent = inr(totalBardaliGross);
+
+    // ----- Department-specific breakdowns -----
+    // Station breakdown: per-station revenue when station mode is active
+    const stationBreakdownEl = document.getElementById("rev-station-breakdown");
+    if (stationBreakdownEl) {
+      if (revSelectedDept === "station") {
+        stationBreakdownEl.classList.remove("hidden");
+        const byStation = {};
+        displayedSessions.forEach((r) => {
+          const key = r.station_name || "Unknown Station";
+          const rev = computeRecordRevenue(r);
+          if (!byStation[key]) byStation[key] = { timeRevenue: 0, minutes: 0, sessions: 0 };
+          byStation[key].timeRevenue += rev.timeRevenue;
+          byStation[key].minutes += Number(r.duration_minutes) || 0;
+          byStation[key].sessions += 1;
+        });
+        const stationRows = Object.entries(byStation).sort((a, b) => b[1].timeRevenue - a[1].timeRevenue);
+        const maxStVal = stationRows.reduce((m, e) => Math.max(m, e[1].timeRevenue), 0);
+        const stBodyEl = document.getElementById("rev-station-breakdown-body");
+        const stEmptyEl = document.getElementById("rev-station-breakdown-empty");
+        if (stBodyEl) {
+          if (!stationRows.length) {
+            stBodyEl.innerHTML = "";
+            if (stEmptyEl) stEmptyEl.classList.remove("hidden");
+          } else {
+            if (stEmptyEl) stEmptyEl.classList.add("hidden");
+            stBodyEl.innerHTML = stationRows.map(([name, v]) => {
+              const pct = maxStVal > 0 ? Math.round((v.timeRevenue / maxStVal) * 100) : 0;
+              const hrs = Math.floor(v.minutes / 60);
+              const mins = v.minutes % 60;
+              const hrsLabel = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+              return `<tr class="hover:bg-white/5 transition-colors">
+                <td class="py-2.5 pr-3 font-medium">${name}</td>
+                <td class="py-2.5 pr-3 text-xs text-slate-400 mono">${v.sessions} session${v.sessions === 1 ? '' : 's'}</td>
+                <td class="py-2.5 pr-3 text-xs text-slate-400 mono">${hrsLabel}</td>
+                <td class="py-2.5 pr-4">
+                  <div class="flex items-center gap-2">
+                    <div class="flex-1 h-1.5 rounded-full bg-slate-800">
+                      <div class="h-1.5 rounded-full bg-sky-400" style="width:${pct}%"></div>
+                    </div>
+                  </div>
+                </td>
+                <td class="py-2.5 text-right mono font-bold text-sky-300">${inr(v.timeRevenue)}</td>
+              </tr>`;
+            }).join("");
+          }
+        }
+      } else {
+        stationBreakdownEl.classList.add("hidden");
+      }
+    }
+
+    // Food breakdown: show detailed per-source panel in food mode
+    const foodBreakdownPanelEl = document.getElementById("rev-food-dept-breakdown");
+    if (foodBreakdownPanelEl) {
+      foodBreakdownPanelEl.classList.toggle("hidden", revSelectedDept !== "food");
+      if (revSelectedDept === "food") {
+        // Per-item ordered count for food mode
+        const itemMap = {};
+        displayedSessions.forEach((r) => {
+          (r.food_items || []).forEach((item) => {
+            const key = item.name || "Unknown Item";
+            if (!itemMap[key]) itemMap[key] = { qty: 0, gross: 0, source: item.source || "chillpill" };
+            itemMap[key].qty += Number(item.qty) || 1;
+            itemMap[key].gross += (Number(item.qty) || 1) * (Number(item.price) || 0);
+          });
+        });
+        const itemRows = Object.entries(itemMap).sort((a, b) => b[1].gross - a[1].gross);
+        const foodItemsBody = document.getElementById("rev-food-items-body");
+        const foodItemsEmpty = document.getElementById("rev-food-items-empty");
+        if (foodItemsBody) {
+          if (!itemRows.length) {
+            foodItemsBody.innerHTML = "";
+            if (foodItemsEmpty) foodItemsEmpty.classList.remove("hidden");
+          } else {
+            if (foodItemsEmpty) foodItemsEmpty.classList.add("hidden");
+            const sourceLabel = { chillpill: "🏠 ChillPill", bros_burger: "🍔 Bro's", bardali: "🍽️ Bardali" };
+            foodItemsBody.innerHTML = itemRows.map(([name, v]) => `
+              <tr class="hover:bg-white/5 transition-colors">
+                <td class="py-2 pr-3 font-medium text-sm">${name}</td>
+                <td class="py-2 pr-3 text-xs text-slate-400">${sourceLabel[v.source] || v.source}</td>
+                <td class="py-2 pr-3 mono text-slate-300 text-xs">${v.qty}</td>
+                <td class="py-2 text-right mono font-semibold text-amber-300 text-xs">${inr(v.gross)}</td>
+              </tr>`).join("");
+          }
+        }
+      }
+    }
+
+    // Adapt the sessions table header labels based on dept
+    const thPlayTime = document.getElementById("rev-th-playtime");
+    const thFoodGross = document.getElementById("rev-th-food-gross");
+    const thNetProfit = document.getElementById("rev-th-net-profit");
+    if (thPlayTime) thPlayTime.classList.toggle("hidden", revSelectedDept === "food");
+    if (thFoodGross) thFoodGross.classList.toggle("hidden", revSelectedDept === "station");
+    if (thNetProfit) {
+      thNetProfit.textContent = revSelectedDept === "station" ? "Play Earnings" : revSelectedDept === "food" ? "Food Net Profit" : "Net Cafe Profit";
+    }
+
+    // Show/hide restaurant partnerships panel
+    const partnersPanelEl = document.getElementById("rev-restaurant-partnerships");
+    if (partnersPanelEl) {
+      // Always visible, but move to top in food mode visually via class
+      partnersPanelEl.classList.toggle("ring-2", revSelectedDept === "food");
+      partnersPanelEl.classList.toggle("ring-[#d8ff45]/30", revSelectedDept === "food");
+    }
 
     // Build daily map and render chart + table (responsive to selected department)
     const dailyMap = buildDailyMap(allPaid, revSelectedDept);
