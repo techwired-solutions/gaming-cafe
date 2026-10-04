@@ -1069,7 +1069,7 @@
     document.getElementById("active-count").textContent = activeSessions.length;
     document.getElementById("ending-soon-count").textContent = endingSoon.length;
     document.getElementById("completed-count").textContent = completedToday.length;
-    document.getElementById("food-count").textContent = records.filter((r) => r.food_items && r.food_items.length).length;
+    document.getElementById("food-count").textContent = records.filter((r) => r.food_items && r.food_items.length && isToday(r.paid_at || r.start_time || r.created_at)).length;
     document.getElementById("today-revenue").textContent = inr(todayRevenue);
     document.getElementById("record-count").textContent = records.length;
   }
