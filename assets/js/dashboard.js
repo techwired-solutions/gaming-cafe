@@ -313,6 +313,28 @@
     set bardali_whatsapp(v) { this.bardali.whatsapp = v || ""; }
   };
 
+  // Committed amounts per partner (stored in localStorage)
+  // Default: Sujan+Sushil combined=400k, Prakash=400k, Abinash=400k, Easymoto=300k
+  const CAPITAL_COMMITTED_KEY = "chillpill_capital_committed";
+  let capitalCommitted = {}; // { partnerName: committedAmount }
+
+  function loadCapitalCommitted() {
+    try {
+      const raw = localStorage.getItem(CAPITAL_COMMITTED_KEY);
+      if (raw) capitalCommitted = JSON.parse(raw) || {};
+    } catch (_) {}
+  }
+
+  function saveCapitalCommitted() {
+    try { localStorage.setItem(CAPITAL_COMMITTED_KEY, JSON.stringify(capitalCommitted)); } catch (_) {}
+  }
+
+  function getCommittedFor(partnerName) {
+    // Case-insensitive lookup
+    const key = Object.keys(capitalCommitted).find(k => k.trim().toLowerCase() === partnerName.trim().toLowerCase());
+    return key ? Number(capitalCommitted[key]) || 0 : 0;
+  }
+
   function loadPartnerSettings() {
     try {
       const local = localStorage.getItem(PARTNER_STORAGE_KEY);
@@ -4516,20 +4538,32 @@
     if (list) {
       list.innerHTML = "";
       partners.forEach(([name, data]) => {
-        const pct = totalCapital > 0 ? ((data.total / totalCapital) * 100).toFixed(1) : "0.0";
+        const committed = getCommittedFor(name);
+        // If committed is set: show paid vs committed %; otherwise fall back to share of total paid
+        let pct, pctBar, committedLabel;
+        if (committed > 0) {
+          pct = ((data.total / committed) * 100).toFixed(1);
+          pctBar = Math.min(100, Number(pct));
+          committedLabel = `${inr(data.total)} of ${inr(committed)} committed`;
+        } else {
+          pct = totalCapital > 0 ? ((data.total / totalCapital) * 100).toFixed(1) : "0.0";
+          pctBar = Number(pct);
+          committedLabel = `${inr(data.total)} invested`;
+        }
+        const barColor = Number(pct) >= 100 ? "bg-emerald-400" : Number(pct) >= 50 ? "bg-[#d8ff45]" : "bg-amber-400";
         const card = document.createElement("div");
         card.className = "rounded-xl border border-slate-700 bg-[#111722] p-3.5 flex flex-col justify-between";
         card.innerHTML = `
           <div>
             <div class="flex items-center justify-between gap-1 mb-1">
               <p class="font-semibold text-sm text-white truncate" title="${name}">${name}</p>
-              <span class="mono text-xs font-bold text-[#d8ff45] bg-[#d8ff45]/10 border border-[#d8ff45]/30 px-1.5 py-0.5 rounded shrink-0">${pct}%</span>
+              <span class="mono text-xs font-bold ${Number(pct) >= 100 ? 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30' : 'text-[#d8ff45] bg-[#d8ff45]/10 border-[#d8ff45]/30'} border px-1.5 py-0.5 rounded shrink-0">${pct}%</span>
             </div>
-            <p class="text-xs text-slate-400">Invested: <span class="mono font-bold text-white">${inr(data.total)}</span></p>
+            <p class="text-xs text-slate-400">${committedLabel}</p>
           </div>
           <div class="mt-2.5">
             <div class="h-1.5 rounded-full bg-slate-800 overflow-hidden">
-              <div class="h-full rounded-full bg-[#d8ff45]" style="width:${pct}%"></div>
+              <div class="h-full rounded-full ${barColor} transition-all" style="width:${pctBar}%"></div>
             </div>
             <p class="text-[10px] text-slate-500 mt-1">${data.count} contribution${data.count > 1 ? "s" : ""}</p>
           </div>`;
@@ -5165,11 +5199,65 @@
     });
 
     // --- Partner Seed Capital Form & Actions ---
+    loadCapitalCommitted();
     const capForm = document.getElementById("capital-form");
     const toggleCapBtn = document.getElementById("btn-toggle-capital-form");
     const closeCapBtn = document.getElementById("btn-close-capital-form");
     const cancelCapBtn = document.getElementById("btn-cancel-capital");
     const copyCapSqlBtn = document.getElementById("btn-copy-capital-sql");
+
+    // Seed Capital section collapse toggle
+    const capitalCollapseBtn = document.getElementById("btn-toggle-capital-section");
+    const capitalCollapseBody = document.getElementById("capital-section-body");
+    const capitalCollapseIcon = document.getElementById("capital-collapse-icon");
+    if (capitalCollapseBtn && capitalCollapseBody) {
+      capitalCollapseBtn.addEventListener("click", () => {
+        const isHidden = capitalCollapseBody.classList.toggle("hidden");
+        if (capitalCollapseIcon) capitalCollapseIcon.style.transform = isHidden ? "rotate(-90deg)" : "rotate(0deg)";
+      });
+    }
+
+    // Edit Committed Amounts form
+    const committedForm = document.getElementById("capital-committed-form");
+    const toggleCommittedBtn = document.getElementById("btn-toggle-committed-form");
+    const closeCommittedBtn = document.getElementById("btn-close-committed-form");
+    if (toggleCommittedBtn && committedForm) {
+      toggleCommittedBtn.addEventListener("click", () => {
+        committedForm.classList.toggle("hidden");
+        if (!committedForm.classList.contains("hidden")) {
+          // Pre-fill current values from stored committed map
+          committedForm.querySelectorAll(".committed-row").forEach(row => {
+            const name = row.dataset.partner;
+            const input = row.querySelector("input");
+            if (input && name) {
+              const val = getCommittedFor(name);
+              input.value = val > 0 ? val : "";
+            }
+          });
+        }
+      });
+    }
+    if (closeCommittedBtn && committedForm) {
+      closeCommittedBtn.addEventListener("click", () => committedForm.classList.add("hidden"));
+    }
+    if (committedForm) {
+      committedForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        committedForm.querySelectorAll(".committed-row").forEach(row => {
+          const name = row.dataset.partner;
+          const input = row.querySelector("input");
+          if (name && input) {
+            const val = Math.max(0, Number(input.value) || 0);
+            if (val > 0) capitalCommitted[name] = val;
+            else delete capitalCommitted[name];
+          }
+        });
+        saveCapitalCommitted();
+        renderCapitalContributions();
+        committedForm.classList.add("hidden");
+        showToast("Committed amounts updated.");
+      });
+    }
 
     if (toggleCapBtn && capForm) {
       toggleCapBtn.addEventListener("click", () => {
