@@ -223,6 +223,47 @@
     if (inlineImg) inlineImg.src = "";
   }
 
+  function formatPrizePoolForBroadcast(prizePool) {
+    if (!prizePool) return "";
+    let prizes = prizePool;
+    if (typeof prizes === "string") {
+      try {
+        prizes = JSON.parse(prizes);
+      } catch (_) {
+        return prizes.trim();
+      }
+    }
+    if (Array.isArray(prizes)) {
+      if (!prizes.length) return "";
+      const valid = prizes.filter(p => {
+        if (!p) return false;
+        if (typeof p === "string" || typeof p === "number") return String(p).trim().length > 0;
+        return (p.place && String(p.place).trim()) || (p.reward && String(p.reward).trim());
+      });
+      if (!valid.length) return "";
+      return valid.map((p, i) => {
+        const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "🎖️";
+        if (typeof p === "string" || typeof p === "number") {
+          return `${medal} ${p}`;
+        }
+        const place = (p.place || p.position || p.rank || `#${i + 1}`).trim();
+        const reward = (p.reward || p.prize || p.amount || "").trim();
+        if (place && reward) return `${medal} *${place}:* ${reward}`;
+        if (reward) return `${medal} ${reward}`;
+        return `${medal} *${place}*`;
+      }).join("\n");
+    }
+    if (typeof prizes === "object") {
+      const entries = Object.entries(prizes).filter(([k, v]) => v != null && String(v).trim() !== "");
+      if (!entries.length) return "";
+      return entries.map(([k, v], i) => {
+        const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "🎖️";
+        return `${medal} *${k}:* ${v}`;
+      }).join("\n");
+    }
+    return String(prizes).trim();
+  }
+
   function buildBroadcastMessage() {
     const t = currentTournament;
     if (!t) return "";
@@ -244,8 +285,9 @@
       msg += `🆓 *Entry:* Free\n`;
     }
 
-    if (t.prize_pool) {
-      msg += `\n🏅 *Prize Pool:*\n${t.prize_pool}\n`;
+    const prizeText = formatPrizePoolForBroadcast(t.prize_pool);
+    if (prizeText) {
+      msg += `\n🏅 *Prize Pool:*\n${prizeText}\n`;
     }
 
     if (t.rules) {
@@ -341,9 +383,45 @@
     }
   }
 
+  function updateBroadcastPreview() {
+    const msg = buildBroadcastMessage();
+    const previewEl = document.getElementById("bc-message-preview");
+    if (previewEl) previewEl.textContent = msg || "Select or open a tournament to preview message...";
+    // Show QR preview inline
+    const inlineWrap = document.getElementById("bc-qr-preview-inline");
+    const inlineImg = document.getElementById("bc-qr-inline-img");
+    if (bcQrDataUrl && inlineWrap && inlineImg) {
+      inlineImg.src = bcQrDataUrl;
+      inlineWrap.classList.remove("hidden");
+    } else if (inlineWrap) {
+      inlineWrap.classList.add("hidden");
+    }
+  }
+
   function initBroadcastTab() {
     loadBroadcastQr();
     loadBroadcastCustomers();
+
+    // Default registration link if not set
+    const regInput = document.getElementById("bc-reg-link");
+    if (regInput && !regInput.value) {
+      try {
+        const origin = window.location.origin;
+        const path = window.location.pathname.substring(0, window.location.pathname.lastIndexOf("/") + 1);
+        regInput.value = `${origin}${path}tournament.html`;
+      } catch (_) {}
+    }
+
+    // Auto-update message preview on input changes
+    if (regInput && !regInput._bcWired) {
+      regInput._bcWired = true;
+      regInput.addEventListener("input", updateBroadcastPreview);
+    }
+    const extraNotes = document.getElementById("bc-extra-notes");
+    if (extraNotes && !extraNotes._bcWired) {
+      extraNotes._bcWired = true;
+      extraNotes.addEventListener("input", updateBroadcastPreview);
+    }
 
     // QR upload
     const qrInput = document.getElementById("bc-qr-input");
@@ -362,6 +440,7 @@
           if (inlineImg) inlineImg.src = bcQrDataUrl;
           document.getElementById("bc-qr-preview")?.classList.remove("hidden");
           document.getElementById("bc-qr-placeholder")?.classList.add("hidden");
+          updateBroadcastPreview();
           showToast("QR code uploaded and saved.");
         };
         reader.readAsDataURL(file);
@@ -377,6 +456,7 @@
         e.preventDefault();
         e.stopPropagation();
         clearBroadcastQr();
+        updateBroadcastPreview();
         showToast("QR code removed.");
       });
     }
@@ -385,21 +465,11 @@
     const previewBtn = document.getElementById("bc-preview-btn");
     if (previewBtn && !previewBtn._bcWired) {
       previewBtn._bcWired = true;
-      previewBtn.addEventListener("click", () => {
-        const msg = buildBroadcastMessage();
-        const previewEl = document.getElementById("bc-message-preview");
-        if (previewEl) previewEl.textContent = msg;
-        // Show QR preview inline
-        const inlineWrap = document.getElementById("bc-qr-preview-inline");
-        const inlineImg = document.getElementById("bc-qr-inline-img");
-        if (bcQrDataUrl && inlineWrap && inlineImg) {
-          inlineImg.src = bcQrDataUrl;
-          inlineWrap.classList.remove("hidden");
-        } else if (inlineWrap) {
-          inlineWrap.classList.add("hidden");
-        }
-      });
+      previewBtn.addEventListener("click", updateBroadcastPreview);
     }
+
+    // Auto-render preview immediately
+    updateBroadcastPreview();
 
     // Search
     const searchInput = document.getElementById("bc-customer-search");
