@@ -3229,6 +3229,27 @@
   }
 
   // ---------- Add Missing Record (Paper Register Backfill) ----------
+  let mrModalWired = false;
+  let isSubmittingMissingRecord = false;
+
+  function setMissingRecordSubmitting(submitting) {
+    isSubmittingMissingRecord = !!submitting;
+    const saveOnlyBtn = document.getElementById("mr-save-only");
+    const savePrintBtn = document.getElementById("mr-save-print");
+    if (saveOnlyBtn) {
+      saveOnlyBtn.disabled = submitting;
+      saveOnlyBtn.classList.toggle("opacity-50", submitting);
+      saveOnlyBtn.classList.toggle("pointer-events-none", submitting);
+      saveOnlyBtn.classList.toggle("cursor-not-allowed", submitting);
+    }
+    if (savePrintBtn) {
+      savePrintBtn.disabled = submitting;
+      savePrintBtn.classList.toggle("opacity-50", submitting);
+      savePrintBtn.classList.toggle("pointer-events-none", submitting);
+      savePrintBtn.classList.toggle("cursor-not-allowed", submitting);
+    }
+  }
+
   function populateMrStaffSelect() {
     const sel = document.getElementById("mr-staff-select");
     if (!sel) return;
@@ -3448,6 +3469,7 @@
   function openMissingRecordModal() {
     const modal = document.getElementById("missing-record-modal");
     if (!modal) return;
+    setMissingRecordSubmitting(false);
 
     // Reset date to yesterday by default (most common register backfill)
     const yest = new Date();
@@ -3548,11 +3570,14 @@
   function closeMissingRecordModal() {
     const modal = document.getElementById("missing-record-modal");
     if (modal) modal.classList.remove("show");
+    setMissingRecordSubmitting(false);
   }
 
   function initMissingRecordModal() {
     const modal = document.getElementById("missing-record-modal");
     if (!modal) return;
+    if (mrModalWired) return;
+    mrModalWired = true;
 
     const openBtn = document.getElementById("btn-open-missing-record");
     if (openBtn) openBtn.addEventListener("click", openMissingRecordModal);
@@ -3713,6 +3738,8 @@
 
     // Form submission helper
     async function submitMissingRecord(printBill = false) {
+      if (isSubmittingMissingRecord) return;
+
       const internalToggle = document.getElementById("mr-is-internal-sale");
       const isInternal = !!(internalToggle && internalToggle.checked) ||
                          document.getElementById("mr-customer-name").value.trim().toLowerCase().includes("internal");
@@ -3750,136 +3777,148 @@
         if (isFoodOnly && !station) station = "Counter / Cafe";
       }
 
-      const { total, foodTotal, duration, rate, discount } = recalcMissingRecord();
-      const foodItems = collectFrItems("mr-food-rows");
-
-      const [yr, mo, da] = dateVal.split("-").map(Number);
-      const baseDate = new Date(yr, mo - 1, da);
-      const startDate = combineDateAndTime(baseDate, startTimeStr);
-      const startIso = startDate ? startDate.toISOString() : new Date().toISOString();
-      const endIso = startDate ? new Date(startDate.getTime() + duration * 60000).toISOString() : startIso;
-
-      const isPaid = document.getElementById("mr-payment-status").value === "Paid";
-      const paymentMethod = isPaid ? document.getElementById("mr-payment-method").value : null;
-
-      let cashAmount = 0;
-      let onlineAmount = 0;
-      if (paymentMethod === "Split") {
-        cashAmount = Math.max(0, Number(document.getElementById("mr-cash-amount")?.value) || 0);
-        onlineAmount = Math.max(0, Number(document.getElementById("mr-online-amount")?.value) || 0);
-        if (cashAmount + onlineAmount !== total && total > 0) {
-          onlineAmount = Math.max(0, total - cashAmount);
-        }
-      } else if (paymentMethod === "Cash") {
-        cashAmount = total;
-        onlineAmount = 0;
-      } else if (paymentMethod === "Online") {
-        cashAmount = 0;
-        onlineAmount = total;
-      }
-
-      const staffSelect = document.getElementById("mr-staff-select");
-      let selectedStaffId = staffSelect ? staffSelect.value : null;
-      let selectedStaffName = null;
-      if (selectedStaffId) {
-        const st = staffList.find((s) => s.id === selectedStaffId);
-        selectedStaffName = st ? st.name : currentStaff ? currentStaff.name : null;
-      } else if (currentStaff) {
-        selectedStaffId = currentStaff.id;
-        selectedStaffName = currentStaff.name;
-      }
-
-      const isFoodOnly = !!document.getElementById("mr-is-food-only")?.checked;
-      const notes = document.getElementById("mr-notes").value.trim();
-      const defaultTag = isInternal ? "[Internal Sale]" : isFoodOnly ? "[Food Only Sale]" : "[Paper Register]";
-      let noteWithTag = notes ? `${defaultTag} ${notes}` : (isInternal ? "[Internal Sale Entry]" : isFoodOnly ? "[Food Only Sale]" : "[Paper Register Entry]");
-      if (paymentMethod === "Split") {
-        const splitTag = `[Payment: Split | Cash: ${cashAmount} | Online: ${onlineAmount}]`;
-        if (!noteWithTag.includes("[Payment: Split")) {
-          noteWithTag = `${noteWithTag} ${splitTag}`;
-        }
-      }
-
-      const recordPayload = {
-        type: "Walk-in",
-        station_name: station,
-        game: document.getElementById("mr-game").value.trim() || null,
-        customer_name: customerName,
-        customer_phone: customerPhone || "—",
-        start_time: startIso,
-        end_time: endIso,
-        duration_minutes: duration,
-        rate,
-        food_items: foodItems,
-        food_total: foodTotal,
-        amount: total,
-        cash_amount: cashAmount,
-        online_amount: onlineAmount,
-        overtime_amount: 0,
-        discount_amount: (discount && discount.amount) || 0,
-        discount_type: (discount && discount.amount > 0) ? discount.mode : null,
-        discount_value: (discount && discount.amount > 0) ? (discount.value || 0) : 0,
-        status: "Completed",
-        notes: noteWithTag,
-        notified_5min: true,
-        staff_id: selectedStaffId || null,
-        staff_name: selectedStaffName || null,
-        payment_method: paymentMethod,
-        paid: isPaid,
-        paid_at: isPaid ? endIso : null,
-        created_at: startIso
-      };
-
-      const saveOnlyBtn = document.getElementById("mr-save-only");
-      const savePrintBtn = document.getElementById("mr-save-print");
-      if (saveOnlyBtn) saveOnlyBtn.disabled = true;
-      if (savePrintBtn) savePrintBtn.disabled = true;
-      msgEl.textContent = isInternal ? "Saving internal sale..." : "Saving missing record...";
-      msgEl.className = "text-sm min-h-5 mb-3 text-slate-300";
-
-      let { data, error } = await window.sb.from("sessions").insert(recordPayload).select();
-
-      // Resilient fallback if cash_amount / online_amount not present in PostgREST schema cache
-      if (error && (error.message.includes("cash_amount") || error.message.includes("online_amount") || error.code === "PGRST204")) {
-        const fallbackPayload = { ...recordPayload };
-        delete fallbackPayload.cash_amount;
-        delete fallbackPayload.online_amount;
-        const retry = await window.sb.from("sessions").insert(fallbackPayload).select();
-        data = retry.data;
-        error = retry.error;
-      }
-
-      if (saveOnlyBtn) saveOnlyBtn.disabled = false;
-      if (savePrintBtn) savePrintBtn.disabled = false;
-
-      if (error) {
-        msgEl.textContent = "Could not save record: " + error.message;
+      if (!sdkReady || !window.sb) {
+        msgEl.textContent = "Database connection not ready yet. Please wait...";
         msgEl.className = "text-sm min-h-5 mb-3 text-red-300";
         return;
       }
 
-      const savedRecord = (data && data[0]) ? { ...data[0], cash_amount: cashAmount, online_amount: onlineAmount } : { ...recordPayload, id: "TEMP-" + Date.now() };
+      setMissingRecordSubmitting(true);
+      msgEl.textContent = isInternal ? "Saving internal sale..." : "Saving missing record...";
+      msgEl.className = "text-sm min-h-5 mb-3 text-slate-300";
 
-      // Update in-memory records list
-      const existingIdx = records.findIndex((r) => r.id === savedRecord.id);
-      if (existingIdx >= 0) records[existingIdx] = savedRecord;
-      else records.unshift(savedRecord);
+      try {
+        const { total, foodTotal, duration, rate, discount } = recalcMissingRecord();
+        const foodItems = collectFrItems("mr-food-rows");
 
-      renderAllLists();
-      renderRevenue();
-      renderStationsBoard();
-      updateSummary();
-      closeMissingRecordModal();
-      showToast(isInternal ? "Internal sale record saved successfully!" : "Missing record added from register successfully!");
+        const [yr, mo, da] = dateVal.split("-").map(Number);
+        const baseDate = new Date(yr, mo - 1, da);
+        const startDate = combineDateAndTime(baseDate, startTimeStr);
+        const startIso = startDate ? startDate.toISOString() : new Date().toISOString();
+        const endIso = startDate ? new Date(startDate.getTime() + duration * 60000).toISOString() : startIso;
 
-      // Log visit to LinkyPot CRM & Loyalty if real customer phone number is provided (skip for internal sales)
-      if (!isInternal && savedRecord.customer_phone && savedRecord.customer_phone !== "—" && savedRecord.customer_phone !== "Internal" && (savedRecord.status === "Completed" || savedRecord.paid)) {
-        const amt = Number(savedRecord.amount || savedRecord.final_amount || 0);
-        logVisitToLinkyPot(savedRecord.customer_phone, savedRecord.customer_name, amt, false);
-      }
+        const isPaid = document.getElementById("mr-payment-status").value === "Paid";
+        const paymentMethod = isPaid ? document.getElementById("mr-payment-method").value : null;
 
-      if (printBill) {
-        printPanBill(savedRecord);
+        let cashAmount = 0;
+        let onlineAmount = 0;
+        if (paymentMethod === "Split") {
+          cashAmount = Math.max(0, Number(document.getElementById("mr-cash-amount")?.value) || 0);
+          onlineAmount = Math.max(0, Number(document.getElementById("mr-online-amount")?.value) || 0);
+          if (cashAmount + onlineAmount !== total && total > 0) {
+            onlineAmount = Math.max(0, total - cashAmount);
+          }
+        } else if (paymentMethod === "Cash") {
+          cashAmount = total;
+          onlineAmount = 0;
+        } else if (paymentMethod === "Online") {
+          cashAmount = 0;
+          onlineAmount = total;
+        }
+
+        const staffSelect = document.getElementById("mr-staff-select");
+        let selectedStaffId = staffSelect ? staffSelect.value : null;
+        let selectedStaffName = null;
+        if (selectedStaffId) {
+          const st = staffList.find((s) => s.id === selectedStaffId);
+          selectedStaffName = st ? st.name : currentStaff ? currentStaff.name : null;
+        } else if (currentStaff) {
+          selectedStaffId = currentStaff.id;
+          selectedStaffName = currentStaff.name;
+        }
+
+        const isFoodOnly = !!document.getElementById("mr-is-food-only")?.checked;
+        const notes = document.getElementById("mr-notes").value.trim();
+        const defaultTag = isInternal ? "[Internal Sale]" : isFoodOnly ? "[Food Only Sale]" : "[Paper Register]";
+        let noteWithTag = notes ? `${defaultTag} ${notes}` : (isInternal ? "[Internal Sale Entry]" : isFoodOnly ? "[Food Only Sale]" : "[Paper Register Entry]");
+        if (paymentMethod === "Split") {
+          const splitTag = `[Payment: Split | Cash: ${cashAmount} | Online: ${onlineAmount}]`;
+          if (!noteWithTag.includes("[Payment: Split")) {
+            noteWithTag = `${noteWithTag} ${splitTag}`;
+          }
+        }
+
+        const recordPayload = {
+          type: "Walk-in",
+          station_name: station,
+          game: document.getElementById("mr-game").value.trim() || null,
+          customer_name: customerName,
+          customer_phone: customerPhone || "—",
+          start_time: startIso,
+          end_time: endIso,
+          duration_minutes: duration,
+          rate,
+          food_items: foodItems,
+          food_total: foodTotal,
+          amount: total,
+          cash_amount: cashAmount,
+          online_amount: onlineAmount,
+          overtime_amount: 0,
+          discount_amount: (discount && discount.amount) || 0,
+          discount_type: (discount && discount.amount > 0) ? discount.mode : null,
+          discount_value: (discount && discount.amount > 0) ? (discount.value || 0) : 0,
+          status: "Completed",
+          notes: noteWithTag,
+          notified_5min: true,
+          staff_id: selectedStaffId || null,
+          staff_name: selectedStaffName || null,
+          payment_method: paymentMethod,
+          paid: isPaid,
+          paid_at: isPaid ? endIso : null,
+          created_at: startIso
+        };
+
+        let { data, error } = await window.sb.from("sessions").insert(recordPayload).select();
+
+        // Resilient fallback if cash_amount / online_amount not present in PostgREST schema cache
+        if (error && (error.message.includes("cash_amount") || error.message.includes("online_amount") || error.code === "PGRST204")) {
+          const fallbackPayload = { ...recordPayload };
+          delete fallbackPayload.cash_amount;
+          delete fallbackPayload.online_amount;
+          const retry = await window.sb.from("sessions").insert(fallbackPayload).select();
+          data = retry.data;
+          error = retry.error;
+        }
+
+        if (error) {
+          msgEl.textContent = "Could not save record: " + error.message;
+          msgEl.className = "text-sm min-h-5 mb-3 text-red-300";
+          setMissingRecordSubmitting(false);
+          return;
+        }
+
+        const savedRecord = (data && data[0]) ? { ...data[0], cash_amount: cashAmount, online_amount: onlineAmount } : { ...recordPayload, id: "TEMP-" + Date.now() };
+
+        // Update in-memory records list
+        const existingIdx = records.findIndex((r) => r.id === savedRecord.id);
+        if (existingIdx >= 0) records[existingIdx] = savedRecord;
+        else records.unshift(savedRecord);
+
+        renderAllLists();
+        renderRevenue();
+        renderStationsBoard();
+        updateSummary();
+        closeMissingRecordModal();
+        showToast(isInternal ? "Internal sale record saved successfully!" : "Missing record added from register successfully!");
+
+        // Log visit to LinkyPot CRM & Loyalty if real customer phone number is provided (skip for internal sales)
+        if (!isInternal && savedRecord.customer_phone && savedRecord.customer_phone !== "—" && savedRecord.customer_phone !== "Internal" && (savedRecord.status === "Completed" || savedRecord.paid)) {
+          const amt = Number(savedRecord.amount || savedRecord.final_amount || 0);
+          logVisitToLinkyPot(savedRecord.customer_phone, savedRecord.customer_name, amt, false);
+        }
+
+        if (printBill) {
+          printPanBill(savedRecord);
+        }
+      } catch (err) {
+        console.error("[ChillPill] Error saving missing record:", err);
+        msgEl.textContent = "Could not save record: " + (err.message || err);
+        msgEl.className = "text-sm min-h-5 mb-3 text-red-300";
+        setMissingRecordSubmitting(false);
+      } finally {
+        if (!document.getElementById("missing-record-modal")?.classList.contains("show")) {
+          isSubmittingMissingRecord = false;
+        }
       }
     }
 
