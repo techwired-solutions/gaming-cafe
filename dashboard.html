@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -1748,80 +1748,62 @@
 
         <!-- ===================== LINKYPOT / DIGITAL CARD (admin) ===================== -->
         <section id="page-linkypot" class="page-view">
-          <div class="space-y-5">
-            <!-- Header Panel -->
-            <div class="panel rounded-2xl p-5 sm:p-6">
-              <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="space-y-3">
+            <!-- Compact Header Bar -->
+            <div class="panel rounded-2xl px-4 py-3 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-[#d8ff45]/15 text-[#d8ff45] flex items-center justify-center shrink-0 border border-[#d8ff45]/30">
+                  <i data-lucide="share-2" width="18" height="18"></i>
+                </div>
                 <div>
-                  <div class="flex items-center gap-2 mb-1">
-                    <span class="mono text-xs font-bold tracking-[.16em] text-[#d8ff45]">SMART BIO &amp; DIGITAL PROFILE</span>
-                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#d8ff45]/10 text-[#d8ff45] border border-[#d8ff45]/20">
+                  <div class="flex items-center gap-2">
+                    <h2 class="font-bold text-base sm:text-lg text-white">LinkyPot Smart Profile</h2>
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#d8ff45]/10 text-[#d8ff45] border border-[#d8ff45]/20">
                       <span class="h-1.5 w-1.5 rounded-full bg-[#d8ff45] animate-pulse"></span>
-                      Live Embed
+                      Live
                     </span>
                   </div>
-                  <h2 class="font-bold text-xl sm:text-2xl">LinkyPot Smart Profile</h2>
-                  <p class="text-sm text-slate-400 mt-1 max-w-2xl">
-                    Manage and preview your cafe's all-in-one digital card, social links, booking links, and contact hub powered by LinkyPot.
-                  </p>
+                  <p class="text-xs text-slate-400 hidden sm:block">Digital card, loyalty stamps &amp; smart menu hub</p>
                 </div>
-                <!-- Action buttons -->
-                <div class="flex flex-wrap items-center gap-2 shrink-0">
-                  <button id="btn-toggle-embed-settings" type="button" class="rounded-xl border border-slate-600 bg-slate-900/60 px-3.5 py-2 text-xs font-semibold text-slate-200 hover:border-[#d8ff45] hover:text-[#d8ff45] flex items-center gap-1.5 transition">
-                    <i data-lucide="code" width="14" height="14"></i>
-                    <span>Embed Settings</span>
-                  </button>
-                  <button id="btn-copy-linkypot" type="button" class="rounded-xl border border-slate-600 bg-slate-900/60 px-3.5 py-2 text-xs font-semibold text-slate-200 hover:border-[#d8ff45] hover:text-[#d8ff45] flex items-center gap-1.5 transition">
-                    <i data-lucide="copy" width="14" height="14"></i>
-                    <span>Copy Card URL</span>
-                  </button>
-                  <button id="btn-refresh-linkypot" type="button" class="rounded-xl border border-slate-600 bg-slate-900/60 px-3.5 py-2 text-xs font-semibold text-slate-200 hover:border-slate-400 hover:text-white flex items-center gap-1.5 transition">
-                    <i data-lucide="rotate-cw" width="14" height="14"></i>
-                    <span>Refresh</span>
-                  </button>
-                  <a href="https://chillpill.linkypot.com" target="_blank" rel="noopener noreferrer" class="rounded-xl px-4 py-2 text-xs font-bold flex items-center gap-1.5 shadow-lg transition hover:brightness-105" style="background:#d8ff45;color:#10141e;">
-                    <i data-lucide="external-link" width="14" height="14"></i>
-                    <span>Open Public Link</span>
-                  </a>
-                </div>
+              </div>
+
+              <!-- Quick Actions -->
+              <div class="flex items-center gap-2 flex-wrap">
+                <button id="btn-toggle-embed-settings" type="button" class="rounded-xl border border-slate-700 bg-slate-800/80 hover:border-[#d8ff45] hover:text-[#d8ff45] px-3 py-1.5 text-xs font-semibold text-slate-300 flex items-center gap-1.5 transition" title="Configure embed code or sync tools">
+                  <i data-lucide="settings" width="14" height="14"></i>
+                  <span>Settings &amp; Tools</span>
+                </button>
+                <button id="btn-copy-linkypot" type="button" class="rounded-xl border border-slate-700 bg-slate-800/80 hover:border-slate-500 hover:text-white px-3 py-1.5 text-xs font-semibold text-slate-300 flex items-center gap-1.5 transition" title="Copy public URL">
+                  <i data-lucide="copy" width="14" height="14"></i>
+                  <span class="hidden md:inline">Copy URL</span>
+                </button>
+                <button id="btn-refresh-linkypot" type="button" class="rounded-xl border border-slate-700 bg-slate-800/80 hover:border-slate-500 hover:text-white px-2.5 py-1.5 text-xs font-semibold text-slate-300 flex items-center gap-1.5 transition" title="Refresh dashboard">
+                  <i data-lucide="rotate-cw" width="14" height="14"></i>
+                </button>
+                <a href="https://chillpill.linkypot.com" target="_blank" rel="noopener noreferrer" class="rounded-xl px-3.5 py-1.5 text-xs font-bold flex items-center gap-1.5 shadow transition hover:brightness-105" style="background:#d8ff45;color:#10141e;">
+                  <i data-lucide="external-link" width="13" height="13"></i>
+                  <span>Open Public Link</span>
+                </a>
               </div>
             </div>
 
-            <!-- POS Auto-Sync & Historical Migration Card -->
-            <div class="panel rounded-2xl p-4 sm:p-5 border border-purple-500/30 bg-purple-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div class="flex items-start gap-3">
-                <div class="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-300 flex items-center justify-center shrink-0 border border-purple-500/30 mt-0.5">
-                  <i data-lucide="sparkles" width="20" height="20"></i>
-                </div>
-                <div>
-                  <h4 class="font-bold text-sm text-white">Automated POS Customer &amp; Loyalty Sync</h4>
-                  <p class="text-xs text-slate-400 mt-0.5 max-w-xl">
-                    Customer visits &amp; spending are automatically recorded into LinkyPot whenever you checkout a gaming session. Click to backfill all past completed sessions now.
-                  </p>
-                </div>
-              </div>
-              <button id="btn-sync-linkypot" type="button" class="shrink-0 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center gap-2 border border-purple-500/50 bg-purple-600/30 text-purple-200 hover:bg-purple-600/50 hover:text-white transition">
-                <i data-lucide="refresh-cw" width="14" height="14"></i>
-                <span id="btn-sync-linkypot-text">Sync Past Records</span>
-              </button>
-            </div>
-
-            <!-- LinkyPot Embed Settings Card -->
-            <div id="linkypot-embed-settings-panel" class="panel rounded-2xl p-4 sm:p-5 border border-slate-700/80 bg-[#121722] space-y-3">
+            <!-- Collapsible Settings & Tools Panel (Hidden by default, expands when clicking Settings & Tools) -->
+            <div id="linkypot-embed-settings-panel" class="hidden panel rounded-2xl p-4 sm:p-5 border border-slate-700/80 bg-[#121722] space-y-4">
+              <!-- Top bar with Save / Reset -->
               <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
                 <div class="flex items-center gap-2">
                   <div class="w-8 h-8 rounded-lg bg-[#d8ff45]/15 text-[#d8ff45] flex items-center justify-center shrink-0 border border-[#d8ff45]/30">
-                    <i data-lucide="code" width="16" height="16"></i>
+                    <i data-lucide="sliders" width="16" height="16"></i>
                   </div>
                   <div>
-                    <h3 class="font-bold text-sm text-white">Embed Code Configuration</h3>
-                    <p class="text-[11px] text-slate-400">Update your embed snippet or URL directly without touching any code.</p>
+                    <h3 class="font-bold text-sm text-white">Embed Configuration &amp; POS Tools</h3>
+                    <p class="text-[11px] text-slate-400">Configure your LinkyPot embed code or backfill past session sync.</p>
                   </div>
                 </div>
                 <div class="flex items-center gap-2">
-                  <button id="btn-save-linkypot-embed" type="button" class="rounded-xl px-3.5 py-1.5 text-xs font-bold text-[#10141e] bg-[#d8ff45] hover:brightness-105 transition flex items-center gap-1.5 shadow">
+                  <button id="btn-save-linkypot-embed" type="button" class="rounded-xl px-3 py-1.5 text-xs font-bold text-[#10141e] bg-[#d8ff45] hover:brightness-105 transition flex items-center gap-1.5 shadow">
                     <i data-lucide="check" width="13" height="13"></i>
-                    <span>Save &amp; Update Embed</span>
+                    <span>Save &amp; Update</span>
                   </button>
                   <button id="btn-reset-linkypot-embed" type="button" class="rounded-xl border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white transition">
                     Reset Default
@@ -1829,57 +1811,37 @@
                 </div>
               </div>
 
+              <!-- Embed Input -->
               <div class="space-y-1.5">
                 <label for="linkypot-embed-input" class="block text-xs font-semibold text-slate-300">
                   LinkyPot &lt;iframe&gt; Embed Code or Direct Embed URL
                 </label>
-                <textarea id="linkypot-embed-input" rows="3" class="form-control font-mono text-xs w-full" placeholder='Paste your &lt;iframe src="https://www.linkypot.com/embed/chillpill?key=..."&gt;&lt;/iframe&gt; code or direct URL'></textarea>
+                <textarea id="linkypot-embed-input" rows="2" class="form-control font-mono text-xs w-full" placeholder='Paste your &lt;iframe src="https://www.linkypot.com/embed/chillpill?key=..."&gt;&lt;/iframe&gt; code or direct URL'></textarea>
                 <p class="text-[11px] text-slate-500">
-                  💡 Tip: You can paste the whole <code class="bg-slate-800 px-1 py-0.5 rounded text-slate-300">&lt;iframe src="..."&gt;</code> HTML snippet from LinkyPot or just the direct URL. The dashboard automatically extracts the source link, normalizes to the canonical domain, and updates both this live preview and the POS loyalty card sync.
+                  💡 Extracts URL automatically, normalizes to canonical domain, and updates both live preview and POS loyalty sync.
                 </p>
               </div>
 
-              <!-- Connection Diagnostics -->
-              <div class="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs flex items-start gap-2.5">
-                <i data-lucide="alert-triangle" width="16" height="16" class="shrink-0 text-amber-400 mt-0.5"></i>
-                <div class="space-y-1 text-amber-200/90 text-[11px] leading-relaxed">
-                  <span class="font-bold text-amber-300 block text-xs">Seeing "refused to connect"?</span>
-                  <span>1. Canonical domain: Always use <strong class="text-white">https://www.linkypot.com/...</strong> (with <code class="bg-black/30 px-1 rounded">www.</code>) to avoid apex redirect security blocks in iframes.</span><br>
-                  <span>2. Frame Security: If LinkyPot is running in Next.js, verify that <code class="bg-black/30 px-1 rounded">middleware.ts</code> permits embedding (<code class="bg-black/30 px-1 rounded">Content-Security-Policy: frame-ancestors *</code>).</span><br>
-                  <span>3. Fallback: You can always use <strong class="text-white">Open Public Link</strong> above to open the digital card directly in a new tab.</span>
+              <!-- Optional POS Historical Sync Row (Tucked inside tools dropdown) -->
+              <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-center gap-2.5">
+                  <i data-lucide="refresh-cw" width="16" height="16" class="text-purple-400 shrink-0"></i>
+                  <div>
+                    <p class="text-xs font-semibold text-slate-200">Manual POS Records Backfill</p>
+                    <p class="text-[11px] text-slate-400">Sync all past completed gaming sessions from ChillPill records into LinkyPot loyalty CRM.</p>
+                  </div>
                 </div>
+                <button id="btn-sync-linkypot" type="button" class="shrink-0 rounded-xl px-3.5 py-1.5 text-xs font-bold flex items-center gap-1.5 border border-purple-500/40 bg-purple-600/25 text-purple-200 hover:bg-purple-600/40 hover:text-white transition">
+                  <i data-lucide="sparkles" width="13" height="13"></i>
+                  <span id="btn-sync-linkypot-text">Sync Past Records</span>
+                </button>
               </div>
             </div>
 
-            <!-- Embed Frame Container -->
-            <div class="panel rounded-2xl p-2 sm:p-4 border border-slate-700/80 bg-[#121722] shadow-2xl">
+            <!-- Embed Frame Container (Directly visible within viewport) -->
+            <div class="panel rounded-2xl p-1.5 sm:p-2 border border-slate-700/80 bg-[#121722] shadow-2xl">
               <div class="w-full rounded-xl overflow-hidden bg-white/5 border border-slate-800 flex justify-center">
-                <iframe id="linkypot-frame" src="https://www.linkypot.com/embed/chillpill?key=lp_emb_c55111f8d6ef264d767f1215e51ac632" width="100%" height="750px" frameborder="0" style="border-radius:16px;border:1px solid #e5e7eb;min-height:650px;" allow="clipboard-write"></iframe>
-              </div>
-            </div>
-
-            <!-- Helpful Sharing Tips -->
-            <div class="grid sm:grid-cols-3 gap-4">
-              <div class="panel rounded-xl p-4 border-l-2 border-l-[#d8ff45]">
-                <div class="flex items-center gap-2 text-[#d8ff45] mb-1">
-                  <i data-lucide="share-2" width="16" height="16"></i>
-                  <p class="font-bold text-xs">Instagram &amp; TikTok Bio</p>
-                </div>
-                <p class="text-xs text-slate-400">Put <code class="text-slate-200 bg-slate-800 px-1 py-0.5 rounded">chillpill.linkypot.com</code> as your social bio link so customers can tap to view menus, stations &amp; WhatsApp chat.</p>
-              </div>
-              <div class="panel rounded-xl p-4 border-l-2 border-l-sky-400">
-                <div class="flex items-center gap-2 text-sky-400 mb-1">
-                  <i data-lucide="tag" width="16" height="16"></i>
-                  <p class="font-bold text-xs">Counter &amp; Table QR Code</p>
-                </div>
-                <p class="text-xs text-slate-400">Print the QR code from your LinkyPot profile for table tents or reception stand so gamers can scan and connect instantly.</p>
-              </div>
-              <div class="panel rounded-xl p-4 border-l-2 border-l-purple-400">
-                <div class="flex items-center gap-2 text-purple-400 mb-1">
-                  <i data-lucide="sparkles" width="16" height="16"></i>
-                  <p class="font-bold text-xs">Live Sync</p>
-                </div>
-                <p class="text-xs text-slate-400">Any links or design elements updated inside your LinkyPot dashboard update automatically in this embedded card.</p>
+                <iframe id="linkypot-frame" src="https://www.linkypot.com/embed/chillpill?key=lp_emb_c55111f8d6ef264d767f1215e51ac632" width="100%" frameborder="0" style="border-radius:12px;border:1px solid #334155;height:calc(100vh - 165px);min-height:680px;" allow="clipboard-write"></iframe>
               </div>
             </div>
           </div>
