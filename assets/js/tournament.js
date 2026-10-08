@@ -148,9 +148,9 @@
     fetchTournaments();
   });
 
-  // ── Tab switching ────────────────────────────────────────────────────────
+  // ── Tab switching (updated to include broadcast) ─────────────────────────
   function switchTournamentTab(tab) {
-    ["registrations", "bracket", "matches", "standings", "prizes"].forEach(t => {
+    ["registrations", "bracket", "matches", "standings", "prizes", "broadcast"].forEach(t => {
       const panel = document.getElementById(`ttab-${t}`);
       const btn = document.querySelector(`[data-ttab="${t}"]`);
       if (panel) panel.classList.toggle("hidden", t !== tab);
@@ -161,10 +161,310 @@
         btn.classList.toggle("text-slate-400", t !== tab);
       }
     });
+    if (tab === "broadcast") initBroadcastTab();
   }
   document.querySelectorAll(".tournament-tab").forEach(btn => {
     btn.addEventListener("click", () => switchTournamentTab(btn.dataset.ttab));
   });
+
+  // ── BROADCAST TAB ─────────────────────────────────────────────────────────
+  const BC_QR_STORAGE_KEY = "chillpill_tournament_qr";
+  let bcQrDataUrl = null;         // current QR image data URL
+  let bcAllCustomers = [];        // { name, phone } deduped from records
+  let bcSelectedPhones = new Set();
+
+  function getBroadcastQrKey() {
+    return `${BC_QR_STORAGE_KEY}_${currentTournament?.id || "default"}`;
+  }
+
+  function loadBroadcastQr() {
+    try {
+      const stored = localStorage.getItem(getBroadcastQrKey());
+      if (stored) {
+        bcQrDataUrl = stored;
+        const img = document.getElementById("bc-qr-img");
+        const inline = document.getElementById("bc-qr-inline-img");
+        const preview = document.getElementById("bc-qr-preview");
+        const placeholder = document.getElementById("bc-qr-placeholder");
+        if (img) img.src = stored;
+        if (inline) inline.src = stored;
+        if (preview) preview.classList.remove("hidden");
+        if (placeholder) placeholder.classList.add("hidden");
+      } else {
+        bcQrDataUrl = null;
+        const preview = document.getElementById("bc-qr-preview");
+        const placeholder = document.getElementById("bc-qr-placeholder");
+        const inlineWrap = document.getElementById("bc-qr-preview-inline");
+        if (preview) preview.classList.add("hidden");
+        if (placeholder) placeholder.classList.remove("hidden");
+        if (inlineWrap) inlineWrap.classList.add("hidden");
+      }
+    } catch (_) {}
+  }
+
+  function saveBroadcastQr(dataUrl) {
+    try { localStorage.setItem(getBroadcastQrKey(), dataUrl); } catch (_) {}
+  }
+
+  function clearBroadcastQr() {
+    try { localStorage.removeItem(getBroadcastQrKey()); } catch (_) {}
+    bcQrDataUrl = null;
+    const preview = document.getElementById("bc-qr-preview");
+    const placeholder = document.getElementById("bc-qr-placeholder");
+    const inlineWrap = document.getElementById("bc-qr-preview-inline");
+    const img = document.getElementById("bc-qr-img");
+    const inlineImg = document.getElementById("bc-qr-inline-img");
+    if (preview) preview.classList.add("hidden");
+    if (placeholder) placeholder.classList.remove("hidden");
+    if (inlineWrap) inlineWrap.classList.add("hidden");
+    if (img) img.src = "";
+    if (inlineImg) inlineImg.src = "";
+  }
+
+  function buildBroadcastMessage() {
+    const t = currentTournament;
+    if (!t) return "";
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "TBD";
+    const formatLabel = FORMAT_LABEL[t.format] || t.format || "—";
+    const regLink = (document.getElementById("bc-reg-link")?.value || "").trim();
+    const extraNotes = (document.getElementById("bc-extra-notes")?.value || "").trim();
+
+    let msg = "";
+    msg += `🎮 *${t.name}* — ${t.game}\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+    msg += `📅 *Start Date:* ${fmtDate(t.start_date)}\n`;
+    if (t.registration_deadline) msg += `⏰ *Register By:* ${fmtDate(t.registration_deadline)}\n`;
+    msg += `🏆 *Format:* ${formatLabel}\n`;
+    msg += `👥 *Max Players:* ${t.max_players || "—"}\n`;
+    if (t.entry_fee > 0) {
+      msg += `💰 *Entry Fee:* Rs ${t.entry_fee}\n`;
+    } else {
+      msg += `🆓 *Entry:* Free\n`;
+    }
+
+    if (t.prize_pool) {
+      msg += `\n🏅 *Prize Pool:*\n${t.prize_pool}\n`;
+    }
+
+    if (t.rules) {
+      msg += `\n📋 *Rules & Format:*\n${t.rules}\n`;
+    }
+
+    if (regLink) {
+      msg += `\n🔗 *Register Here:*\n${regLink}\n`;
+    }
+
+    if (t.entry_fee > 0) {
+      msg += `\n💳 *Payment:* Scan the QR code shared below to pay the entry fee and confirm your spot.\n`;
+    }
+
+    if (extraNotes) {
+      msg += `\n📍 *Details:*\n${extraNotes}\n`;
+    }
+
+    msg += `\n━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `📲 Reply to this message or visit us at ChillPill Gaming Cafe to register!\n`;
+    msg += `_ChillPill Gaming Cafe — Let's Game!_ 🎯`;
+
+    return msg;
+  }
+
+  async function loadBroadcastCustomers() {
+    const listEl = document.getElementById("bc-customer-list");
+    if (!window.sb || !listEl) return;
+
+    // Fetch unique customers with phone numbers from records table
+    const { data, error } = await window.sb
+      .from("records")
+      .select("customer_name, customer_phone")
+      .not("customer_phone", "is", null)
+      .neq("customer_phone", "")
+      .neq("customer_phone", "-")
+      .order("customer_name", { ascending: true });
+
+    if (error) {
+      listEl.innerHTML = `<p class="text-xs text-rose-400 col-span-full text-center py-4">Could not load customers: ${error.message}</p>`;
+      return;
+    }
+
+    // Deduplicate by phone
+    const seen = new Map();
+    (data || []).forEach(r => {
+      const phone = (r.customer_phone || "").trim();
+      if (phone && !seen.has(phone)) {
+        seen.set(phone, r.customer_name || "Unknown");
+      }
+    });
+
+    bcAllCustomers = [...seen.entries()].map(([phone, name]) => ({ name, phone }));
+    renderBroadcastCustomerList();
+  }
+
+  function renderBroadcastCustomerList() {
+    const listEl = document.getElementById("bc-customer-list");
+    const countEl = document.getElementById("bc-selected-count");
+    if (!listEl) return;
+
+    const search = (document.getElementById("bc-customer-search")?.value || "").toLowerCase();
+    const filtered = bcAllCustomers.filter(c =>
+      !search || c.name.toLowerCase().includes(search) || c.phone.includes(search)
+    );
+
+    if (!filtered.length) {
+      listEl.innerHTML = `<p class="text-sm text-slate-500 italic col-span-full text-center py-6">${bcAllCustomers.length ? "No customers match your search." : "No customers with phone numbers found in records."}</p>`;
+    } else {
+      listEl.innerHTML = filtered.map(c => {
+        const selected = bcSelectedPhones.has(c.phone);
+        return `<label class="flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer transition select-none
+          ${selected ? "border-[#d8ff45]/50 bg-[#d8ff45]/5" : "border-slate-700 hover:border-slate-500"}">
+          <input type="checkbox" class="bc-phone-check w-4 h-4 accent-[#d8ff45] shrink-0" value="${c.phone}" ${selected ? "checked" : ""}>
+          <div class="min-w-0">
+            <p class="text-xs font-semibold text-slate-200 truncate">${esc(c.name)}</p>
+            <p class="text-[11px] text-slate-500 mono">${esc(c.phone)}</p>
+          </div>
+        </label>`;
+      }).join("");
+
+      listEl.querySelectorAll(".bc-phone-check").forEach(chk => {
+        chk.addEventListener("change", () => {
+          if (chk.checked) bcSelectedPhones.add(chk.value);
+          else bcSelectedPhones.delete(chk.value);
+          renderBroadcastCustomerList();
+        });
+      });
+    }
+
+    if (countEl) {
+      countEl.textContent = `${bcSelectedPhones.size} recipient${bcSelectedPhones.size !== 1 ? "s" : ""} selected`;
+    }
+  }
+
+  function initBroadcastTab() {
+    loadBroadcastQr();
+    loadBroadcastCustomers();
+
+    // QR upload
+    const qrInput = document.getElementById("bc-qr-input");
+    if (qrInput && !qrInput._bcWired) {
+      qrInput._bcWired = true;
+      qrInput.addEventListener("change", () => {
+        const file = qrInput.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          bcQrDataUrl = e.target.result;
+          saveBroadcastQr(bcQrDataUrl);
+          const img = document.getElementById("bc-qr-img");
+          const inlineImg = document.getElementById("bc-qr-inline-img");
+          if (img) img.src = bcQrDataUrl;
+          if (inlineImg) inlineImg.src = bcQrDataUrl;
+          document.getElementById("bc-qr-preview")?.classList.remove("hidden");
+          document.getElementById("bc-qr-placeholder")?.classList.add("hidden");
+          showToast("QR code uploaded and saved.");
+        };
+        reader.readAsDataURL(file);
+        qrInput.value = "";
+      });
+    }
+
+    // QR clear
+    const qrClearBtn = document.getElementById("bc-qr-clear");
+    if (qrClearBtn && !qrClearBtn._bcWired) {
+      qrClearBtn._bcWired = true;
+      qrClearBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        clearBroadcastQr();
+        showToast("QR code removed.");
+      });
+    }
+
+    // Preview button
+    const previewBtn = document.getElementById("bc-preview-btn");
+    if (previewBtn && !previewBtn._bcWired) {
+      previewBtn._bcWired = true;
+      previewBtn.addEventListener("click", () => {
+        const msg = buildBroadcastMessage();
+        const previewEl = document.getElementById("bc-message-preview");
+        if (previewEl) previewEl.textContent = msg;
+        // Show QR preview inline
+        const inlineWrap = document.getElementById("bc-qr-preview-inline");
+        const inlineImg = document.getElementById("bc-qr-inline-img");
+        if (bcQrDataUrl && inlineWrap && inlineImg) {
+          inlineImg.src = bcQrDataUrl;
+          inlineWrap.classList.remove("hidden");
+        } else if (inlineWrap) {
+          inlineWrap.classList.add("hidden");
+        }
+      });
+    }
+
+    // Search
+    const searchInput = document.getElementById("bc-customer-search");
+    if (searchInput && !searchInput._bcWired) {
+      searchInput._bcWired = true;
+      searchInput.addEventListener("input", renderBroadcastCustomerList);
+    }
+
+    // Select All
+    const selectAll = document.getElementById("bc-select-all");
+    if (selectAll && !selectAll._bcWired) {
+      selectAll._bcWired = true;
+      selectAll.addEventListener("click", () => {
+        const search = (document.getElementById("bc-customer-search")?.value || "").toLowerCase();
+        const filtered = bcAllCustomers.filter(c =>
+          !search || c.name.toLowerCase().includes(search) || c.phone.includes(search)
+        );
+        filtered.forEach(c => bcSelectedPhones.add(c.phone));
+        renderBroadcastCustomerList();
+      });
+    }
+
+    // Deselect All
+    const deselectAll = document.getElementById("bc-deselect-all");
+    if (deselectAll && !deselectAll._bcWired) {
+      deselectAll._bcWired = true;
+      deselectAll.addEventListener("click", () => {
+        bcSelectedPhones.clear();
+        renderBroadcastCustomerList();
+      });
+    }
+
+    // Send via WhatsApp
+    const sendBtn = document.getElementById("bc-send-whatsapp");
+    if (sendBtn && !sendBtn._bcWired) {
+      sendBtn._bcWired = true;
+      sendBtn.addEventListener("click", () => {
+        if (!bcSelectedPhones.size) return showToast("Please select at least one recipient.");
+        const msg = buildBroadcastMessage();
+        if (!msg) return showToast("No tournament loaded.");
+
+        const encodedMsg = encodeURIComponent(msg);
+        const phones = [...bcSelectedPhones];
+
+        // Open WhatsApp links one by one (browser will open each)
+        let delay = 0;
+        phones.forEach(phone => {
+          const cleaned = phone.replace(/\D/g, "");
+          // Prepend country code 977 for Nepal if not already
+          const intlPhone = cleaned.startsWith("977") ? cleaned : `977${cleaned}`;
+          setTimeout(() => {
+            window.open(`https://wa.me/${intlPhone}?text=${encodedMsg}`, "_blank");
+          }, delay);
+          delay += 600; // 600ms gap between each to avoid popup blockers
+        });
+
+        // If QR code exists, remind to share it separately
+        if (bcQrDataUrl) {
+          showToast(`Opened ${phones.length} WhatsApp chat${phones.length > 1 ? "s" : ""}. Remember to also share the QR code image in each chat!`);
+        } else {
+          showToast(`Opened ${phones.length} WhatsApp chat${phones.length > 1 ? "s" : ""}.`);
+        }
+      });
+    }
+
+    if (window.lucide) lucide.createIcons({ nodes: [document.getElementById("ttab-broadcast")] });
+  }
 
   // ── Status change buttons ─────────────────────────────────────────────────
   document.querySelectorAll(".td-status-btn").forEach(btn => {

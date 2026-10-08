@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -1346,6 +1346,9 @@
               <button type="button" data-ttab="prizes" class="tournament-tab px-4 py-2.5 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition -mb-px">
                 <i data-lucide="trophy" width="14" height="14" class="inline mr-1.5"></i>Prizes &amp; Rules
               </button>
+              <button type="button" data-ttab="broadcast" class="tournament-tab px-4 py-2.5 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition -mb-px">
+                <i data-lucide="send" width="14" height="14" class="inline mr-1.5"></i>Broadcast
+              </button>
             </div>
 
             <!-- ── TAB: REGISTRATIONS ── -->
@@ -1418,6 +1421,96 @@
                 </div>
               </div>
             </div>
+            </div>
+
+            <!-- ── TAB: BROADCAST ── -->
+            <div id="ttab-broadcast" class="hidden space-y-5">
+              <!-- QR & Message Settings -->
+              <div class="grid md:grid-cols-2 gap-5">
+                <!-- Left: Message Composer -->
+                <div class="panel rounded-2xl p-5 space-y-4">
+                  <div>
+                    <h4 class="font-bold flex items-center gap-2 mb-1">
+                      <i data-lucide="message-square" width="16" height="16" class="text-[#d8ff45]"></i>
+                      Compose Invite Message
+                    </h4>
+                    <p class="text-xs text-slate-400">Customize the WhatsApp message sent to customers. Tournament details auto-fill from the current tournament.</p>
+                  </div>
+                  <div>
+                    <label class="block text-xs text-slate-400 mb-1">Registration Link (optional)</label>
+                    <input id="bc-reg-link" type="url" class="form-control" placeholder="https://chillpill.gg/tournament or leave blank">
+                  </div>
+                  <div>
+                    <label class="block text-xs text-slate-400 mb-1">Extra Notes / Instructions</label>
+                    <textarea id="bc-extra-notes" class="form-control min-h-[80px]" rows="3" placeholder="Venue: ChillPill Gaming Cafe&#10;Bring your own controller, etc."></textarea>
+                  </div>
+                  <div>
+                    <label class="block text-xs text-slate-400 mb-2">QR Code for Payment</label>
+                    <div id="bc-qr-dropzone" class="relative border-2 border-dashed border-slate-700 rounded-xl p-4 text-center cursor-pointer hover:border-[#d8ff45]/60 transition group">
+                      <input type="file" id="bc-qr-input" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                      <div id="bc-qr-placeholder" class="pointer-events-none">
+                        <i data-lucide="qr-code" width="32" height="32" class="mx-auto text-slate-600 mb-2 group-hover:text-[#d8ff45]/60 transition"></i>
+                        <p class="text-xs text-slate-500">Click or drag to upload QR code image</p>
+                        <p class="text-[11px] text-slate-600 mt-0.5">PNG, JPG — shown in message preview</p>
+                      </div>
+                      <div id="bc-qr-preview" class="hidden">
+                        <img id="bc-qr-img" src="" alt="QR Code" class="mx-auto max-h-40 rounded-xl object-contain">
+                        <p class="text-[11px] text-slate-400 mt-2">QR code uploaded · <button type="button" id="bc-qr-clear" class="text-rose-400 hover:text-rose-300 underline">Remove</button></p>
+                      </div>
+                    </div>
+                  </div>
+                  <button type="button" id="bc-preview-btn" class="w-full rounded-xl py-2.5 text-sm font-bold border border-[#d8ff45]/60 text-[#d8ff45] hover:bg-[#d8ff45]/10 transition">
+                    <i data-lucide="eye" width="14" height="14" class="inline mr-1.5"></i>Preview Message
+                  </button>
+                </div>
+
+                <!-- Right: Message Preview -->
+                <div class="panel rounded-2xl p-5">
+                  <h4 class="font-bold flex items-center gap-2 mb-3">
+                    <i data-lucide="smartphone" width="16" height="16" class="text-green-400"></i>
+                    WhatsApp Preview
+                  </h4>
+                  <div id="bc-message-preview" class="bg-[#0a1929] rounded-xl p-4 text-sm text-slate-200 whitespace-pre-wrap leading-relaxed border border-slate-700/60 min-h-[200px] font-mono text-xs">
+                    <span class="text-slate-500 italic">Click "Preview Message" to generate the WhatsApp message text...</span>
+                  </div>
+                  <div id="bc-qr-preview-inline" class="hidden mt-3">
+                    <p class="text-xs text-slate-400 mb-1">📎 QR Code will be shared separately:</p>
+                    <img id="bc-qr-inline-img" src="" alt="QR" class="max-h-32 rounded-lg border border-slate-700 object-contain">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Customer Selection -->
+              <div class="panel rounded-2xl p-5">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                  <div>
+                    <h4 class="font-bold flex items-center gap-2">
+                      <i data-lucide="users" width="16" height="16" class="text-sky-400"></i>
+                      Select Recipients
+                    </h4>
+                    <p class="text-xs text-slate-400 mt-0.5">Customers from your records with saved phone numbers.</p>
+                  </div>
+                  <div class="flex items-center gap-2 flex-wrap shrink-0">
+                    <input id="bc-customer-search" type="text" placeholder="Search name or phone..." class="bg-[#111722] border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-[#d8ff45] w-44">
+                    <button type="button" id="bc-select-all" class="rounded-lg px-3 py-1.5 text-xs font-bold border border-slate-600 text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] transition">Select All</button>
+                    <button type="button" id="bc-deselect-all" class="rounded-lg px-3 py-1.5 text-xs font-bold border border-slate-600 text-slate-300 hover:border-rose-400 hover:text-rose-300 transition">Deselect All</button>
+                  </div>
+                </div>
+                <div id="bc-customer-list" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[320px] overflow-y-auto mb-4">
+                  <p class="text-sm text-slate-500 italic col-span-full text-center py-6">Loading customers...</p>
+                </div>
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-4 border-t border-slate-700/60">
+                  <p id="bc-selected-count" class="text-xs text-slate-400">0 recipients selected</p>
+                  <div class="flex gap-2 flex-wrap">
+                    <button type="button" id="bc-send-whatsapp" class="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 font-bold text-sm bg-green-500 hover:bg-green-400 text-white transition">
+                      <i data-lucide="send" width="15" height="15"></i>
+                      Send via WhatsApp
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
           </div>
         </section>
 
