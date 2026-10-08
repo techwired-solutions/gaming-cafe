@@ -497,11 +497,11 @@
 
   function addFrRow(containerId, selectedId = "", qty = 1, customUnitPrice = null, preselectedSupplier = "all", customItemName = "") {
     let initialSupplier = preselectedSupplier || "all";
-    let isCustom = selectedId === "_custom" || (selectedId && !menuItems.some((m) => m.id === selectedId));
+    let isCustom = selectedId === "_custom" || (Boolean(selectedId) && !(menuItems || []).some((m) => String(m.id) === String(selectedId)));
     let initialName = customItemName || "";
 
     if (selectedId && !isCustom) {
-      const match = menuItems.find((m) => m.id === selectedId);
+      const match = (menuItems || []).find((m) => String(m.id) === String(selectedId));
       if (match) initialSupplier = match.supplier || "chillpill";
     }
 
@@ -509,14 +509,14 @@
     if (customUnitPrice !== null && customUnitPrice !== undefined) {
       initialPrice = Number(customUnitPrice) || 0;
     } else if (selectedId && !isCustom) {
-      const match = menuItems.find((m) => m.id === selectedId);
+      const match = (menuItems || []).find((m) => String(m.id) === String(selectedId));
       if (match) initialPrice = match.price || 0;
     }
 
     const row = document.createElement("div");
     row.className = "fr-row grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-2 items-center";
     if (isCustom) row.dataset.isCustom = "true";
-    if (selectedId && selectedId.startsWith("custom_")) row.dataset.customId = selectedId;
+    if (selectedId && String(selectedId).startsWith("custom_")) row.dataset.customId = String(selectedId);
 
     row.innerHTML = `
       <select aria-label="Food source" class="form-control fr-source text-xs py-2 w-24 sm:w-28 bg-[#161d2a] border-slate-700 text-slate-300 font-medium">
@@ -1265,13 +1265,23 @@
     });
   }
 
+  function escapeHtml(str) {
+    if (str == null) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   function renderStationChips(containerId, inputId) {
     const container = document.getElementById(containerId);
     const input = document.getElementById(inputId);
     if (!container || !input) return;
 
-    const currentNames = splitStationNames(input.value);
-    const activeStations = stations.filter((s) => s.active);
+    const currentNames = splitStationNames(input.value || "");
+    const activeStations = (stations || []).filter((s) => s && s.active);
     if (!activeStations.length) {
       container.innerHTML = "";
       return;
@@ -1279,18 +1289,19 @@
 
     container.innerHTML = activeStations
       .map((s) => {
-        const isSelected = currentNames.some((cn) => cn === s.name.trim().toLowerCase());
+        const sName = String(s.name || "");
+        const isSelected = currentNames.some((cn) => cn === sName.trim().toLowerCase());
         const cls = isSelected
           ? "station-chip active rounded-lg border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] px-2 py-0.5 text-xs font-bold transition cursor-pointer"
           : "station-chip rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-xs text-slate-300 hover:border-slate-500 hover:text-white transition cursor-pointer";
-        return `<button type="button" class="${cls}" data-station="${escapeHtml(s.name)}">${isSelected ? "✓ " : "+ "}${escapeHtml(s.name)}</button>`;
+        return `<button type="button" class="${cls}" data-station="${escapeHtml(sName)}">${isSelected ? "✓ " : "+ "}${escapeHtml(sName)}</button>`;
       })
       .join("");
 
     container.querySelectorAll(".station-chip").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const stationName = btn.dataset.station;
-        let names = splitStationNames(input.value);
+        const stationName = btn.dataset.station || "";
+        let names = splitStationNames(input.value || "");
         const idx = names.indexOf(stationName.trim().toLowerCase());
         if (idx !== -1) {
           names.splice(idx, 1);
@@ -1299,7 +1310,7 @@
         }
         const formatted = names
           .map((n) => {
-            const match = activeStations.find((as) => as.name.trim().toLowerCase() === n);
+            const match = activeStations.find((as) => (as.name || "").trim().toLowerCase() === n);
             return match ? match.name : n;
           })
           .join(", ");
@@ -1479,24 +1490,24 @@
     });
 
     card.querySelector(".open-checkout").addEventListener("click", () => {
-      const item = records.find((row) => row.id === card.dataset.recordId);
+      const item = records.find((row) => String(row.id) === String(card.dataset.recordId)) || record;
       if (item) openCheckoutModal(item);
     });
 
     card.querySelector(".open-edit").addEventListener("click", () => {
-      const item = records.find((row) => row.id === card.dataset.recordId);
+      const item = records.find((row) => String(row.id) === String(card.dataset.recordId)) || record;
       if (item) openEditModal(item);
     });
 
     card.querySelector(".open-add-food").addEventListener("click", () => {
-      const item = records.find((row) => row.id === card.dataset.recordId);
+      const item = records.find((row) => String(row.id) === String(card.dataset.recordId)) || record;
       if (item) openQuickFoodModal(item);
     });
 
     const printBtn = card.querySelector(".print-bill-btn");
     if (printBtn) {
       printBtn.addEventListener("click", () => {
-        const item = records.find((row) => row.id === card.dataset.recordId);
+        const item = records.find((row) => String(row.id) === String(card.dataset.recordId)) || record;
         if (item) printPanBill(item);
       });
     }
@@ -2849,79 +2860,101 @@
   }
 
   function openEditModal(record) {
-    editTarget = record;
-    document.getElementById("edit-heading").textContent = `${record.customer_name || "—"} · ${record.status}`;
-    document.getElementById("edit-station").value = record.station_name || "";
-    document.getElementById("edit-game").value = record.game || "";
-    document.getElementById("edit-customer-name").value = record.customer_name || "";
-    document.getElementById("edit-customer-phone").value = record.customer_phone || "";
+    if (!record) return;
+    try {
+      editTarget = record;
+      document.getElementById("edit-heading").textContent = `${record.customer_name || "—"} · ${record.status || "Session"}`;
+      document.getElementById("edit-station").value = record.station_name || "";
+      document.getElementById("edit-game").value = record.game || "";
+      document.getElementById("edit-customer-name").value = record.customer_name || "";
+      document.getElementById("edit-customer-phone").value = record.customer_phone || "";
 
-    const isInternal = !!(record.customer_name && record.customer_name.toLowerCase().includes("internal")) ||
-                       !!(record.notes && record.notes.includes("[Internal Sale]"));
-    const internalToggle = document.getElementById("edit-is-internal-sale");
-    if (internalToggle) {
-      internalToggle.checked = isInternal;
+      const isInternal = !!(record.customer_name && record.customer_name.toLowerCase().includes("internal")) ||
+                         !!(record.notes && record.notes.includes("[Internal Sale]"));
+      const internalToggle = document.getElementById("edit-is-internal-sale");
+      if (internalToggle) {
+        internalToggle.checked = isInternal;
+      }
+
+      // Editing an older record keeps its original date (just changing the time-of-day)
+      let d = record.start_time ? new Date(record.start_time) : record.created_at ? new Date(record.created_at) : new Date();
+      if (isNaN(d.getTime())) d = new Date();
+      editBaseDate = d;
+
+      const todayLabel = document.getElementById("edit-today-label");
+      if (todayLabel) todayLabel.textContent = fmtDateLabel(editBaseDate);
+      const dateInput = document.getElementById("edit-date");
+      if (dateInput) {
+        const pad = (n) => String(n).padStart(2, "0");
+        dateInput.value = `${editBaseDate.getFullYear()}-${pad(editBaseDate.getMonth() + 1)}-${pad(editBaseDate.getDate())}`;
+      }
+
+      const startTimeDate = record.start_time ? new Date(record.start_time) : null;
+      document.getElementById("edit-start-time").value = (startTimeDate && !isNaN(startTimeDate.getTime())) ? timeInputValue(startTimeDate) : timeInputValue(new Date());
+      document.getElementById("edit-duration").value = record.duration_minutes || 0;
+      const endTimeDate = record.end_time ? new Date(record.end_time) : null;
+      if (endTimeDate && !isNaN(endTimeDate.getTime())) {
+        document.getElementById("edit-end-time").value = timeInputValue(endTimeDate);
+      } else {
+        syncEndFromDuration("edit-start-time", "edit-duration", "edit-end-time");
+      }
+      document.getElementById("edit-rate").value = record.rate || 0;
+      document.getElementById("edit-notes").value = record.notes || "";
+      document.getElementById("edit-session-message").textContent = "";
+
+      clearFrContainer("edit-food-rows");
+      document.getElementById("edit-menu-empty").classList.toggle("hidden", (menuItems || []).length > 0);
+      (record.food_items || []).forEach((item) => {
+        if (!item) return;
+        if (typeof item === "string") {
+          addFrRow("edit-food-rows", "_custom", 1, 0, "chillpill", item);
+        } else {
+          addFrRow("edit-food-rows", item.id, item.qty || 1, item.price, item.supplier || "chillpill", item.name || "");
+        }
+      });
+      if (!record.food_items || !record.food_items.length) addFrRow("edit-food-rows");
+
+      updateEditInternalSaleState();
+
+      const payStatusEl = document.getElementById("edit-payment-status");
+      const payMethodEl = document.getElementById("edit-payment-method");
+      const bd = getRecordPaymentBreakdown(record);
+      if (payStatusEl) {
+        payStatusEl.value = record.paid ? "Paid" : "Unpaid";
+      }
+      if (payMethodEl) {
+        payMethodEl.value = record.payment_method === "Split" ? "Split" : record.payment_method === "Online" ? "Online" : "Cash";
+        payMethodEl.disabled = !record.paid;
+      }
+
+      const cashInput = document.getElementById("edit-cash-amount");
+      const onlineInput = document.getElementById("edit-online-amount");
+      if (cashInput) {
+        cashInput.value = bd.cash;
+        if (record.payment_method === "Split") cashInput.dataset.userEdited = "true";
+        else delete cashInput.dataset.userEdited;
+      }
+      if (onlineInput) {
+        onlineInput.value = bd.online;
+        if (record.payment_method === "Split") onlineInput.dataset.userEdited = "true";
+        else delete onlineInput.dataset.userEdited;
+      }
+
+      const customBillInput = document.getElementById("edit-custom-bill");
+      if (customBillInput) {
+        customBillInput.value = record.amount != null ? record.amount : 0;
+        delete customBillInput.dataset.userEdited;
+      }
+
+      renderStationChips("edit-station-chips-container", "edit-station");
+      recalcEditModal();
+      updateEditSplitFields();
+      wireClickableTimeInputs();
+      document.getElementById("edit-session-modal").classList.add("show");
+    } catch (err) {
+      console.error("[openEditModal error]", err);
+      showToast("Could not open edit modal: " + (err.message || err));
     }
-
-    // Editing an older record keeps its original date (just changing the
-    // time-of-day) instead of silently moving it to today.
-    editBaseDate = record.start_time ? new Date(record.start_time) : record.created_at ? new Date(record.created_at) : new Date();
-    document.getElementById("edit-today-label").textContent = fmtDateLabel(editBaseDate);
-    const dateInput = document.getElementById("edit-date");
-    if (dateInput) {
-      const pad = (n) => String(n).padStart(2, "0");
-      dateInput.value = `${editBaseDate.getFullYear()}-${pad(editBaseDate.getMonth() + 1)}-${pad(editBaseDate.getDate())}`;
-    }
-    document.getElementById("edit-start-time").value = record.start_time ? timeInputValue(new Date(record.start_time)) : timeInputValue(new Date());
-    document.getElementById("edit-duration").value = record.duration_minutes || 0;
-    if (record.end_time) document.getElementById("edit-end-time").value = timeInputValue(new Date(record.end_time));
-    else syncEndFromDuration("edit-start-time", "edit-duration", "edit-end-time");
-    document.getElementById("edit-rate").value = record.rate || 0;
-    document.getElementById("edit-notes").value = record.notes || "";
-    document.getElementById("edit-session-message").textContent = "";
-
-    clearFrContainer("edit-food-rows");
-    document.getElementById("edit-menu-empty").classList.toggle("hidden", menuItems.length > 0);
-    (record.food_items || []).forEach((item) => addFrRow("edit-food-rows", item.id, item.qty, item.price, item.supplier || "chillpill", item.name));
-    if (!record.food_items || !record.food_items.length) addFrRow("edit-food-rows");
-
-    updateEditInternalSaleState();
-
-    const payStatusEl = document.getElementById("edit-payment-status");
-    const payMethodEl = document.getElementById("edit-payment-method");
-    const bd = getRecordPaymentBreakdown(record);
-    if (payStatusEl) {
-      payStatusEl.value = record.paid ? "Paid" : "Unpaid";
-    }
-    if (payMethodEl) {
-      payMethodEl.value = record.payment_method === "Split" ? "Split" : record.payment_method === "Online" ? "Online" : "Cash";
-      payMethodEl.disabled = !record.paid;
-    }
-
-    const cashInput = document.getElementById("edit-cash-amount");
-    const onlineInput = document.getElementById("edit-online-amount");
-    if (cashInput) {
-      cashInput.value = bd.cash;
-      if (record.payment_method === "Split") cashInput.dataset.userEdited = "true";
-      else delete cashInput.dataset.userEdited;
-    }
-    if (onlineInput) {
-      onlineInput.value = bd.online;
-      if (record.payment_method === "Split") onlineInput.dataset.userEdited = "true";
-      else delete onlineInput.dataset.userEdited;
-    }
-
-    const customBillInput = document.getElementById("edit-custom-bill");
-    if (customBillInput) {
-      customBillInput.value = record.amount != null ? record.amount : 0;
-      delete customBillInput.dataset.userEdited;
-    }
-
-    renderStationChips("edit-station-chips-container", "edit-station");
-    recalcEditModal();
-    updateEditSplitFields();
-    wireClickableTimeInputs();
-    document.getElementById("edit-session-modal").classList.add("show");
   }
 
   function closeEditModal() {
