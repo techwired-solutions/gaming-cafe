@@ -63,7 +63,9 @@ create table if not exists public.sessions (
   notified_5min boolean not null default false,
   staff_id uuid references public.staff(id) on delete set null,
   staff_name text,
-  payment_method text check (payment_method in ('Cash', 'Online')),
+  payment_method text check (payment_method in ('Cash', 'Online', 'Split')),
+  cash_amount numeric default 0,
+  online_amount numeric default 0,
   paid boolean not null default false,
   paid_at timestamptz,
   created_at timestamptz not null default now()
@@ -74,10 +76,12 @@ create table if not exists public.sessions (
 alter table public.sessions add column if not exists staff_id uuid references public.staff(id) on delete set null;
 alter table public.sessions add column if not exists staff_name text;
 alter table public.sessions add column if not exists payment_method text;
+alter table public.sessions add column if not exists cash_amount numeric default 0;
+alter table public.sessions add column if not exists online_amount numeric default 0;
 do $$ begin
-  if not exists (select 1 from pg_constraint where conname = 'sessions_payment_method_check') then
-    alter table public.sessions add constraint sessions_payment_method_check check (payment_method in ('Cash', 'Online'));
-  end if;
+  alter table public.sessions drop constraint if exists sessions_payment_method_check;
+  alter table public.sessions add constraint sessions_payment_method_check check (payment_method in ('Cash', 'Online', 'Split'));
+exception when others then null;
 end $$;
 alter table public.sessions add column if not exists paid boolean not null default false;
 alter table public.sessions add column if not exists paid_at timestamptz;

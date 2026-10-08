@@ -438,14 +438,18 @@
   }
 
   // ---------- menu (food & drinks) ----------
+  // ---------- menu (food & drinks) ----------
   function menuOptions(selectedId, supplierFilter = "all") {
     const supFilter = supplierFilter || "all";
     const filtered = supFilter === "all"
       ? menuItems
       : menuItems.filter((m) => (m.supplier || "chillpill") === supFilter);
 
+    const customSelected = selectedId === "_custom" || (selectedId && !menuItems.some((m) => m.id === selectedId));
+    const customOption = `<option value="_custom" ${customSelected ? "selected" : ""}>✏️ Custom / Other item...</option>`;
+
     if (!filtered.length) {
-      return '<option value="">No items for this source</option>';
+      return '<option value="">No items for this source</option>' + customOption;
     }
 
     if (supFilter !== "all") {
@@ -453,7 +457,8 @@
         '<option value="">Select item</option>' +
         filtered.map((item) => {
           return `<option value="${item.id}" ${item.id === selectedId ? "selected" : ""}>${item.name} (${inr(item.price)})</option>`;
-        }).join("")
+        }).join("") +
+        customOption
       );
     }
 
@@ -477,6 +482,7 @@
         bardaliItems.map((m) => `<option value="${m.id}" ${m.id === selectedId ? "selected" : ""}>${m.name} (${inr(m.price)}) · Bardali</option>`).join("") +
         '</optgroup>';
     }
+    html += customOption;
     return html;
   }
 
@@ -489,51 +495,61 @@
     frChangeHandlers[containerId] = onChange;
   }
 
-  function addFrRow(containerId, selectedId = "", qty = 1, customUnitPrice = null, preselectedSupplier = "all") {
-    const hasCustomPriceCol = containerId === "mr-food-rows" || containerId === "edit-food-rows";
-    const isInternalActive = (containerId === "mr-food-rows" && !!document.getElementById("mr-is-internal-sale")?.checked) ||
-                             (containerId === "edit-food-rows" && !!document.getElementById("edit-is-internal-sale")?.checked);
-
+  function addFrRow(containerId, selectedId = "", qty = 1, customUnitPrice = null, preselectedSupplier = "all", customItemName = "") {
     let initialSupplier = preselectedSupplier || "all";
-    if (selectedId) {
+    let isCustom = selectedId === "_custom" || (selectedId && !menuItems.some((m) => m.id === selectedId));
+    let initialName = customItemName || "";
+
+    if (selectedId && !isCustom) {
       const match = menuItems.find((m) => m.id === selectedId);
       if (match) initialSupplier = match.supplier || "chillpill";
     }
 
-    const row = document.createElement("div");
-    if (hasCustomPriceCol) {
-      row.className = "fr-row grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-2 items-center";
-      row.innerHTML = `
-        <select aria-label="Food source" class="form-control fr-source text-xs py-2 w-24 sm:w-28 bg-[#161d2a] border-slate-700 text-slate-300 font-medium">
-          <option value="all" ${initialSupplier === "all" ? "selected" : ""}>🌐 All</option>
-          <option value="chillpill" ${initialSupplier === "chillpill" ? "selected" : ""}>🍟 ChillPill</option>
-          <option value="bros_burger" ${initialSupplier === "bros_burger" ? "selected" : ""}>🍔 Bro's</option>
-          <option value="bardali" ${initialSupplier === "bardali" ? "selected" : ""}>🍽️ Bardali</option>
-        </select>
-        <select aria-label="Food or drink item" class="form-control fr-select text-xs py-2 min-w-0">${menuOptions(selectedId, initialSupplier)}</select>
-        <input aria-label="Quantity" type="number" min="1" value="${qty}" class="form-control fr-qty w-14 text-center text-xs py-2">
-        <input aria-label="Unit price" type="number" min="0" step="1" placeholder="Price" class="form-control fr-unit-price w-20 text-right mono text-xs py-2 font-semibold ${isInternalActive ? 'bg-[#101520] border-[#d8ff45]/60 text-[#d8ff45]' : 'bg-slate-900/50 border-slate-700 text-slate-400'}" ${isInternalActive ? '' : 'disabled'} title="${isInternalActive ? 'Custom price for internal sale' : 'Turn on Internal Sale to edit price'}">
-        <span class="fr-price mono min-w-14 text-right text-xs text-[#d8ff45] font-bold">रु 0</span>
-        <button type="button" aria-label="Remove item" class="fr-remove h-9 w-9 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400 text-lg leading-none cursor-pointer">×</button>`;
-    } else {
-      row.className = "fr-row grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 items-center";
-      row.innerHTML = `
-        <select aria-label="Food source" class="form-control fr-source text-xs py-2 w-24 sm:w-28 bg-[#161d2a] border-slate-700 text-slate-300 font-medium">
-          <option value="all" ${initialSupplier === "all" ? "selected" : ""}>🌐 All</option>
-          <option value="chillpill" ${initialSupplier === "chillpill" ? "selected" : ""}>🍟 ChillPill</option>
-          <option value="bros_burger" ${initialSupplier === "bros_burger" ? "selected" : ""}>🍔 Bro's</option>
-          <option value="bardali" ${initialSupplier === "bardali" ? "selected" : ""}>🍽️ Bardali</option>
-        </select>
-        <select aria-label="Food or drink item" class="form-control fr-select text-xs py-2 min-w-0">${menuOptions(selectedId, initialSupplier)}</select>
-        <input aria-label="Quantity" type="number" min="1" value="${qty}" class="form-control fr-qty w-14 text-center text-xs py-2">
-        <span class="fr-price mono min-w-14 text-right text-xs text-[#d8ff45] font-bold">रु 0</span>
-        <button type="button" aria-label="Remove item" class="fr-remove h-9 w-9 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400 text-lg leading-none cursor-pointer">×</button>`;
+    let initialPrice = 0;
+    if (customUnitPrice !== null && customUnitPrice !== undefined) {
+      initialPrice = Number(customUnitPrice) || 0;
+    } else if (selectedId && !isCustom) {
+      const match = menuItems.find((m) => m.id === selectedId);
+      if (match) initialPrice = match.price || 0;
     }
+
+    const row = document.createElement("div");
+    row.className = "fr-row grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-2 items-center";
+    if (isCustom) row.dataset.isCustom = "true";
+    if (selectedId && selectedId.startsWith("custom_")) row.dataset.customId = selectedId;
+
+    row.innerHTML = `
+      <select aria-label="Food source" class="form-control fr-source text-xs py-2 w-24 sm:w-28 bg-[#161d2a] border-slate-700 text-slate-300 font-medium">
+        <option value="all" ${initialSupplier === "all" ? "selected" : ""}>🌐 All</option>
+        <option value="chillpill" ${initialSupplier === "chillpill" ? "selected" : ""}>🍟 ChillPill</option>
+        <option value="bros_burger" ${initialSupplier === "bros_burger" ? "selected" : ""}>🍔 Bro's</option>
+        <option value="bardali" ${initialSupplier === "bardali" ? "selected" : ""}>🍽️ Bardali</option>
+      </select>
+      <div class="fr-item-col min-w-0 flex flex-col gap-1">
+        <select aria-label="Food or drink item" class="form-control fr-select text-xs py-2 min-w-0 ${isCustom ? 'hidden' : ''}">
+          ${menuOptions(isCustom ? "_custom" : selectedId, initialSupplier)}
+        </select>
+        <div class="fr-custom-wrap flex items-center gap-1 ${isCustom ? '' : 'hidden'}">
+          <input aria-label="Custom item name" type="text" class="form-control fr-custom-name text-xs py-2 min-w-0 font-medium" placeholder="Custom item name..." value="${(initialName || '').replace(/"/g, '&quot;')}">
+          <button type="button" class="fr-toggle-select text-[10px] text-slate-400 hover:text-white px-1.5 py-1 rounded border border-slate-700 whitespace-nowrap" title="Switch back to menu list">📋 List</button>
+        </div>
+      </div>
+      <input aria-label="Quantity" type="number" min="1" value="${qty}" class="form-control fr-qty w-14 text-center text-xs py-2">
+      <input aria-label="Unit price" type="number" min="0" step="1" placeholder="Price" class="form-control fr-unit-price w-20 text-right mono text-xs py-2 font-semibold bg-[#101520] border-slate-700 text-[#d8ff45]" value="${initialPrice}">
+      <span class="fr-price mono min-w-14 text-right text-xs text-[#d8ff45] font-bold">रु 0</span>
+      <button type="button" aria-label="Remove item" class="fr-remove h-9 w-9 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400 text-lg leading-none cursor-pointer">×</button>`;
 
     const notify = () => { const cb = frChangeHandlers[containerId]; if (cb) cb(); };
     const unitPriceInput = row.querySelector(".fr-unit-price");
     const sourceSelect = row.querySelector(".fr-source");
     const itemSelect = row.querySelector(".fr-select");
+    const customWrap = row.querySelector(".fr-custom-wrap");
+    const customNameInput = row.querySelector(".fr-custom-name");
+    const toggleSelectBtn = row.querySelector(".fr-toggle-select");
+
+    if (customUnitPrice !== null) {
+      unitPriceInput.dataset.userEdited = "true";
+    }
 
     sourceSelect.addEventListener("change", () => {
       const chosenSource = sourceSelect.value;
@@ -544,16 +560,42 @@
     });
 
     itemSelect.addEventListener("change", () => {
-      if (unitPriceInput) {
+      if (itemSelect.value === "_custom") {
+        row.dataset.isCustom = "true";
+        itemSelect.classList.add("hidden");
+        customWrap.classList.remove("hidden");
+        customNameInput.focus();
+        unitPriceInput.dataset.userEdited = "true";
+      } else {
+        row.dataset.isCustom = "false";
         unitPriceInput.dataset.userEdited = "false";
-      }
-      const item = menuItems.find((entry) => entry.id === itemSelect.value);
-      if (item && item.supplier && sourceSelect.value === "all") {
-        sourceSelect.value = item.supplier;
+        const item = menuItems.find((entry) => entry.id === itemSelect.value);
+        if (item && item.supplier && sourceSelect.value === "all") {
+          sourceSelect.value = item.supplier;
+        }
       }
       updateFrRow(row);
       notify();
     });
+
+    if (toggleSelectBtn) {
+      toggleSelectBtn.addEventListener("click", () => {
+        row.dataset.isCustom = "false";
+        customWrap.classList.add("hidden");
+        itemSelect.classList.remove("hidden");
+        itemSelect.value = "";
+        unitPriceInput.dataset.userEdited = "false";
+        updateFrRow(row);
+        notify();
+      });
+    }
+
+    if (customNameInput) {
+      customNameInput.addEventListener("input", () => {
+        updateFrRow(row);
+        notify();
+      });
+    }
 
     row.querySelector(".fr-qty").addEventListener("input", () => {
       updateFrRow(row);
@@ -569,12 +611,8 @@
     }
 
     row.querySelector(".fr-remove").addEventListener("click", () => { row.remove(); notify(); });
-    document.getElementById(containerId).appendChild(row);
-
-    if (customUnitPrice !== null && unitPriceInput) {
-      unitPriceInput.value = customUnitPrice;
-      unitPriceInput.dataset.userEdited = "true";
-    }
+    const container = document.getElementById(containerId);
+    if (container) container.appendChild(row);
 
     updateFrRow(row);
   }
@@ -582,28 +620,48 @@
   function updateFrRow(row) {
     const select = row.querySelector(".fr-select");
     const sourceSelect = row.querySelector(".fr-source");
-    const item = menuItems.find((entry) => entry.id === select.value);
+    const customNameInput = row.querySelector(".fr-custom-name");
+    const isCustom = row.dataset.isCustom === "true" || (select && select.value === "_custom");
     const quantity = Math.max(1, Number(row.querySelector(".fr-qty").value) || 1);
     const unitPriceInput = row.querySelector(".fr-unit-price");
 
-    let unitPrice = item ? item.price : 0;
-    if (unitPriceInput) {
-      if (unitPriceInput.dataset.userEdited === "true") {
-        unitPrice = Math.max(0, Number(unitPriceInput.value) || 0);
+    let unitPrice = 0;
+    let itemId = "";
+    let itemName = "";
+
+    if (isCustom) {
+      itemName = (customNameInput && customNameInput.value.trim()) || "Custom Item";
+      if (!row.dataset.customId) {
+        row.dataset.customId = "custom_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+      }
+      itemId = row.dataset.customId;
+      unitPrice = Math.max(0, Number(unitPriceInput.value) || 0);
+    } else {
+      const item = menuItems.find((entry) => entry.id === select.value);
+      if (item) {
+        itemId = item.id;
+        itemName = item.name;
+        if (unitPriceInput.dataset.userEdited === "true") {
+          unitPrice = Math.max(0, Number(unitPriceInput.value) || 0);
+        } else {
+          unitPrice = item.price;
+          unitPriceInput.value = unitPrice;
+        }
       } else {
-        unitPrice = item ? item.price : 0;
-        unitPriceInput.value = unitPrice;
+        unitPrice = Math.max(0, Number(unitPriceInput.value) || 0);
       }
     }
 
     const price = Math.round(unitPrice * quantity);
     row.dataset.price = price;
     row.dataset.qty = quantity;
-    row.dataset.itemId = item ? item.id : "";
-    row.dataset.itemName = item ? item.name : "";
+    row.dataset.itemId = itemId;
+    row.dataset.itemName = itemName;
     row.dataset.unitPrice = unitPrice;
 
-    const chosenSupplier = item ? (item.supplier || "chillpill") : (sourceSelect && sourceSelect.value !== "all" ? sourceSelect.value : "chillpill");
+    const chosenSupplier = isCustom
+      ? (sourceSelect && sourceSelect.value !== "all" ? sourceSelect.value : "chillpill")
+      : (menuItems.find((m) => m.id === itemId)?.supplier || (sourceSelect && sourceSelect.value !== "all" ? sourceSelect.value : "chillpill"));
     row.dataset.supplier = chosenSupplier;
 
     const priceEl = row.querySelector(".fr-price");
@@ -612,22 +670,22 @@
 
   function collectFrItems(containerId) {
     const raw = [...document.querySelectorAll(`#${containerId} .fr-row`)]
-      .filter((row) => row.dataset.itemId)
+      .filter((row) => row.dataset.itemId && (row.dataset.itemName || row.dataset.price > 0))
       .map((row) => {
         const item = menuItems.find((m) => m.id === row.dataset.itemId);
         const supplier = (item && item.supplier) ? item.supplier : (row.dataset.supplier || "chillpill");
         return {
           id: row.dataset.itemId,
-          name: row.dataset.itemName,
-          price: Number(row.dataset.unitPrice),
-          qty: Number(row.dataset.qty),
+          name: row.dataset.itemName || "Item",
+          price: Number(row.dataset.unitPrice) || 0,
+          qty: Number(row.dataset.qty) || 1,
           supplier: supplier
         };
       });
-    // Merge rows that ended up pointing at the same menu item, supplier and unit price
+    // Merge rows that ended up pointing at the exact same menu item, supplier and unit price
     const merged = [];
     raw.forEach((item) => {
-      const existing = merged.find((m) => m.id === item.id && m.price === item.price && m.supplier === item.supplier);
+      const existing = merged.find((m) => m.id === item.id && m.price === item.price && m.supplier === item.supplier && m.name === item.name);
       if (existing) existing.qty += item.qty;
       else merged.push({ ...item });
     });
@@ -639,11 +697,13 @@
   }
 
   function clearFrContainer(containerId) {
-    document.getElementById(containerId).innerHTML = "";
+    const el = document.getElementById(containerId);
+    if (el) el.innerHTML = "";
   }
 
   function refreshFoodMenus() {
     document.querySelectorAll(".fr-row").forEach((row) => {
+      if (row.dataset.isCustom === "true") return; // preserve custom items untouched
       const select = row.querySelector(".fr-select");
       const sourceSelect = row.querySelector(".fr-source");
       if (!select) return;
@@ -667,7 +727,11 @@
         const target = btn.dataset.target;
         const source = btn.dataset.source;
         if (target) {
-          addFrRow(target, "", 1, null, source);
+          if (source === "custom") {
+            addFrRow(target, "_custom", 1, null, "all");
+          } else {
+            addFrRow(target, "", 1, null, source);
+          }
         }
       });
     });
@@ -1105,30 +1169,153 @@
   // session (if any) so New Session / Edit / "Mark active" can all refuse
   // to double-book it — excludeId lets an Edit save ignore the record
   // being edited when checking against itself.
+  function splitStationNames(raw) {
+    if (!raw) return [];
+    return String(raw)
+      .split(/[,+&/]/)
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  function sessionUsesStation(record, stationName) {
+    if (!record || !record.station_name || !stationName) return false;
+    const target = String(stationName).trim().toLowerCase();
+    if (!target) return false;
+    const recStations = splitStationNames(record.station_name);
+    return recStations.some((s) => s === target || s.includes(target) || target.includes(s));
+  }
+
+  // A station can only have one Active session at a time. Supports multiple
+  // stations in a single session (e.g. "Station 2, Racing Simulator").
   function findActiveStationConflict(stationName, excludeId = null) {
-    const name = (stationName || "").trim().toLowerCase();
-    if (!name) return null;
-    return records.find((r) => r.status === "Active" && r.id !== excludeId && (r.station_name || "").trim().toLowerCase() === name) || null;
+    if (!stationName) return null;
+    const parts = splitStationNames(stationName);
+    if (!parts.length) return null;
+    return records.find((r) => {
+      if (r.id === excludeId || r.status !== "Active") return false;
+      return parts.some((p) => sessionUsesStation(r, p));
+    }) || null;
   }
 
   // Broader than findActiveStationConflict: catches any Active *or* Booked
-  // session on the same station whose time window overlaps the candidate
+  // session on any of the stations whose time window overlaps the candidate
   // window — e.g. two Booked reservations clashing, or a new booking
   // landing on top of one that's already running.
   function findStationTimeOverlap(stationName, candidateStart, candidateEnd, excludeId = null) {
-    const name = (stationName || "").trim().toLowerCase();
-    if (!name || !candidateStart || !candidateEnd) return null;
+    if (!stationName || !candidateStart || !candidateEnd) return null;
+    const candidateParts = splitStationNames(stationName);
+    if (!candidateParts.length) return null;
     return (
       records.find((r) => {
         if (r.id === excludeId) return false;
         if (r.status !== "Active" && r.status !== "Booked") return false;
-        if ((r.station_name || "").trim().toLowerCase() !== name) return false;
         if (!r.start_time || !r.end_time) return false;
+        const overlapsAny = candidateParts.some((cp) => sessionUsesStation(r, cp));
+        if (!overlapsAny) return false;
         const rStart = new Date(r.start_time);
         const rEnd = new Date(r.end_time);
         return candidateStart < rEnd && rStart < candidateEnd;
       }) || null
     );
+  }
+
+  function getRecordPaymentBreakdown(r) {
+    if (!r) return { method: "Unpaid", cash: 0, online: 0, total: 0 };
+    const total = Number(r.amount) || 0;
+    let method = r.payment_method || (r.paid ? "Cash" : "Unpaid");
+    let cash = Number(r.cash_amount) || 0;
+    let online = Number(r.online_amount) || 0;
+
+    // Check if encoded in notes: [Payment: Split | Cash: 200 | Online: 300]
+    if ((method === "Split" || (cash === 0 && online === 0)) && r.notes) {
+      const match = String(r.notes).match(/\[Payment:\s*Split\s*\|\s*Cash:\s*(\d+(?:\.\d+)?)\s*\|\s*Online:\s*(\d+(?:\.\d+)?)\]/i);
+      if (match) {
+        method = "Split";
+        cash = Number(match[1]) || 0;
+        online = Number(match[2]) || 0;
+      }
+    }
+
+    if (method === "Split") {
+      if (cash === 0 && online === 0 && total > 0) {
+        cash = Math.round(total / 2);
+        online = total - cash;
+      }
+    } else if (method === "Cash") {
+      cash = total;
+      online = 0;
+    } else if (method === "Online") {
+      cash = 0;
+      online = total;
+    }
+    return { method, cash, online, total };
+  }
+
+  function wireClickableTimeInputs() {
+    document.querySelectorAll('input[type="time"], input[type="date"], input[type="datetime-local"]').forEach((input) => {
+      if (input.dataset.pickerWired) return;
+      input.dataset.pickerWired = "1";
+      input.addEventListener("click", () => {
+        try {
+          if (typeof input.showPicker === "function") input.showPicker();
+        } catch (e) {
+          // Fallback silently if browser restricts showPicker
+        }
+      });
+    });
+  }
+
+  function renderStationChips(containerId, inputId) {
+    const container = document.getElementById(containerId);
+    const input = document.getElementById(inputId);
+    if (!container || !input) return;
+
+    const currentNames = splitStationNames(input.value);
+    const activeStations = stations.filter((s) => s.active);
+    if (!activeStations.length) {
+      container.innerHTML = "";
+      return;
+    }
+
+    container.innerHTML = activeStations
+      .map((s) => {
+        const isSelected = currentNames.some((cn) => cn === s.name.trim().toLowerCase());
+        const cls = isSelected
+          ? "station-chip active rounded-lg border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] px-2 py-0.5 text-xs font-bold transition cursor-pointer"
+          : "station-chip rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-xs text-slate-300 hover:border-slate-500 hover:text-white transition cursor-pointer";
+        return `<button type="button" class="${cls}" data-station="${escapeHtml(s.name)}">${isSelected ? "✓ " : "+ "}${escapeHtml(s.name)}</button>`;
+      })
+      .join("");
+
+    container.querySelectorAll(".station-chip").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const stationName = btn.dataset.station;
+        let names = splitStationNames(input.value);
+        const idx = names.indexOf(stationName.trim().toLowerCase());
+        if (idx !== -1) {
+          names.splice(idx, 1);
+        } else {
+          names.push(stationName.trim().toLowerCase());
+        }
+        const formatted = names
+          .map((n) => {
+            const match = activeStations.find((as) => as.name.trim().toLowerCase() === n);
+            return match ? match.name : n;
+          })
+          .join(", ");
+        input.value = formatted;
+        renderStationChips(containerId, inputId);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    });
+
+    if (!input.dataset.chipsSynced) {
+      input.dataset.chipsSynced = "1";
+      input.addEventListener("input", () => {
+        renderStationChips(containerId, inputId);
+      });
+    }
   }
 
   // Grace period after end_time before overtime starts accruing. Once past
@@ -1188,11 +1375,19 @@
 
     const paymentEl = card.querySelector(".record-payment");
     if (record.paid && record.payment_method) {
-      paymentEl.textContent = record.payment_method;
-      paymentEl.className = "record-payment rounded-full px-2 py-0.5 font-bold " + (record.payment_method === "Cash" ? "badge-cash" : "badge-online");
+      if (record.payment_method === "Split") {
+        const bd = getRecordPaymentBreakdown(record);
+        paymentEl.textContent = `Split (C: ${inr(bd.cash)} · QR: ${inr(bd.online)})`;
+        paymentEl.className = "record-payment rounded-full px-2 py-0.5 font-bold badge-split text-[11px]";
+      } else {
+        paymentEl.textContent = record.payment_method;
+        paymentEl.className = "record-payment rounded-full px-2 py-0.5 font-bold " + (record.payment_method === "Cash" ? "badge-cash" : "badge-online");
+      }
+      paymentEl.classList.remove("hidden");
     } else if (record.status === "Completed" && !record.paid) {
       paymentEl.textContent = "Unpaid / Due";
       paymentEl.className = "record-payment rounded-full px-2 py-0.5 font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30";
+      paymentEl.classList.remove("hidden");
     } else paymentEl.classList.add("hidden");
 
     const countdown = card.querySelector(".record-countdown");
@@ -1766,7 +1961,25 @@
 
   function renderCheckoutBreakdown(record) {
     const timeCost = ((Number(record.duration_minutes) || 0) / 60) * (Number(record.rate) || 0);
-    const overtime = computeOvertimeCharge(record);
+    let overtime = computeOvertimeCharge(record);
+
+    const waiveCheckbox = document.getElementById("checkout-waive-overtime");
+    const overtimeRow = document.getElementById("checkout-overtime-row");
+    const overtimeAmountEl = document.getElementById("checkout-overtime-amount");
+
+    if (overtimeRow && overtimeAmountEl) {
+      if (overtime.amount > 0) {
+        overtimeRow.classList.remove("hidden");
+        overtimeAmountEl.textContent = inr(overtime.amount);
+      } else {
+        overtimeRow.classList.add("hidden");
+      }
+    }
+
+    if (waiveCheckbox && waiveCheckbox.checked) {
+      overtime = { minutes: overtime.minutes, amount: 0, waived: true };
+    }
+
     const subtotal = Math.round((Number(record.amount) || 0) + overtime.amount);
 
     const rawValue = document.getElementById("checkout-discount-value").value;
@@ -1778,6 +1991,8 @@
     const lines = [`Time: ${record.duration_minutes || 0} min @ ${inr(record.rate || 0)}/hr — ${inr(timeCost)}`, ...foodLines];
     if (overtime.amount > 0) {
       lines.push(`Overtime: ${overtime.minutes} min past end time (after a ${OVERTIME_GRACE_MINUTES}-min grace period) — ${inr(overtime.amount)}`);
+    } else if (overtime.waived) {
+      lines.push(`Overtime: Waived by staff (रु 0)`);
     }
     if (discount.amount > 0) {
       const discountLabel =
@@ -1787,6 +2002,9 @@
     document.getElementById("checkout-breakdown").innerHTML = lines.map((l) => `<span class="block">${l}</span>`).join("");
     const grandTotal = Math.max(0, subtotal - discount.amount);
     document.getElementById("checkout-amount").textContent = inr(grandTotal);
+
+    if (window._syncCheckoutSplit) window._syncCheckoutSplit(grandTotal);
+
     return { overtime, discount, grandTotal };
   }
 
@@ -2068,18 +2286,115 @@
       selectedPaymentMethod = method;
       const cashBtn = document.getElementById("method-btn-cash");
       const onlineBtn = document.getElementById("method-btn-online");
+      const splitBtn = document.getElementById("method-btn-split");
+      const splitFields = document.getElementById("checkout-split-fields");
       const label = document.getElementById("checkout-selected-method-label");
-      if (label) label.textContent = method;
 
-      if (cashBtn && onlineBtn) {
-        if (method === "Cash") {
-          cashBtn.className = "checkout-method-btn rounded-xl py-3 px-3 font-bold flex flex-col items-center gap-1 border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45] transition cursor-pointer";
-          onlineBtn.className = "checkout-method-btn rounded-xl py-3 px-3 font-bold flex flex-col items-center gap-1 border border-slate-600 bg-[#1c2333] text-slate-400 hover:border-slate-500 hover:text-slate-200 transition cursor-pointer";
+      if (cashBtn) {
+        cashBtn.className = method === "Cash"
+          ? "checkout-method-btn rounded-xl py-2.5 px-2 font-bold flex flex-col items-center gap-1 border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45] transition cursor-pointer text-xs"
+          : "checkout-method-btn rounded-xl py-2.5 px-2 font-bold flex flex-col items-center gap-1 border border-slate-600 bg-[#1c2333] text-slate-400 hover:border-slate-500 hover:text-slate-200 transition cursor-pointer text-xs";
+      }
+      if (onlineBtn) {
+        onlineBtn.className = method === "Online"
+          ? "checkout-method-btn rounded-xl py-2.5 px-2 font-bold flex flex-col items-center gap-1 border border-sky-400 bg-sky-400/15 text-sky-300 transition cursor-pointer text-xs"
+          : "checkout-method-btn rounded-xl py-2.5 px-2 font-bold flex flex-col items-center gap-1 border border-slate-600 bg-[#1c2333] text-slate-400 hover:border-slate-500 hover:text-slate-200 transition cursor-pointer text-xs";
+      }
+      if (splitBtn) {
+        splitBtn.className = method === "Split"
+          ? "checkout-method-btn rounded-xl py-2.5 px-2 font-bold flex flex-col items-center gap-1 border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] transition cursor-pointer text-xs"
+          : "checkout-method-btn rounded-xl py-2.5 px-2 font-bold flex flex-col items-center gap-1 border border-slate-600 bg-[#1c2333] text-slate-400 hover:border-slate-500 hover:text-slate-200 transition cursor-pointer text-xs";
+      }
+
+      if (splitFields) {
+        splitFields.classList.toggle("hidden", method !== "Split");
+      }
+
+      const record = records.find((r) => r.id === modal.dataset.recordId);
+      if (record) {
+        renderCheckoutBreakdown(record);
+      } else if (label) {
+        label.textContent = method;
+      }
+    }
+
+    window._syncCheckoutSplit = (grandTotal) => {
+      const splitFields = document.getElementById("checkout-split-fields");
+      const cashInput = document.getElementById("checkout-cash-amount");
+      const onlineInput = document.getElementById("checkout-online-amount");
+      const remainderEl = document.getElementById("checkout-split-remainder");
+      const label = document.getElementById("checkout-selected-method-label");
+
+      if (selectedPaymentMethod !== "Split") {
+        if (label) label.textContent = selectedPaymentMethod;
+        return;
+      }
+
+      if (splitFields) splitFields.classList.remove("hidden");
+
+      let cash = Number(cashInput?.value) || 0;
+      let online = Number(onlineInput?.value) || 0;
+
+      if (!cashInput?.dataset.userEdited && !onlineInput?.dataset.userEdited) {
+        cash = Math.round(grandTotal / 2);
+        online = grandTotal - cash;
+        if (cashInput) cashInput.value = cash;
+        if (onlineInput) onlineInput.value = online;
+      }
+
+      const diff = grandTotal - (cash + online);
+      if (remainderEl) {
+        if (diff === 0) {
+          remainderEl.textContent = `Balanced: रु ${grandTotal}`;
+          remainderEl.className = "mono text-[#d8ff45] font-semibold";
+        } else if (diff > 0) {
+          remainderEl.textContent = `Under by रु ${diff}`;
+          remainderEl.className = "mono text-amber-300 font-semibold";
         } else {
-          onlineBtn.className = "checkout-method-btn rounded-xl py-3 px-3 font-bold flex flex-col items-center gap-1 border border-sky-400 bg-sky-400/15 text-sky-300 transition cursor-pointer";
-          cashBtn.className = "checkout-method-btn rounded-xl py-3 px-3 font-bold flex flex-col items-center gap-1 border border-slate-600 bg-[#1c2333] text-slate-400 hover:border-slate-500 hover:text-slate-200 transition cursor-pointer";
+          remainderEl.textContent = `Over by रु ${Math.abs(diff)}`;
+          remainderEl.className = "mono text-rose-400 font-semibold";
         }
       }
+
+      if (label) {
+        label.textContent = `Split (Cash ${inr(cash)} + QR ${inr(online)})`;
+      }
+    };
+
+    const cashInput = document.getElementById("checkout-cash-amount");
+    const onlineInput = document.getElementById("checkout-online-amount");
+    if (cashInput && onlineInput) {
+      cashInput.addEventListener("input", () => {
+        cashInput.dataset.userEdited = "true";
+        const record = records.find((r) => r.id === modal.dataset.recordId);
+        if (record) {
+          const { grandTotal } = renderCheckoutBreakdown(record);
+          const cash = Math.max(0, Number(cashInput.value) || 0);
+          const autoOnline = Math.max(0, grandTotal - cash);
+          onlineInput.value = autoOnline;
+          window._syncCheckoutSplit(grandTotal);
+        }
+      });
+
+      onlineInput.addEventListener("input", () => {
+        onlineInput.dataset.userEdited = "true";
+        const record = records.find((r) => r.id === modal.dataset.recordId);
+        if (record) {
+          const { grandTotal } = renderCheckoutBreakdown(record);
+          const online = Math.max(0, Number(onlineInput.value) || 0);
+          const autoCash = Math.max(0, grandTotal - online);
+          cashInput.value = autoCash;
+          window._syncCheckoutSplit(grandTotal);
+        }
+      });
+    }
+
+    const waiveOvertimeCheckbox = document.getElementById("checkout-waive-overtime");
+    if (waiveOvertimeCheckbox) {
+      waiveOvertimeCheckbox.addEventListener("change", () => {
+        const record = records.find((r) => r.id === modal.dataset.recordId);
+        if (record) renderCheckoutBreakdown(record);
+      });
     }
 
     document.getElementById("checkout-cancel").addEventListener("click", closeCheckoutModal);
@@ -2096,94 +2411,147 @@
       if (record) renderCheckoutBreakdown(record);
     });
 
-    // Method selection buttons (Cash or Online)
+    // Method selection buttons (Cash, Online, or Split)
     modal.querySelectorAll(".checkout-method-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         updatePaymentMethodUI(btn.dataset.method || "Cash");
       });
     });
 
-    window._resetCheckoutMethod = () => updatePaymentMethodUI("Cash");
+    window._resetCheckoutMethod = () => {
+      const cashIn = document.getElementById("checkout-cash-amount");
+      const onlineIn = document.getElementById("checkout-online-amount");
+      const waiveBox = document.getElementById("checkout-waive-overtime");
+      if (cashIn) { delete cashIn.dataset.userEdited; cashIn.value = ""; }
+      if (onlineIn) { delete onlineIn.dataset.userEdited; onlineIn.value = ""; }
+      if (waiveBox) waiveBox.checked = false;
+      updatePaymentMethodUI("Cash");
+    };
 
-    // "Complete & Pay" button (with confirmation!)
-    const confirmPayBtn = document.getElementById("checkout-confirm-pay");
-    if (confirmPayBtn) {
-      confirmPayBtn.addEventListener("click", async () => {
-        const recordId = modal.dataset.recordId;
-        const record = records.find((r) => r.id === recordId);
-        if (!record) return;
-        const { overtime, discount, grandTotal } = renderCheckoutBreakdown(record);
+    // Helper for saving checkout payment
+    async function executeCheckoutPayment(printBill = false) {
+      const recordId = modal.dataset.recordId;
+      const record = records.find((r) => r.id === recordId);
+      if (!record) return;
+      const { overtime, discount, grandTotal } = renderCheckoutBreakdown(record);
 
-        if (!confirm(`Complete checkout for ${record.customer_name || "Customer"}?\n• Amount: ${inr(grandTotal)}\n• Method: ${selectedPaymentMethod}`)) {
-          return;
+      let cashAmount = 0;
+      let onlineAmount = 0;
+      if (selectedPaymentMethod === "Split") {
+        cashAmount = Math.max(0, Number(document.getElementById("checkout-cash-amount")?.value) || 0);
+        onlineAmount = Math.max(0, Number(document.getElementById("checkout-online-amount")?.value) || 0);
+        if (cashAmount + onlineAmount !== grandTotal && grandTotal > 0) {
+          onlineAmount = Math.max(0, grandTotal - cashAmount);
         }
+      } else if (selectedPaymentMethod === "Cash") {
+        cashAmount = grandTotal;
+        onlineAmount = 0;
+      } else if (selectedPaymentMethod === "Online") {
+        cashAmount = 0;
+        onlineAmount = grandTotal;
+      }
 
-        confirmPayBtn.disabled = true;
-        const { error } = await window.sb
-          .from("sessions")
-          .update({
-            status: "Completed",
-            paid: true,
-            payment_method: selectedPaymentMethod,
-            paid_at: new Date().toISOString(),
-            amount: grandTotal,
-            overtime_amount: overtime.amount,
-            discount_amount: discount.amount,
-            discount_type: discount.amount > 0 ? discount.mode : null,
-            discount_value: discount.amount > 0 ? discount.value : 0
-          })
-          .eq("id", recordId);
-        confirmPayBtn.disabled = false;
-        if (error) showToast("Could not record payment: " + error.message);
-        else {
-          const redeemed = modal.dataset.linkypotRedeemed === "true";
-          closeCheckoutModal();
-          const extras = [overtime.amount > 0 ? `+${inr(overtime.amount)} overtime` : null, discount.amount > 0 ? `−${inr(discount.amount)} discount` : null].filter(Boolean).join(", ");
-          showToast(`Payment recorded — ${selectedPaymentMethod}${extras ? ` (${extras})` : ""}.`);
-          logVisitToLinkyPot(record.customer_phone, record.customer_name, grandTotal, redeemed);
+      const methodDisplay = selectedPaymentMethod === "Split"
+        ? `Split (Cash: ${inr(cashAmount)} + Online: ${inr(onlineAmount)})`
+        : selectedPaymentMethod;
+
+      const confirmPrompt = printBill
+        ? `Confirm payment & print PAN bill for ${record.customer_name || "Customer"}?\n• Amount: ${inr(grandTotal)}\n• Method: ${methodDisplay}`
+        : `Complete checkout for ${record.customer_name || "Customer"}?\n• Amount: ${inr(grandTotal)}\n• Method: ${methodDisplay}`;
+
+      if (!confirm(confirmPrompt)) return;
+
+      const btn = printBill ? document.getElementById("checkout-pay-print") : document.getElementById("checkout-confirm-pay");
+      if (btn) btn.disabled = true;
+
+      const splitTag = selectedPaymentMethod === "Split"
+        ? `[Payment: Split | Cash: ${cashAmount} | Online: ${onlineAmount}]`
+        : "";
+      let finalNotes = record.notes || "";
+      if (splitTag && !finalNotes.includes("[Payment: Split")) {
+        finalNotes = [finalNotes, splitTag].filter(Boolean).join(" ");
+      }
+      if (overtime.waived && !finalNotes.includes("[Overtime Waived]")) {
+        finalNotes = [finalNotes, "[Overtime Waived]"].filter(Boolean).join(" ");
+      }
+
+      const updatePayload = {
+        status: "Completed",
+        paid: true,
+        payment_method: selectedPaymentMethod,
+        cash_amount: cashAmount,
+        online_amount: onlineAmount,
+        paid_at: new Date().toISOString(),
+        amount: grandTotal,
+        overtime_amount: overtime.amount,
+        discount_amount: discount.amount,
+        discount_type: discount.amount > 0 ? discount.mode : null,
+        discount_value: discount.amount > 0 ? discount.value : 0,
+        notes: finalNotes
+      };
+
+      let { error } = await window.sb
+        .from("sessions")
+        .update(updatePayload)
+        .eq("id", recordId);
+
+      // Resilient fallback if cash_amount / online_amount not present in PostgREST schema cache
+      if (error && (error.message.includes("cash_amount") || error.message.includes("online_amount") || error.code === "PGRST204")) {
+        delete updatePayload.cash_amount;
+        delete updatePayload.online_amount;
+        const retry = await window.sb.from("sessions").update(updatePayload).eq("id", recordId);
+        error = retry.error;
+      }
+
+      if (btn) btn.disabled = false;
+
+      if (error) {
+        showToast("Could not record payment: " + error.message);
+      } else {
+        const redeemed = modal.dataset.linkypotRedeemed === "true";
+        const updatedRecord = {
+          ...record,
+          ...updatePayload,
+          cash_amount: cashAmount,
+          online_amount: onlineAmount
+        };
+
+        // Instant local update & re-render
+        const idx = records.findIndex((r) => r.id === recordId);
+        if (idx !== -1) {
+          records[idx] = updatedRecord;
         }
-      });
+        renderRecordsList();
+        renderRevenue();
+        renderStationsBoard();
+        updateSummary();
+
+        closeCheckoutModal();
+        const extras = [
+          overtime.amount > 0 ? `+${inr(overtime.amount)} overtime` : overtime.waived ? "overtime waived" : null,
+          discount.amount > 0 ? `−${inr(discount.amount)} discount` : null
+        ].filter(Boolean).join(", ");
+
+        if (printBill) {
+          showToast(`Payment recorded — ${methodDisplay}. Printing PAN bill...`);
+          printPanBill(updatedRecord, selectedPaymentMethod);
+        } else {
+          showToast(`Payment recorded — ${methodDisplay}${extras ? ` (${extras})` : ""}.`);
+        }
+        logVisitToLinkyPot(record.customer_phone, record.customer_name, grandTotal, redeemed);
+      }
     }
 
-    // "Pay & Print PAN Bill" button (with confirmation!)
+    // "Complete & Pay" button
+    const confirmPayBtn = document.getElementById("checkout-confirm-pay");
+    if (confirmPayBtn) {
+      confirmPayBtn.addEventListener("click", () => executeCheckoutPayment(false));
+    }
+
+    // "Pay & Print PAN Bill" button
     const payAndPrintBtn = document.getElementById("checkout-pay-print");
     if (payAndPrintBtn) {
-      payAndPrintBtn.addEventListener("click", async () => {
-        const recordId = modal.dataset.recordId;
-        const record = records.find((r) => r.id === recordId);
-        if (!record) return;
-        const { overtime, discount, grandTotal } = renderCheckoutBreakdown(record);
-
-        if (!confirm(`Confirm payment & print PAN bill for ${record.customer_name || "Customer"}?\n• Amount: ${inr(grandTotal)}\n• Method: ${selectedPaymentMethod}`)) {
-          return;
-        }
-
-        payAndPrintBtn.disabled = true;
-        const { error } = await window.sb
-          .from("sessions")
-          .update({
-            status: "Completed",
-            paid: true,
-            payment_method: selectedPaymentMethod,
-            paid_at: new Date().toISOString(),
-            amount: grandTotal,
-            overtime_amount: overtime.amount,
-            discount_amount: discount.amount,
-            discount_type: discount.amount > 0 ? discount.mode : null,
-            discount_value: discount.amount > 0 ? discount.value : 0
-          })
-          .eq("id", recordId);
-        payAndPrintBtn.disabled = false;
-        if (error) showToast("Could not record payment: " + error.message);
-        else {
-          const redeemed = modal.dataset.linkypotRedeemed === "true";
-          const updated = { ...record, status: "Completed", paid: true, payment_method: selectedPaymentMethod, amount: grandTotal, overtime_amount: overtime.amount, discount_amount: discount.amount };
-          closeCheckoutModal();
-          showToast(`Payment recorded — ${selectedPaymentMethod}. Printing PAN bill...`);
-          printPanBill(updated, selectedPaymentMethod);
-          logVisitToLinkyPot(record.customer_phone, record.customer_name, grandTotal, redeemed);
-        }
-      });
+      payAndPrintBtn.addEventListener("click", () => executeCheckoutPayment(true));
     }
 
     const printOnlyBtn = document.getElementById("checkout-print-only");
@@ -2281,7 +2649,13 @@
     }
 
     if (totalEl) totalEl.textContent = inr(grandTotal);
-    if (payMethodEl) payMethodEl.textContent = overridePaymentMethod || record.payment_method || (record.paid ? "Paid" : "Due");
+
+    const bd = getRecordPaymentBreakdown(record);
+    let printedMethod = overridePaymentMethod || record.payment_method || (record.paid ? "Paid" : "Due");
+    if (record.payment_method === "Split" || overridePaymentMethod === "Split" || bd.method === "Split") {
+      printedMethod = `Split (Cash: ${inr(bd.cash)} + QR: ${inr(bd.online)})`;
+    }
+    if (payMethodEl) payMethodEl.textContent = printedMethod;
 
     setTimeout(() => {
       window.print();
@@ -2379,12 +2753,55 @@
   let editTarget = null;
   let editBaseDate = new Date(); // the calendar date edit-start-time/edit-end-time apply to
 
+  function updateEditSplitFields() {
+    const payMethodSelect = document.getElementById("edit-payment-method");
+    const splitFields = document.getElementById("edit-split-fields");
+    const cashInput = document.getElementById("edit-cash-amount");
+    const onlineInput = document.getElementById("edit-online-amount");
+    const remainderEl = document.getElementById("edit-split-remainder");
+    const customBillInput = document.getElementById("edit-custom-bill");
+
+    const isSplit = payMethodSelect && payMethodSelect.value === "Split";
+    if (splitFields) splitFields.classList.toggle("hidden", !isSplit);
+    if (!isSplit) return;
+
+    const total = Number(customBillInput?.value) || 0;
+    let cash = Number(cashInput?.value) || 0;
+    let online = Number(onlineInput?.value) || 0;
+
+    if (!cashInput?.dataset.userEdited && !onlineInput?.dataset.userEdited) {
+      cash = Math.round(total / 2);
+      online = total - cash;
+      if (cashInput) cashInput.value = cash;
+      if (onlineInput) onlineInput.value = online;
+    }
+
+    const diff = total - (cash + online);
+    if (remainderEl) {
+      if (diff === 0) {
+        remainderEl.textContent = `Balanced: रु ${total}`;
+        remainderEl.className = "mono text-[#d8ff45] font-semibold";
+      } else if (diff > 0) {
+        remainderEl.textContent = `Under by रु ${diff}`;
+        remainderEl.className = "mono text-amber-300 font-semibold";
+      } else {
+        remainderEl.textContent = `Over by रु ${Math.abs(diff)}`;
+        remainderEl.className = "mono text-rose-400 font-semibold";
+      }
+    }
+  }
+
   function recalcEditModal() {
     const duration = Math.max(0, Number(document.getElementById("edit-duration").value) || 0);
     const rate = Math.max(0, Number(document.getElementById("edit-rate").value) || 0);
     const foodTotal = frTotal("edit-food-rows");
     const total = Math.round((duration / 60) * rate + foodTotal);
     document.getElementById("edit-new-total").textContent = inr(total);
+    const customBillInput = document.getElementById("edit-custom-bill");
+    if (customBillInput && customBillInput.dataset.userEdited !== "true") {
+      customBillInput.value = total;
+    }
+    updateEditSplitFields();
     updateEditSessionWhatsAppState();
     return { total, foodTotal, duration, rate };
   }
@@ -2428,26 +2845,6 @@
       }
     }
 
-    // Toggle unit price input state in all edit-food-rows
-    const rows = document.querySelectorAll("#edit-food-rows .fr-row");
-    rows.forEach((row) => {
-      const pInput = row.querySelector(".fr-unit-price");
-      if (pInput) {
-        pInput.disabled = !isInternal;
-        pInput.classList.toggle("border-[#d8ff45]/60", isInternal);
-        pInput.classList.toggle("text-[#d8ff45]", isInternal);
-        pInput.classList.toggle("bg-[#101520]", isInternal);
-        pInput.classList.toggle("border-slate-700", !isInternal);
-        pInput.classList.toggle("text-slate-400", !isInternal);
-        pInput.classList.toggle("bg-slate-900/50", !isInternal);
-        pInput.title = isInternal ? "Custom price for internal sale" : "Turn on Internal Sale to edit price";
-        if (!isInternal) {
-          pInput.dataset.userEdited = "false";
-          updateFrRow(row);
-        }
-      }
-    });
-
     recalcEditModal();
   }
 
@@ -2485,22 +2882,45 @@
 
     clearFrContainer("edit-food-rows");
     document.getElementById("edit-menu-empty").classList.toggle("hidden", menuItems.length > 0);
-    (record.food_items || []).forEach((item) => addFrRow("edit-food-rows", item.id, item.qty, item.price));
+    (record.food_items || []).forEach((item) => addFrRow("edit-food-rows", item.id, item.qty, item.price, item.supplier || "chillpill", item.name));
     if (!record.food_items || !record.food_items.length) addFrRow("edit-food-rows");
 
     updateEditInternalSaleState();
 
     const payStatusEl = document.getElementById("edit-payment-status");
     const payMethodEl = document.getElementById("edit-payment-method");
+    const bd = getRecordPaymentBreakdown(record);
     if (payStatusEl) {
       payStatusEl.value = record.paid ? "Paid" : "Unpaid";
     }
     if (payMethodEl) {
-      payMethodEl.value = record.payment_method === "Online" ? "Online" : "Cash";
+      payMethodEl.value = record.payment_method === "Split" ? "Split" : record.payment_method === "Online" ? "Online" : "Cash";
       payMethodEl.disabled = !record.paid;
     }
 
+    const cashInput = document.getElementById("edit-cash-amount");
+    const onlineInput = document.getElementById("edit-online-amount");
+    if (cashInput) {
+      cashInput.value = bd.cash;
+      if (record.payment_method === "Split") cashInput.dataset.userEdited = "true";
+      else delete cashInput.dataset.userEdited;
+    }
+    if (onlineInput) {
+      onlineInput.value = bd.online;
+      if (record.payment_method === "Split") onlineInput.dataset.userEdited = "true";
+      else delete onlineInput.dataset.userEdited;
+    }
+
+    const customBillInput = document.getElementById("edit-custom-bill");
+    if (customBillInput) {
+      customBillInput.value = record.amount != null ? record.amount : 0;
+      delete customBillInput.dataset.userEdited;
+    }
+
+    renderStationChips("edit-station-chips-container", "edit-station");
     recalcEditModal();
+    updateEditSplitFields();
+    wireClickableTimeInputs();
     document.getElementById("edit-session-modal").classList.add("show");
   }
 
@@ -2524,6 +2944,41 @@
       syncEndFromDuration("edit-start-time", "edit-duration", "edit-end-time");
       recalcEditModal();
     });
+
+    const customBillInput = document.getElementById("edit-custom-bill");
+    if (customBillInput) {
+      customBillInput.addEventListener("input", () => {
+        customBillInput.dataset.userEdited = "true";
+        const payMethod = document.getElementById("edit-payment-method")?.value;
+        if (payMethod === "Split") {
+          const total = Math.max(0, Number(customBillInput.value) || 0);
+          const cashIn = document.getElementById("edit-cash-amount");
+          const onlineIn = document.getElementById("edit-online-amount");
+          const cash = Math.max(0, Number(cashIn?.value) || 0);
+          if (onlineIn) onlineIn.value = Math.max(0, total - cash);
+        }
+        updateEditSplitFields();
+      });
+    }
+
+    const cashInput = document.getElementById("edit-cash-amount");
+    const onlineInput = document.getElementById("edit-online-amount");
+    if (cashInput && onlineInput) {
+      cashInput.addEventListener("input", () => {
+        cashInput.dataset.userEdited = "true";
+        const total = Number(document.getElementById("edit-custom-bill")?.value) || 0;
+        const cash = Math.max(0, Number(cashInput.value) || 0);
+        onlineInput.value = Math.max(0, total - cash);
+        updateEditSplitFields();
+      });
+      onlineInput.addEventListener("input", () => {
+        onlineInput.dataset.userEdited = "true";
+        const total = Number(document.getElementById("edit-custom-bill")?.value) || 0;
+        const online = Math.max(0, Number(onlineInput.value) || 0);
+        cashInput.value = Math.max(0, total - online);
+        updateEditSplitFields();
+      });
+    }
 
     const editInternalToggle = document.getElementById("edit-is-internal-sale");
     if (editInternalToggle) {
@@ -2557,6 +3012,10 @@
     if (editPayStatus && editPayMethod) {
       editPayStatus.addEventListener("change", () => {
         editPayMethod.disabled = editPayStatus.value === "Unpaid";
+        updateEditSplitFields();
+      });
+      editPayMethod.addEventListener("change", () => {
+        updateEditSplitFields();
       });
     }
 
@@ -2612,10 +3071,36 @@
       const isPaid = editPayStatus ? editPayStatus.value === "Paid" : !!editTarget.paid;
       const paymentMethod = isPaid ? (editPayMethod ? editPayMethod.value : editTarget.payment_method || "Cash") : null;
 
+      // Check if user specified a manual bill override (e.g. waived overtime, custom charge)
+      const customBillVal = document.getElementById("edit-custom-bill")?.value;
+      const finalAmount = customBillVal !== "" && !isNaN(Number(customBillVal)) ? Math.max(0, Number(customBillVal)) : total;
+
+      let cashAmount = 0;
+      let onlineAmount = 0;
+      if (paymentMethod === "Split") {
+        cashAmount = Math.max(0, Number(document.getElementById("edit-cash-amount")?.value) || 0);
+        onlineAmount = Math.max(0, Number(document.getElementById("edit-online-amount")?.value) || 0);
+        if (cashAmount + onlineAmount !== finalAmount && finalAmount > 0) {
+          onlineAmount = Math.max(0, finalAmount - cashAmount);
+        }
+      } else if (paymentMethod === "Cash") {
+        cashAmount = finalAmount;
+        onlineAmount = 0;
+      } else if (paymentMethod === "Online") {
+        cashAmount = 0;
+        onlineAmount = finalAmount;
+      }
+
       const rawNotes = document.getElementById("edit-notes").value.trim();
       let finalNotes = rawNotes;
       if (isInternal && !rawNotes.includes("[Internal Sale]")) {
         finalNotes = rawNotes ? `[Internal Sale] ${rawNotes}` : "[Internal Sale]";
+      }
+      if (paymentMethod === "Split") {
+        const splitTag = `[Payment: Split | Cash: ${cashAmount} | Online: ${onlineAmount}]`;
+        if (!finalNotes.includes("[Payment: Split")) {
+          finalNotes = [finalNotes, splitTag].filter(Boolean).join(" ");
+        }
       }
 
       const btn = document.getElementById("edit-session-save");
@@ -2631,16 +3116,15 @@
         rate,
         food_items: foodItems,
         food_total: foodTotal,
-        amount: total,
+        amount: finalAmount,
         paid: isPaid,
         payment_method: paymentMethod,
+        cash_amount: cashAmount,
+        online_amount: onlineAmount,
         notes: finalNotes,
         notified_5min: false
       };
       if (isPaid) {
-        // Always update paid_at to reflect the corrected end_time.
-        // Using the old paid_at would keep the revenue on the wrong date
-        // when staff fix an AM/PM mistake (e.g. 11:30 PM → 11:30 AM).
         updatePayload.paid_at = endIso || editTarget.paid_at || startIso || new Date().toISOString();
       } else {
         updatePayload.paid_at = null;
@@ -2649,15 +3133,40 @@
         updatePayload.created_at = startIso;
       }
 
-      const { error } = await window.sb
+      let { error } = await window.sb
         .from("sessions")
         .update(updatePayload)
         .eq("id", editTarget.id);
+
+      // Resilient fallback if cash_amount / online_amount not present in PostgREST schema cache
+      if (error && (error.message.includes("cash_amount") || error.message.includes("online_amount") || error.code === "PGRST204")) {
+        delete updatePayload.cash_amount;
+        delete updatePayload.online_amount;
+        const retry = await window.sb.from("sessions").update(updatePayload).eq("id", editTarget.id);
+        error = retry.error;
+      }
+
       btn.disabled = false;
       if (error) {
         msgEl.textContent = "Could not save changes: " + error.message;
         msgEl.className = "text-sm min-h-5 mt-2 text-red-300";
       } else {
+        // INSTANT LOCAL UPDATE & RE-RENDER
+        const updated = {
+          ...editTarget,
+          ...updatePayload,
+          cash_amount: cashAmount,
+          online_amount: onlineAmount
+        };
+        const idx = records.findIndex((r) => r.id === editTarget.id);
+        if (idx !== -1) {
+          records[idx] = updated;
+        }
+        renderRecordsList();
+        renderRevenue();
+        renderStationsBoard();
+        updateSummary();
+
         overdueToasted.delete(editTarget.id);
         closeEditModal();
         showToast("Session updated.");
@@ -2751,7 +3260,50 @@
     if (totalEl) {
       totalEl.textContent = inr(total);
     }
+    const payMethod = document.getElementById("mr-payment-method")?.value;
+    if (payMethod === "Split") {
+      updateMrSplitFields();
+    }
     return { total, foodTotal, duration, rate, timeCost, discount, rawTimeCost };
+  }
+
+  function updateMrSplitFields() {
+    const payMethod = document.getElementById("mr-payment-method")?.value;
+    const splitContainer = document.getElementById("mr-split-fields");
+    if (!splitContainer) return;
+
+    const isSplit = payMethod === "Split";
+    splitContainer.classList.toggle("hidden", !isSplit);
+    if (!isSplit) return;
+
+    const { total } = recalcMissingRecord();
+    const cashInput = document.getElementById("mr-cash-amount");
+    const onlineInput = document.getElementById("mr-online-amount");
+    const remainderEl = document.getElementById("mr-split-balance");
+
+    let cash = Number(cashInput?.value) || 0;
+    let online = Number(onlineInput?.value) || 0;
+
+    if (!cashInput?.dataset.userEdited && !onlineInput?.dataset.userEdited) {
+      cash = Math.round(total / 2);
+      online = total - cash;
+      if (cashInput) cashInput.value = cash;
+      if (onlineInput) onlineInput.value = online;
+    }
+
+    const diff = total - (cash + online);
+    if (remainderEl) {
+      if (diff === 0) {
+        remainderEl.textContent = `Balanced: रु ${total}`;
+        remainderEl.className = "mono text-[#d8ff45] font-semibold";
+      } else if (diff > 0) {
+        remainderEl.textContent = `Under by रु ${diff}`;
+        remainderEl.className = "mono text-amber-300 font-semibold";
+      } else {
+        remainderEl.textContent = `Over by रु ${Math.abs(diff)}`;
+        remainderEl.className = "mono text-rose-400 font-semibold";
+      }
+    }
   }
 
   function updateMrInternalSaleState() {
@@ -2921,6 +3473,14 @@
     // Payment defaults
     document.getElementById("mr-payment-status").value = "Paid";
     document.getElementById("mr-payment-method").value = "Cash";
+    const mrCashIn = document.getElementById("mr-cash-amount");
+    const mrOnlineIn = document.getElementById("mr-online-amount");
+    if (mrCashIn) { mrCashIn.value = 0; delete mrCashIn.dataset.userEdited; }
+    if (mrOnlineIn) { mrOnlineIn.value = 0; delete mrOnlineIn.dataset.userEdited; }
+    updateMrSplitFields();
+
+    renderStationChips("mr-station-chips-container", "mr-station");
+    wireClickableTimeInputs();
 
     // Staff select
     populateMrStaffSelect();
@@ -3033,16 +3593,48 @@
       });
     }
 
-    // Station auto-rate fill
+    // Station auto-rate fill & chips update
     const stationInput = document.getElementById("mr-station");
     if (stationInput) {
       stationInput.addEventListener("input", () => {
+        renderStationChips("mr-station-chips-container", "mr-station");
         const val = stationInput.value.trim().toLowerCase();
         const match = stations.find((s) => (s.name || "").toLowerCase() === val);
         if (match && match.rate) {
           document.getElementById("mr-rate").value = match.rate;
           recalcMissingRecord();
         }
+      });
+    }
+
+    // Split payment controls
+    const mrPayMethod = document.getElementById("mr-payment-method");
+    if (mrPayMethod) {
+      mrPayMethod.addEventListener("change", () => {
+        const cashIn = document.getElementById("mr-cash-amount");
+        const onlineIn = document.getElementById("mr-online-amount");
+        if (cashIn) delete cashIn.dataset.userEdited;
+        if (onlineIn) delete onlineIn.dataset.userEdited;
+        updateMrSplitFields();
+      });
+    }
+
+    const mrCashInput = document.getElementById("mr-cash-amount");
+    const mrOnlineInput = document.getElementById("mr-online-amount");
+    if (mrCashInput && mrOnlineInput) {
+      mrCashInput.addEventListener("input", () => {
+        mrCashInput.dataset.userEdited = "true";
+        const { total } = recalcMissingRecord();
+        const cash = Math.max(0, Number(mrCashInput.value) || 0);
+        mrOnlineInput.value = Math.max(0, total - cash);
+        updateMrSplitFields();
+      });
+      mrOnlineInput.addEventListener("input", () => {
+        mrOnlineInput.dataset.userEdited = "true";
+        const { total } = recalcMissingRecord();
+        const online = Math.max(0, Number(mrOnlineInput.value) || 0);
+        mrCashInput.value = Math.max(0, total - online);
+        updateMrSplitFields();
       });
     }
 
@@ -3137,6 +3729,22 @@
       const isPaid = document.getElementById("mr-payment-status").value === "Paid";
       const paymentMethod = isPaid ? document.getElementById("mr-payment-method").value : null;
 
+      let cashAmount = 0;
+      let onlineAmount = 0;
+      if (paymentMethod === "Split") {
+        cashAmount = Math.max(0, Number(document.getElementById("mr-cash-amount")?.value) || 0);
+        onlineAmount = Math.max(0, Number(document.getElementById("mr-online-amount")?.value) || 0);
+        if (cashAmount + onlineAmount !== total && total > 0) {
+          onlineAmount = Math.max(0, total - cashAmount);
+        }
+      } else if (paymentMethod === "Cash") {
+        cashAmount = total;
+        onlineAmount = 0;
+      } else if (paymentMethod === "Online") {
+        cashAmount = 0;
+        onlineAmount = total;
+      }
+
       const staffSelect = document.getElementById("mr-staff-select");
       let selectedStaffId = staffSelect ? staffSelect.value : null;
       let selectedStaffName = null;
@@ -3151,7 +3759,13 @@
       const isFoodOnly = !!document.getElementById("mr-is-food-only")?.checked;
       const notes = document.getElementById("mr-notes").value.trim();
       const defaultTag = isInternal ? "[Internal Sale]" : isFoodOnly ? "[Food Only Sale]" : "[Paper Register]";
-      const noteWithTag = notes ? `${defaultTag} ${notes}` : (isInternal ? "[Internal Sale Entry]" : isFoodOnly ? "[Food Only Sale]" : "[Paper Register Entry]");
+      let noteWithTag = notes ? `${defaultTag} ${notes}` : (isInternal ? "[Internal Sale Entry]" : isFoodOnly ? "[Food Only Sale]" : "[Paper Register Entry]");
+      if (paymentMethod === "Split") {
+        const splitTag = `[Payment: Split | Cash: ${cashAmount} | Online: ${onlineAmount}]`;
+        if (!noteWithTag.includes("[Payment: Split")) {
+          noteWithTag = `${noteWithTag} ${splitTag}`;
+        }
+      }
 
       const recordPayload = {
         type: "Walk-in",
@@ -3166,6 +3780,8 @@
         food_items: foodItems,
         food_total: foodTotal,
         amount: total,
+        cash_amount: cashAmount,
+        online_amount: onlineAmount,
         overtime_amount: 0,
         discount_amount: (discount && discount.amount) || 0,
         discount_type: (discount && discount.amount > 0) ? discount.mode : null,
@@ -3188,7 +3804,17 @@
       msgEl.textContent = isInternal ? "Saving internal sale..." : "Saving missing record...";
       msgEl.className = "text-sm min-h-5 mb-3 text-slate-300";
 
-      const { data, error } = await window.sb.from("sessions").insert(recordPayload).select();
+      let { data, error } = await window.sb.from("sessions").insert(recordPayload).select();
+
+      // Resilient fallback if cash_amount / online_amount not present in PostgREST schema cache
+      if (error && (error.message.includes("cash_amount") || error.message.includes("online_amount") || error.code === "PGRST204")) {
+        const fallbackPayload = { ...recordPayload };
+        delete fallbackPayload.cash_amount;
+        delete fallbackPayload.online_amount;
+        const retry = await window.sb.from("sessions").insert(fallbackPayload).select();
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (saveOnlyBtn) saveOnlyBtn.disabled = false;
       if (savePrintBtn) savePrintBtn.disabled = false;
@@ -3199,7 +3825,7 @@
         return;
       }
 
-      const savedRecord = (data && data[0]) ? data[0] : { ...recordPayload, id: "TEMP-" + Date.now() };
+      const savedRecord = (data && data[0]) ? { ...data[0], cash_amount: cashAmount, online_amount: onlineAmount } : { ...recordPayload, id: "TEMP-" + Date.now() };
 
       // Update in-memory records list
       const existingIdx = records.findIndex((r) => r.id === savedRecord.id);
@@ -3207,6 +3833,9 @@
       else records.unshift(savedRecord);
 
       renderAllLists();
+      renderRevenue();
+      renderStationsBoard();
+      updateSummary();
       closeMissingRecordModal();
       showToast(isInternal ? "Internal sale record saved successfully!" : "Missing record added from register successfully!");
 
@@ -3506,10 +4135,10 @@
   }
 
   function computeStationStatus(station) {
-    const activeSession = records.find((r) => r.status === "Active" && r.station_name === station.name);
+    const activeSession = records.find((r) => r.status === "Active" && sessionUsesStation(r, station.name));
     if (activeSession) return { state: "occupied", session: activeSession };
     const nextBooking = records
-      .filter((r) => r.status === "Booked" && r.station_name === station.name && r.start_time)
+      .filter((r) => r.status === "Booked" && sessionUsesStation(r, station.name) && r.start_time)
       .sort((a, b) => new Date(a.start_time) - new Date(b.start_time))[0];
     return { state: "available", nextBooking };
   }
@@ -3806,8 +4435,15 @@
 
       map[ds].total += effectiveNet;
       map[ds].gross += effectiveGross;
-      if (r.payment_method === "Cash") map[ds].cash += effectiveGross;
-      if (r.payment_method === "Online") map[ds].online += effectiveGross;
+      const bd = getRecordPaymentBreakdown(r);
+      if (dept === "all") {
+        map[ds].cash += bd.cash;
+        map[ds].online += bd.online;
+      } else {
+        const cPortion = Math.round(effectiveGross * (bd.cash / (rev.grossAmount || 1)));
+        map[ds].cash += cPortion;
+        map[ds].online += Math.max(0, effectiveGross - cPortion);
+      }
       map[ds].sessions.push({ ...r, _rev: rev });
     });
     return map;
@@ -4019,8 +4655,15 @@
 
       // Payments breakdown respecting active department
       const effPayAmount = revSelectedDept === "station" ? rev.timeRevenue : revSelectedDept === "food" ? rev.foodTotal : rev.grossAmount;
-      if (r.payment_method === "Cash") totalCash += effPayAmount;
-      if (r.payment_method === "Online") totalOnline += effPayAmount;
+      const bd = getRecordPaymentBreakdown(r);
+      if (revSelectedDept === "all") {
+        totalCash += bd.cash;
+        totalOnline += bd.online;
+      } else {
+        const cPortion = Math.round(effPayAmount * (bd.cash / (rev.grossAmount || 1)));
+        totalCash += cPortion;
+        totalOnline += Math.max(0, effPayAmount - cPortion);
+      }
 
       totalChillpillFood += rev.chillpillFood;
       totalBrosGross += rev.brosGross;
@@ -4153,6 +4796,14 @@
             sourceCell = `<td class="py-2.5 pr-3"><div class="flex flex-wrap gap-1">${badges || '<span class="text-slate-600 text-xs">—</span>'}</div></td>`;
           }
 
+          let payCellHtml = "";
+          if (r.payment_method === "Split") {
+            const rowBd = getRecordPaymentBreakdown(r);
+            payCellHtml = `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30" title="Cash: रु ${rowBd.cash} · QR: रु ${rowBd.online}">Split <span class="text-[10px] mono text-slate-300">(${rowBd.cash}/${rowBd.online})</span></span>`;
+          } else {
+            payCellHtml = `<span class="${isCash ? "text-amber-300" : "text-sky-300"}">${r.payment_method || "—"}</span>`;
+          }
+
           return `
             <tr class="hover:bg-white/5 transition-colors">
               <td class="py-2.5 pr-3 text-xs text-slate-300">${fmtDateTime(r.paid_at || r.created_at)}</td>
@@ -4161,7 +4812,7 @@
               ${playCell}
               ${sourceCell}
               ${foodCell}
-              <td class="py-2.5 pr-3 text-xs ${isCash ? "text-amber-300" : "text-sky-300"}">${r.payment_method || "—"}</td>
+              <td class="py-2.5 pr-3 text-xs">${payCellHtml}</td>
               <td class="py-2.5 pr-3 mono text-slate-200 text-xs">${inr(r.amount)}</td>
               <td class="py-2.5 text-right mono font-bold text-xs text-[#d8ff45]">${inr(profit)}</td>
             </tr>`;
@@ -5059,6 +5710,7 @@
     stations = data || [];
     renderStationDatalist();
     renderStationsBoard();
+    renderStationChips("station-chips-container", "station-name");
     if (currentStaff && currentStaff.role === "admin") renderStationManageList();
   }
 
@@ -6015,7 +6667,11 @@ Here is the menu image:`;
     attachCustomerAutocomplete("edit-customer-name", "edit-customer-phone"); // Edit Session modal
     // =====================================================================
 
+    // Wire all native time/date inputs across the page to show system pickers on click
+    wireClickableTimeInputs();
+
     document.getElementById("station-name").addEventListener("input", () => {
+      renderStationChips("station-chips-container", "station-name");
       updateStationConflictUI();
       autofillRateForStation(document.getElementById("station-name").value.trim());
     });
