@@ -168,13 +168,15 @@
   });
 
   // ── BROADCAST TAB ─────────────────────────────────────────────────────────
-  const BC_QR_STORAGE_KEY = "chillpill_tournament_qr";
+  // QR is cafe-wide (FonePay QR doesn't change per tournament)
+  const BC_QR_STORAGE_KEY = "chillpill_cafe_fonepay_qr";
   let bcQrDataUrl = null;         // current QR image data URL
-  let bcAllCustomers = [];        // { name, phone } deduped from records
+  let bcAllCustomers = [];        // { name, phone } deduped from sessions
   let bcSelectedPhones = new Set();
 
   function getBroadcastQrKey() {
-    return `${BC_QR_STORAGE_KEY}_${currentTournament?.id || "default"}`;
+    // Single cafe-wide key — same FonePay QR for all tournaments
+    return BC_QR_STORAGE_KEY;
   }
 
   function loadBroadcastQr() {
@@ -273,9 +275,9 @@
     const listEl = document.getElementById("bc-customer-list");
     if (!window.sb || !listEl) return;
 
-    // Fetch unique customers with phone numbers from records table
+    // Fetch unique customers with phone numbers from the sessions table
     const { data, error } = await window.sb
-      .from("records")
+      .from("sessions")
       .select("customer_name, customer_phone")
       .not("customer_phone", "is", null)
       .neq("customer_phone", "")
@@ -538,12 +540,15 @@
           "bg-slate-700 text-slate-400"}">${p.status}</span>
         <div class="flex gap-1 shrink-0">
           ${p.status === "registered" ? `<button class="confirm-player-btn text-[11px] font-bold text-green-300 border border-green-500/40 rounded-lg px-2 py-1 hover:bg-green-500/10 transition" data-pid="${p.id}">Confirm</button>` : ""}
+          ${p.status === "confirmed" ? `<button class="revoke-player-btn text-[11px] font-bold text-amber-300 border border-amber-500/40 rounded-lg px-2 py-1 hover:bg-amber-500/10 transition" data-pid="${p.id}" title="Revert to registered">Revoke</button>` : ""}
         </div>
         <button class="remove-player-btn text-slate-500 hover:text-red-300 transition text-xl leading-none shrink-0" data-pid="${p.id}" title="Remove">&#215;</button>
       </div>`).join("");
 
     list.querySelectorAll(".confirm-player-btn").forEach(btn =>
       btn.addEventListener("click", () => updatePlayerStatus(btn.dataset.pid, "confirmed")));
+    list.querySelectorAll(".revoke-player-btn").forEach(btn =>
+      btn.addEventListener("click", () => updatePlayerStatus(btn.dataset.pid, "registered")));
     list.querySelectorAll(".remove-player-btn").forEach(btn =>
       btn.addEventListener("click", () => removePlayer(btn.dataset.pid)));
   }
