@@ -944,7 +944,11 @@
                   m.status === "completed" ? "border-slate-600 text-slate-300 hover:border-sky-400 hover:text-sky-300" :
                   "border-[#d8ff45]/50 text-[#d8ff45] hover:bg-[#d8ff45]/10"
                 }" data-mid="${m.id}">${m.status === "completed" ? "Edit Result" : "Enter Result"}</button>
-                ${m.status === "completed" ? `<button class="quick-revoke-match-btn text-xs font-bold border border-rose-500/40 text-rose-300 hover:bg-rose-500/10 rounded-lg px-2.5 py-2 transition" data-mid="${m.id}" title="Revoke match result and restore player stats">Revoke</button>` : ""}
+                ${(m.status === "completed" || m.status === "ongoing" || m.player1_score != null || m.player2_score != null) ? `
+                  <button class="quick-revoke-match-btn text-xs font-bold border border-rose-500/40 text-rose-300 hover:bg-rose-500/15 rounded-lg px-2.5 py-2 transition flex items-center gap-1 cursor-pointer" data-mid="${m.id}" title="Reset match scores & revert status to scheduled">
+                    <i data-lucide="rotate-ccw" width="12" height="12"></i>Reset
+                  </button>
+                ` : ""}
               ` : '<span class="text-xs text-slate-500 italic">Bye</span>'}
             </div>
           </div>
@@ -954,7 +958,9 @@
     list.querySelectorAll(".open-match-score-btn").forEach(btn =>
       btn.addEventListener("click", () => openMatchScoreModal(btn.dataset.mid)));
     list.querySelectorAll(".quick-revoke-match-btn").forEach(btn =>
-      btn.addEventListener("click", () => revokeMatchResult(btn.dataset.mid)));
+      btn.addEventListener("click", () => resetParticularMatch(btn.dataset.mid)));
+
+    if (window.lucide) lucide.createIcons();
   }
 
   document.getElementById("td-match-round-filter")?.addEventListener("change", renderMatchesTab);
@@ -976,7 +982,7 @@
 
     const revokeBtn = document.getElementById("ms-revoke-result");
     if (revokeBtn) {
-      revokeBtn.classList.toggle("hidden", match.status !== "completed");
+      revokeBtn.classList.toggle("hidden", match.status !== "completed" && match.status !== "ongoing" && match.player1_score == null && match.player2_score == null);
     }
 
     openModal("match-score-modal");
@@ -1093,13 +1099,13 @@
     }
   }
 
-  // ── REVOKE MATCH RESULT ───────────────────────────────────────────────────
-  async function revokeMatchResult(mid) {
+  // ── RESET PARTICULAR MATCH ───────────────────────────────────────────────────
+  async function resetParticularMatch(mid) {
     if (!window.sb) return;
     const match = tMatches.find(m => m.id === mid);
-    if (!match || match.status !== "completed") return;
+    if (!match) return;
 
-    if (!confirm("Revoke this match result? This will clear scores, reset the match to 'scheduled', and revert player stats.")) {
+    if (!confirm("Reset this match? This will clear recorded scores, set status back to 'scheduled', and revert player stats.")) {
       return;
     }
 
@@ -1107,8 +1113,10 @@
     const s2 = match.player2_score ?? 0;
     const wid = match.winner_id;
 
-    // Rollback player stats
-    await rollbackPlayerStats(match, s1, s2, wid);
+    // Rollback player stats if match was completed or had scores recorded
+    if (match.status === "completed" || s1 > 0 || s2 > 0 || wid) {
+      await rollbackPlayerStats(match, s1, s2, wid);
+    }
 
     // If winner was slotted into subsequent round matches, revert that slot to null
     if (wid) {
@@ -1132,19 +1140,121 @@
     };
 
     const { error } = await window.sb.from("tournament_matches").update(matchReset).eq("id", mid);
-    if (error) return showToast("Revoke error: " + error.message);
+    if (error) return showToast("Reset error: " + error.message);
 
     Object.assign(match, matchReset);
     closeModal("match-score-modal");
     renderMatchesTab();
     renderBracketTab();
     renderStandingsTab();
-    showToast("Match result revoked successfully.");
+    showToast("Match reset to scheduled successfully.");
   }
+  const revokeMatchResult = resetParticularMatch;
+
+  // ── RESET WHOLE TOURNAMENT MATCHES & STANDINGS ───────────────────────────
+  function openResetTournamentModal() {
+    if (!currentTournament) return showToast("Please select a tournament first.");
+    openModal("reset-tournament-modal");
+    if (window.lucide) lucide.createIcons();
+  }
+
+  async function resetTournamentScoresAndStandings(wipeAllMatches = false) {
+    if (!currentTournament || !window.sb) return;
+    const tid = currentTournament.id;
+
+    const actionPrompt = wipeAllMatches
+      ? `Are you sure you want to WIPE ALL MATCHES and reset all player standings for "${currentTournament.title || 'this tournament'}"?\n\nThis will completely remove the draw fixtures and reset all player stats to zero.`
+      : `Are you sure you want to reset ALL SCORES and standings for "${currentTournament.title || 'this tournament'}"?\n\nThis will clear match results, delete any generated playoff rounds (Quarter/Semi/Finals), and reset player stats to 0 while keeping Round 1 draw fixtures intact.`;
+
+    if (!confirm(actionPrompt)) return;
+
+    try {
+      showToast("Resetting tournament data in database...");
+
+      // 1. Reset all players' standings in tournament_players
+      const { data: players, error: pErr } = await window.sb
+        .from("tournament_players")
+        .select("id, status")
+        .eq("tournament_id", tid);
+
+      if (pErr) throw pErr;
+
+      const playerResetPayload = {
+        points: 0,
+        wins: 0,
+        draws: 0,
+        losses: 0,
+        goals_for: 0,
+        goals_against: 0,
+        current_score: 0
+      };
+
+      for (const p of (players || [])) {
+        const update = { ...playerResetPayload };
+        if (["winner", "runner_up", "eliminated"].includes(p.status)) {
+          update.status = "confirmed";
+        }
+        await window.sb.from("tournament_players").update(update).eq("id", p.id);
+      }
+
+      // 2. Handle matches
+      if (wipeAllMatches) {
+        // Delete all matches for this tournament
+        const { error: mDelErr } = await window.sb
+          .from("tournament_matches")
+          .delete()
+          .eq("tournament_id", tid);
+        if (mDelErr) throw mDelErr;
+      } else {
+        // Keep initial draw:
+        // In knockout, delete subsequent generated rounds (round_number > 1)
+        if (currentTournament.format === "knockout") {
+          const { error: delSubErr } = await window.sb
+            .from("tournament_matches")
+            .delete()
+            .eq("tournament_id", tid)
+            .gt("round_number", 1);
+          if (delSubErr) console.warn("Failed deleting subsequent rounds:", delSubErr);
+        }
+
+        // Reset remaining round matches to scheduled
+        const matchResetPayload = {
+          status: "scheduled",
+          player1_score: null,
+          player2_score: null,
+          winner_id: null
+        };
+
+        const { error: mUpErr } = await window.sb
+          .from("tournament_matches")
+          .update(matchResetPayload)
+          .eq("tournament_id", tid);
+        if (mUpErr) throw mUpErr;
+      }
+
+      // 3. Reload complete tournament data from Supabase
+      await loadTournamentData(tid);
+      closeModal("reset-tournament-modal");
+      showToast(wipeAllMatches ? "All matches wiped & standings reset." : "Scores cleared & standings reset to scheduled.");
+    } catch (err) {
+      console.error("Error resetting tournament:", err);
+      showToast("Reset failed: " + (err.message || err));
+    }
+  }
+
+  // Modal event wiring
+  document.getElementById("td-reset-matches-btn")?.addEventListener("click", openResetTournamentModal);
+  document.getElementById("td-reset-standings-btn")?.addEventListener("click", openResetTournamentModal);
+  document.getElementById("reset-tournament-modal-close")?.addEventListener("click", () => closeModal("reset-tournament-modal"));
+  document.getElementById("reset-tournament-modal-cancel")?.addEventListener("click", () => closeModal("reset-tournament-modal"));
+  document.getElementById("reset-tournament-modal")?.addEventListener("click", e => { if (e.target === e.currentTarget) closeModal("reset-tournament-modal"); });
+
+  document.getElementById("btn-do-reset-scores")?.addEventListener("click", () => resetTournamentScoresAndStandings(false));
+  document.getElementById("btn-do-wipe-matches")?.addEventListener("click", () => resetTournamentScoresAndStandings(true));
 
   document.getElementById("ms-revoke-result")?.addEventListener("click", () => {
     const mid = document.getElementById("ms-match-id").value;
-    if (mid) revokeMatchResult(mid);
+    if (mid) resetParticularMatch(mid);
   });
   document.getElementById("ms-save-result")?.addEventListener("click", () => saveMatchResult(true));
   document.getElementById("ms-save-schedule")?.addEventListener("click", () => saveMatchResult(false));

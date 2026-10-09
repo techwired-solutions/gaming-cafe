@@ -1441,6 +1441,9 @@
               <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <p class="text-sm text-slate-400">Schedule matches and enter results. Revoke results anytime if a match needs replaying.</p>
                 <div class="flex items-center gap-2 flex-wrap">
+                  <button id="td-reset-matches-btn" type="button" class="rounded-xl px-3 py-1.5 text-xs font-bold border border-rose-500/50 text-rose-300 hover:bg-rose-500/10 transition flex items-center gap-1 cursor-pointer" title="Reset match scores or whole tournament fixtures & standings">
+                    <i data-lucide="rotate-ccw" width="12" height="12"></i>Reset Tournament / Matches
+                  </button>
                   <button id="td-matches-next-round-btn" type="button" class="rounded-xl px-3 py-1.5 text-xs font-bold border border-sky-400 text-sky-300 hover:bg-sky-500/10 transition flex items-center gap-1 cursor-pointer">
                     <i data-lucide="zap" width="12" height="12"></i>Next Round
                   </button>
@@ -1464,6 +1467,9 @@
                   <p class="text-xs text-slate-400">Only confirmed &amp; active players are shown.</p>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap">
+                  <button id="td-reset-standings-btn" type="button" class="rounded-xl px-3.5 py-1.5 text-xs font-bold border border-rose-500/50 text-rose-300 hover:bg-rose-500/10 transition flex items-center gap-1.5 cursor-pointer" title="Reset tournament standings and match scores">
+                    <i data-lucide="rotate-ccw" width="12" height="12"></i> Reset Standings
+                  </button>
                   <button id="td-fullscreen-standings" type="button" class="rounded-xl px-3.5 py-1.5 text-xs font-bold bg-[#d8ff45] text-[#10141e] hover:brightness-110 transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-[#d8ff45]/10">
                     <i data-lucide="maximize-2" width="13" height="13"></i> Big Screen / Fullscreen
                   </button>
@@ -3046,14 +3052,67 @@
           <button id="ms-save-schedule" type="button" class="rounded-xl px-4 py-2.5 text-xs font-bold border border-slate-600 text-slate-300 hover:border-sky-400 hover:text-sky-300 transition cursor-pointer">
             Schedule Only
           </button>
-          <button id="ms-revoke-result" type="button" class="hidden rounded-xl px-3.5 py-2.5 text-xs font-bold border border-rose-500/40 text-rose-300 hover:bg-rose-500/15 transition flex items-center gap-1.5 cursor-pointer" title="Revoke recorded score, revert status to scheduled and restore player stats">
-            <i data-lucide="rotate-ccw" width="14" height="14"></i>Revoke
+          <button id="ms-revoke-result" type="button" class="hidden rounded-xl px-3.5 py-2.5 text-xs font-bold border border-rose-500/50 text-rose-300 hover:bg-rose-500/15 transition flex items-center gap-1.5 cursor-pointer" title="Reset recorded score, revert status to scheduled and restore player stats">
+            <i data-lucide="rotate-ccw" width="14" height="14"></i>Reset Match
           </button>
         </div>
       </div>
     </div>
   </div>
   <!-- ===================== / MATCH SCORE MODAL ===================== -->
+
+  <!-- ===================== RESET TOURNAMENT MODAL ===================== -->
+  <div id="reset-tournament-modal" class="modal-overlay hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+    <div class="panel rounded-3xl w-full max-w-lg p-6 space-y-5 border border-rose-500/40 shadow-2xl" style="background:#101622;">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 text-lg font-bold">
+            ↺
+          </div>
+          <div>
+            <h3 class="font-bold text-lg text-white">Reset Tournament Matches &amp; Standings</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Clear test scores, revert standings, or wipe entire fixtures.</p>
+          </div>
+        </div>
+        <button id="reset-tournament-modal-close" type="button" class="text-slate-400 hover:text-white text-2xl leading-none cursor-pointer">&times;</button>
+      </div>
+
+      <div class="space-y-3">
+        <!-- Option 1: Reset Scores & Standings only (Keep Initial Draw) -->
+        <div class="p-4 rounded-2xl border border-slate-700/80 bg-[#141c2b] hover:border-amber-400/50 transition">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-sm font-bold text-slate-100">Reset Scores &amp; Standings Only</span>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase tracking-wide">Keep Round 1 Draw</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed mb-3">
+            Reverts all Round 1 matches back to <b>scheduled</b>, clears all scores &amp; winner tags, deletes auto-generated subsequent rounds (Quarters/Semis/Finals), and resets all player standings (P, W, D, L, GF, GA, GD, PTS) back to 0.
+          </p>
+          <button type="button" id="btn-do-reset-scores" class="w-full py-2.5 rounded-xl font-bold text-xs border border-amber-500/50 text-amber-300 hover:bg-amber-500/20 transition flex items-center justify-center gap-1.5 cursor-pointer">
+            <i data-lucide="rotate-ccw" width="13" height="13"></i> Clear Scores &amp; Reset Standings
+          </button>
+        </div>
+
+        <!-- Option 2: Full Wipe of All Matches & Standings -->
+        <div class="p-4 rounded-2xl border border-slate-700/80 bg-[#141c2b] hover:border-rose-500/50 transition">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-sm font-bold text-slate-100">Wipe All Matches &amp; Draw</span>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 uppercase tracking-wide">Full Reset</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed mb-3">
+            Deletes <b>all matches completely</b>, resets all player standings back to zero, and returns to the initial state so you can re-run the Draw Ceremony / Spin-the-Wheel fresh.
+          </p>
+          <button type="button" id="btn-do-wipe-matches" class="w-full py-2.5 rounded-xl font-bold text-xs bg-rose-600/80 hover:bg-rose-600 text-white transition flex items-center justify-center gap-1.5 cursor-pointer">
+            <i data-lucide="trash-2" width="13" height="13"></i> Wipe All Matches &amp; Reset All
+          </button>
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-1">
+        <button id="reset-tournament-modal-cancel" type="button" class="px-4 py-2 text-xs font-bold rounded-xl border border-slate-700 text-slate-300 hover:text-white transition cursor-pointer">Cancel</button>
+      </div>
+    </div>
+  </div>
+  <!-- ===================== / RESET TOURNAMENT MODAL ===================== -->
 
   <!-- ===================== LIVE DRAW CEREMONY MODAL ===================== -->
   <div id="live-draw-ceremony-modal" class="modal-overlay hidden fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/95 backdrop-blur-md">
