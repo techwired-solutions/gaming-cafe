@@ -101,11 +101,13 @@
 
   function showToast(message) {
     const toast = document.getElementById("toast");
+    if (!toast) return;
     toast.textContent = message;
     toast.classList.add("toast-show");
     clearTimeout(showToast.timer);
     showToast.timer = setTimeout(() => toast.classList.remove("toast-show"), 3200);
   }
+  window.showToast = showToast;
 
   function showMessage(message, error) {
     const el = document.getElementById("form-message");

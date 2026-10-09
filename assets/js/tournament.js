@@ -37,6 +37,23 @@
     return String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
+  function showToast(msg) {
+    if (typeof window.showToast === "function" && window.showToast !== showToast) {
+      window.showToast(msg);
+      return;
+    }
+    const t = document.getElementById("toast");
+    if (t) {
+      t.textContent = msg;
+      t.classList.add("toast-show");
+      clearTimeout(t._timer);
+      t._timer = setTimeout(() => t.classList.remove("toast-show"), 3200);
+    } else {
+      console.log("[Toast]", msg);
+    }
+  }
+  if (!window.showToast) window.showToast = showToast;
+
   // ── Modal helpers ─────────────────────────────────────────────────────────
   function openModal(id) {
     const m = document.getElementById(id);
@@ -1133,39 +1150,42 @@
     const tid = currentTournament.id;
 
     const actionPrompt = wipeAllMatches
-      ? `Are you sure you want to WIPE ALL MATCHES and reset all player standings for "${currentTournament.title || 'this tournament'}"?\n\nThis will completely remove the draw fixtures and reset all player stats to zero.`
-      : `Are you sure you want to reset ALL SCORES and standings for "${currentTournament.title || 'this tournament'}"?\n\nThis will clear match results, delete any generated playoff rounds (Quarter/Semi/Finals), and reset player stats to 0 while keeping Round 1 draw fixtures intact.`;
+      ? `Are you sure you want to WIPE ALL MATCHES and reset all player standings for "${currentTournament.title || currentTournament.name || 'this tournament'}"?\n\nThis will completely remove the draw fixtures and reset all player stats to zero.`
+      : `Are you sure you want to reset ALL SCORES and standings for "${currentTournament.title || currentTournament.name || 'this tournament'}"?\n\nThis will clear match results, delete any generated playoff rounds (Quarter/Semi/Finals), and reset player stats to 0 while keeping Round 1 draw fixtures intact.`;
 
     if (!confirm(actionPrompt)) return;
+
+    const wipeBtn = document.getElementById("btn-do-wipe-matches");
+    const scoresBtn = document.getElementById("btn-do-reset-scores");
+    if (wipeBtn) wipeBtn.disabled = true;
+    if (scoresBtn) scoresBtn.disabled = true;
 
     try {
       showToast("Resetting tournament data in database...");
 
-      // 1. Reset all players' standings in tournament_players
-      const { data: players, error: pErr } = await window.sb
-        .from("tournament_players")
-        .select("id, status")
-        .eq("tournament_id", tid);
-
-      if (pErr) throw pErr;
-
+      // 1. Reset all players' standings in tournament_players (only valid columns)
       const playerResetPayload = {
         points: 0,
         wins: 0,
         draws: 0,
         losses: 0,
         goals_for: 0,
-        goals_against: 0,
-        current_score: 0
+        goals_against: 0
       };
 
-      for (const p of (players || [])) {
-        const update = { ...playerResetPayload };
-        if (["winner", "runner_up", "eliminated"].includes(p.status)) {
-          update.status = "confirmed";
-        }
-        await window.sb.from("tournament_players").update(update).eq("id", p.id);
-      }
+      const { error: pErr1 } = await window.sb
+        .from("tournament_players")
+        .update(playerResetPayload)
+        .eq("tournament_id", tid);
+      if (pErr1) console.warn("[CP] Reset player stats warning:", pErr1);
+
+      // Restore any eliminated/winner/runner_up players back to confirmed
+      const { error: pErr2 } = await window.sb
+        .from("tournament_players")
+        .update({ status: "confirmed" })
+        .eq("tournament_id", tid)
+        .in("status", ["winner", "runner_up", "eliminated"]);
+      if (pErr2) console.warn("[CP] Restore player status warning:", pErr2);
 
       // 2. Handle matches
       if (wipeAllMatches) {
@@ -1175,6 +1195,14 @@
           .delete()
           .eq("tournament_id", tid);
         if (mDelErr) throw mDelErr;
+
+        tMatches = [];
+
+        // If tournament was marked completed, set back to ongoing
+        if (currentTournament.status === "completed") {
+          await window.sb.from("tournaments").update({ status: "ongoing", updated_at: new Date().toISOString() }).eq("id", tid);
+          currentTournament.status = "ongoing";
+        }
       } else {
         // Keep initial draw:
         // In knockout, delete subsequent generated rounds (round_number > 1)
@@ -1187,7 +1215,7 @@
           if (delSubErr) console.warn("Failed deleting subsequent rounds:", delSubErr);
         }
 
-        // Reset remaining round matches to scheduled
+        // Reset remaining round matches to scheduled with null scores
         const matchResetPayload = {
           status: "scheduled",
           player1_score: null,
@@ -1202,13 +1230,22 @@
         if (mUpErr) throw mUpErr;
       }
 
-      // 3. Reload complete tournament data from Supabase
-      await loadTournamentData(tid);
+      // 3. Close modal and reload complete tournament data from Supabase
       closeModal("reset-tournament-modal");
-      showToast(wipeAllMatches ? "All matches wiped & standings reset." : "Scores cleared & standings reset to scheduled.");
+      await loadTournamentData(tid);
+      renderBracketTab();
+      renderMatchesTab();
+      renderStandingsTab();
+      renderRegistrationsTab();
+
+      showToast(wipeAllMatches ? "All matches wiped & standings reset!" : "Scores cleared & standings reset to scheduled!");
     } catch (err) {
       console.error("Error resetting tournament:", err);
       showToast("Reset failed: " + (err.message || err));
+      alert("Reset failed: " + (err.message || JSON.stringify(err)));
+    } finally {
+      if (wipeBtn) wipeBtn.disabled = false;
+      if (scoresBtn) scoresBtn.disabled = false;
     }
   }
 
