@@ -705,64 +705,24 @@
   document.getElementById("td-generate-draw")?.addEventListener("click", async () => {
     if (!currentTournament || !window.sb) return;
     const confirmed = tPlayers.filter(p => p.status === "confirmed");
-    if (confirmed.length < 4) return showToast("Need at least 4 confirmed players to generate a draw.");
-    if (!confirm(`Generate draw for ${confirmed.length} confirmed players? This will delete any existing matches.`)) return;
+    if (confirmed.length < 4) return showToast("Need at least 4 confirmed players to conduct a draw.");
 
-    await window.sb.from("tournament_matches").delete().eq("tournament_id", currentTournament.id);
-    tMatches = [];
-    const shuffled = shuffle(confirmed);
-    const tid = currentTournament.id;
-    const toInsert = [];
+    const hasMatches = tMatches.length > 0;
+    const msg = hasMatches
+      ? `Generate a new draw for ${confirmed.length} confirmed players? Existing matches will be cleared and the new draw will be revealed live on the big screen.`
+      : `Launch the Live Draw Ceremony for ${confirmed.length} confirmed players? Fixtures will be generated and revealed on the big screen.`;
 
-    if (currentTournament.format === "knockout") {
-      const n = shuffled.length;
-      const roundName = n <= 2 ? "Final" : n <= 4 ? "Semi Final" : n <= 8 ? "Quarter Final" : "Round of 16";
-      for (let i = 0; i < n; i += 2) {
-        toInsert.push({
-          tournament_id: tid, round_name: roundName, round_number: 1,
-          match_number: Math.floor(i / 2) + 1,
-          player1_id: shuffled[i].id,
-          player2_id: shuffled[i + 1]?.id || null,
-          status: shuffled[i + 1] ? "scheduled" : "bye"
-        });
-      }
-    } else {
-      // Group stage: groups of 4, round-robin within groups
-      const groupSize = 4;
-      const groupNames = "ABCDEFGH".split("");
-      let mNum = 1;
-      for (let g = 0; g < Math.ceil(shuffled.length / groupSize); g++) {
-        const grp = shuffled.slice(g * groupSize, (g + 1) * groupSize);
-        const gName = groupNames[g] || String(g + 1);
-        for (const p of grp) {
-          await window.sb.from("tournament_players").update({ group_name: gName }).eq("id", p.id);
-          p.group_name = gName;
-        }
-        for (let a = 0; a < grp.length; a++) {
-          for (let b = a + 1; b < grp.length; b++) {
-            toInsert.push({
-              tournament_id: tid, round_name: `Group ${gName}`, round_number: 1,
-              match_number: mNum++, player1_id: grp[a].id, player2_id: grp[b].id, status: "scheduled"
-            });
-          }
-        }
-      }
+    if (!confirm(msg)) return;
+
+    if (hasMatches) {
+      await window.sb.from("tournament_matches").delete().eq("tournament_id", currentTournament.id);
+      tMatches = [];
+      renderBracketTab();
+      renderMatchesTab();
+      renderStandingsTab();
     }
 
-    const { data: inserted, error } = await window.sb.from("tournament_matches").insert(toInsert).select();
-    if (error) return showToast("Draw error: " + error.message);
-    tMatches = inserted || [];
-
-    if (["draft", "registration_closed"].includes(currentTournament.status)) {
-      await window.sb.from("tournaments").update({ status: "ongoing", updated_at: new Date().toISOString() }).eq("id", tid);
-      currentTournament.status = "ongoing";
-    }
-
-    renderBracketTab();
-    renderMatchesTab();
-    renderStandingsTab();
-    renderRegistrationsTab();
-    showToast(`Draw generated! ${toInsert.length} matches scheduled.`);
+    openLiveDrawCeremony(true);
   });
 
   // ── BRACKET / DRAW TAB ───────────────────────────────────────────────────
@@ -771,8 +731,18 @@
     const roundBadge = document.getElementById("td-bracket-round-badge");
     if (!view) return;
     if (!tMatches.length) {
-      if (roundBadge) roundBadge.textContent = "No Draw";
-      view.innerHTML = '<p class="text-sm text-slate-500 italic text-center py-6">No draw yet. Confirm players then click Generate Draw.</p>';
+      if (roundBadge) roundBadge.textContent = "Draw Pending";
+      view.innerHTML = `
+        <div class="text-center py-10 px-4 border border-dashed border-slate-700/80 rounded-2xl bg-[#0b1019]/60">
+          <div class="w-14 h-14 rounded-2xl bg-[#d8ff45]/15 border border-[#d8ff45]/30 flex items-center justify-center text-3xl mx-auto mb-3 shadow-lg shadow-[#d8ff45]/10">🎰</div>
+          <h4 class="font-bold text-base text-white">Live Draw Ceremony Pending</h4>
+          <p class="text-xs text-slate-400 mt-1 max-w-md mx-auto">Fixtures are kept confidential until drawn live! Project the wheel spin on the big screen to reveal match pairings with drama and suspense.</p>
+          <button type="button" id="btn-bracket-start-ceremony" class="mt-4 px-5 py-2.5 rounded-xl font-bold text-xs bg-[#d8ff45] text-[#10141e] hover:brightness-110 shadow-lg shadow-[#d8ff45]/20 inline-flex items-center gap-2 cursor-pointer transition">
+            <i data-lucide="tv" width="14" height="14"></i> Launch Big Screen Draw Ceremony
+          </button>
+        </div>`;
+      view.querySelector("#btn-bracket-start-ceremony")?.addEventListener("click", () => openLiveDrawCeremony(true));
+      if (window.lucide) lucide.createIcons();
       return;
     }
     const rounds = [...new Set(tMatches.map(m => m.round_name))];
@@ -1613,34 +1583,59 @@
     } catch (_) {}
   }
 
-  function openLiveDrawCeremony() {
+  function openLiveDrawCeremony(forceNewDraw = false) {
     if (!currentTournament) return showToast("No tournament selected.");
     const confirmed = tPlayers.filter(p => p.status === "confirmed");
     if (!tMatches.length && confirmed.length < 4) {
       return showToast("Need at least 4 confirmed players to launch the draw ceremony.");
     }
 
-    // Prepare matches to reveal
-    if (!tMatches.length) {
-      // Auto-prepare a new draw sequence from confirmed players
+    // Prepare matches in memory
+    if (!tMatches.length || forceNewDraw) {
+      // Auto-prepare a new draw sequence from confirmed players in memory ONLY
       const shuffled = shuffle(confirmed);
       const tid = currentTournament.id;
       const n = shuffled.length;
-      const roundName = n <= 2 ? "Final" : n <= 4 ? "Semi Final" : n <= 8 ? "Quarter Final" : "Round of 16";
       ldcCeremonyMatches = [];
-      for (let i = 0; i < n; i += 2) {
-        ldcCeremonyMatches.push({
-          tournament_id: tid,
-          round_name: roundName,
-          round_number: 1,
-          match_number: Math.floor(i / 2) + 1,
-          player1_id: shuffled[i].id,
-          player2_id: shuffled[i + 1]?.id || null,
-          status: shuffled[i + 1] ? "scheduled" : "bye"
-        });
+
+      if (currentTournament.format === "knockout") {
+        const roundName = n <= 2 ? "Final" : n <= 4 ? "Semi Final" : n <= 8 ? "Quarter Final" : "Round of 16";
+        for (let i = 0; i < n; i += 2) {
+          ldcCeremonyMatches.push({
+            tournament_id: tid,
+            round_name: roundName,
+            round_number: 1,
+            match_number: Math.floor(i / 2) + 1,
+            player1_id: shuffled[i].id,
+            player2_id: shuffled[i + 1]?.id || null,
+            status: shuffled[i + 1] ? "scheduled" : "bye"
+          });
+        }
+      } else {
+        // Group stage: groups of 4, round-robin within groups
+        const groupSize = 4;
+        const groupNames = "ABCDEFGH".split("");
+        let mNum = 1;
+        for (let g = 0; g < Math.ceil(shuffled.length / groupSize); g++) {
+          const grp = shuffled.slice(g * groupSize, (g + 1) * groupSize);
+          const gName = groupNames[g] || String(g + 1);
+          for (let a = 0; a < grp.length; a++) {
+            for (let b = a + 1; b < grp.length; b++) {
+              ldcCeremonyMatches.push({
+                tournament_id: tid,
+                round_name: `Group ${gName}`,
+                round_number: 1,
+                match_number: mNum++,
+                player1_id: grp[a].id,
+                player2_id: grp[b].id,
+                status: "scheduled"
+              });
+            }
+          }
+        }
       }
     } else {
-      // Use latest round matches
+      // Replaying an existing already-published round
       const maxRound = Math.max(...tMatches.map(m => m.round_number || 1));
       ldcCeremonyMatches = [...tMatches.filter(m => (m.round_number || 1) === maxRound)].sort((a, b) => a.match_number - b.match_number);
     }
@@ -1650,7 +1645,7 @@
     if (ldcAutoPlayTimer) { clearInterval(ldcAutoPlayTimer); ldcAutoPlayTimer = null; }
 
     const titleEl = document.getElementById("ldc-tournament-title");
-    if (titleEl) titleEl.textContent = `${currentTournament.name} · ${currentTournament.game || "EA FC"}`;
+    if (titleEl) titleEl.textContent = `${currentTournament.title || currentTournament.name} · ${currentTournament.game || "EA FC"}`;
 
     const totalEl = document.getElementById("ldc-total-matches");
     if (totalEl) totalEl.textContent = ldcCeremonyMatches.length;
@@ -1663,6 +1658,40 @@
 
     resetLdcStageForCurrentMatch();
     openModal("live-draw-ceremony-modal");
+  }
+
+  async function publishCeremonyDraw() {
+    if (!currentTournament || !window.sb || !ldcCeremonyMatches.length) return;
+    const tid = currentTournament.id;
+
+    try {
+      showToast("Saving and publishing official fixtures...");
+
+      // Update groups on players if group format
+      if (currentTournament.format !== "knockout") {
+        for (const m of ldcCeremonyMatches) {
+          const gName = (m.round_name || "").replace("Group ", "");
+          if (m.player1_id && gName) await window.sb.from("tournament_players").update({ group_name: gName }).eq("id", m.player1_id);
+          if (m.player2_id && gName) await window.sb.from("tournament_players").update({ group_name: gName }).eq("id", m.player2_id);
+        }
+      }
+
+      await window.sb.from("tournament_matches").delete().eq("tournament_id", tid);
+      const { data: inserted, error } = await window.sb.from("tournament_matches").insert(ldcCeremonyMatches).select();
+      if (error) throw error;
+
+      if (["draft", "registration_closed"].includes(currentTournament.status)) {
+        await window.sb.from("tournaments").update({ status: "ongoing", updated_at: new Date().toISOString() }).eq("id", tid);
+        currentTournament.status = "ongoing";
+      }
+
+      await loadTournamentData(tid);
+      closeModal("live-draw-ceremony-modal");
+      showToast(`Official draw published! ${ldcCeremonyMatches.length} matches scheduled.`);
+    } catch (err) {
+      console.error("Failed publishing draw:", err);
+      showToast("Save error: " + err.message);
+    }
   }
 
   function resetLdcStageForCurrentMatch() {
@@ -1693,18 +1722,10 @@
     if (!m) {
       if (roundBadge) roundBadge.textContent = "DRAW COMPLETED";
       if (matchLabel) matchLabel.textContent = "ALL FIXTURES DECIDED!";
-      if (subLabel) subLabel.textContent = "The live ceremony has concluded. Fixtures are locked.";
-      if (spinLabel) spinLabel.textContent = "SAVE & CLOSE";
+      if (subLabel) subLabel.textContent = "The live ceremony has concluded. Fixtures are ready to lock in.";
+      if (spinLabel) spinLabel.textContent = "SAVE & PUBLISH FIXTURES";
       if (spinBtn) {
-        spinBtn.onclick = async () => {
-          // If matches were freshly drawn in memory, persist them
-          if (!tMatches.length && ldcCeremonyMatches.length) {
-            await window.sb.from("tournament_matches").insert(ldcCeremonyMatches);
-            await fetchTournaments();
-            if (currentTournament) await loadTournamentData(currentTournament.id);
-          }
-          closeModal("live-draw-ceremony-modal");
-        };
+        spinBtn.onclick = publishCeremonyDraw;
       }
       return;
     }
@@ -1835,10 +1856,35 @@
   }
 
   // Live Draw Ceremony controls
-  document.getElementById("td-live-draw-ceremony")?.addEventListener("click", openLiveDrawCeremony);
-  document.getElementById("live-draw-ceremony-close")?.addEventListener("click", () => {
+  document.getElementById("td-live-draw-ceremony")?.addEventListener("click", () => openLiveDrawCeremony(false));
+  document.getElementById("live-draw-ceremony-close")?.addEventListener("click", async () => {
     if (ldcAutoPlayTimer) { clearInterval(ldcAutoPlayTimer); ldcAutoPlayTimer = null; }
+    if (!tMatches.length && ldcCeremonyMatches.length && ldcCurrentIndex > 0) {
+      if (confirm("Ceremony in progress. Would you like to save and lock the revealed fixtures before closing?")) {
+        await publishCeremonyDraw();
+        return;
+      }
+    }
     closeModal("live-draw-ceremony-modal");
+  });
+  document.getElementById("ldc-quick-publish-btn")?.addEventListener("click", async () => {
+    if (!ldcCeremonyMatches.length) return;
+    if (ldcAutoPlayTimer) { clearInterval(ldcAutoPlayTimer); ldcAutoPlayTimer = null; }
+
+    const tape = document.getElementById("ldc-fixtures-tape");
+    if (tape) {
+      tape.innerHTML = "";
+      for (const m of ldcCeremonyMatches) {
+        const p1 = tPlayers.find(p => p.id === m.player1_id);
+        const p2 = tPlayers.find(p => p.id === m.player2_id);
+        addMatchToLdcTape(m, p1, p2);
+      }
+    }
+    ldcCurrentIndex = ldcCeremonyMatches.length;
+    const countEl = document.getElementById("ldc-revealed-count");
+    if (countEl) countEl.textContent = ldcCeremonyMatches.length;
+
+    await publishCeremonyDraw();
   });
   document.getElementById("ldc-reset-ceremony-btn")?.addEventListener("click", () => {
     if (ldcAutoPlayTimer) { clearInterval(ldcAutoPlayTimer); ldcAutoPlayTimer = null; }
