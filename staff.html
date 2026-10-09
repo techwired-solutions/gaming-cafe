@@ -1409,12 +1409,26 @@
               <div class="panel rounded-2xl p-5">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                   <div>
-                    <h4 class="font-bold">Tournament Draw</h4>
-                    <p class="text-xs text-slate-400 mt-0.5">Randomly assign players to groups or bracket slots. This will overwrite any existing draw.</p>
+                    <h4 class="font-bold flex items-center gap-2">
+                      <span>Tournament Draw &amp; Bracket</span>
+                      <span id="td-bracket-round-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300"></span>
+                    </h4>
+                    <p class="text-xs text-slate-400 mt-0.5">Generate round fixtures, project the live draw ceremony on big screens, or export bracket graphics.</p>
                   </div>
-                  <button id="td-generate-draw" type="button" class="rounded-xl px-4 py-2 font-bold text-sm border border-[#d8ff45]/60 text-[#d8ff45] hover:bg-[#d8ff45]/10 flex items-center gap-2 transition shrink-0">
-                    <i data-lucide="shuffle" width="16" height="16"></i> Generate Draw
-                  </button>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <button id="td-live-draw-ceremony" type="button" class="rounded-xl px-3.5 py-2 font-bold text-xs bg-[#d8ff45] text-[#10141e] hover:brightness-110 flex items-center gap-1.5 transition cursor-pointer shadow-md shadow-[#d8ff45]/10">
+                      <i data-lucide="tv" width="14" height="14"></i> Live Draw Ceremony
+                    </button>
+                    <button id="td-generate-next-round" type="button" class="rounded-xl px-3.5 py-2 font-bold text-xs border border-sky-400 text-sky-300 hover:bg-sky-500/10 flex items-center gap-1.5 transition cursor-pointer">
+                      <i data-lucide="zap" width="14" height="14"></i> Next Round Fixtures
+                    </button>
+                    <button id="td-generate-draw" type="button" class="rounded-xl px-3.5 py-2 font-bold text-xs border border-slate-600 text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] flex items-center gap-1.5 transition cursor-pointer">
+                      <i data-lucide="shuffle" width="14" height="14"></i> Reset / New Draw
+                    </button>
+                    <button id="td-download-draw" type="button" class="rounded-xl px-3.5 py-2 font-bold text-xs border border-slate-600 text-slate-300 hover:border-slate-400 flex items-center gap-1.5 transition cursor-pointer">
+                      <i data-lucide="download" width="14" height="14"></i> Download Graphic
+                    </button>
+                  </div>
                 </div>
                 <div id="td-bracket-view" class="space-y-4">
                   <p class="text-sm text-slate-500 italic text-center py-6">No draw generated yet. Confirm at least 4 players first, then click Generate Draw.</p>
@@ -1424,18 +1438,35 @@
 
             <!-- ── TAB: MATCHES ── -->
             <div id="ttab-matches" class="hidden space-y-3">
-              <div class="flex items-center justify-between">
-                <p class="text-sm text-slate-400">Schedule matches and enter results.</p>
-                <select id="td-match-round-filter" class="bg-[#111722] border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-[#d8ff45]">
-                  <option value="all">All Rounds</option>
-                </select>
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <p class="text-sm text-slate-400">Schedule matches and enter results. Revoke results anytime if a match needs replaying.</p>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <button id="td-matches-next-round-btn" type="button" class="rounded-xl px-3 py-1.5 text-xs font-bold border border-sky-400 text-sky-300 hover:bg-sky-500/10 transition flex items-center gap-1 cursor-pointer">
+                    <i data-lucide="zap" width="12" height="12"></i>Next Round
+                  </button>
+                  <button id="td-matches-download-btn" type="button" class="rounded-xl px-3 py-1.5 text-xs font-bold border border-slate-600 text-slate-300 hover:border-slate-400 transition flex items-center gap-1 cursor-pointer">
+                    <i data-lucide="download" width="12" height="12"></i>Download PNG
+                  </button>
+                  <select id="td-match-round-filter" class="bg-[#111722] border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-[#d8ff45]">
+                    <option value="all">All Rounds</option>
+                  </select>
+                </div>
               </div>
               <div id="td-matches-list" class="space-y-2"></div>
               <p id="td-matches-empty" class="text-sm text-slate-500 text-center py-8 hidden">No matches yet — generate the draw first.</p>
             </div>
 
             <!-- ── TAB: STANDINGS ── -->
-            <div id="ttab-standings" class="hidden">
+            <div id="ttab-standings" class="hidden space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h4 class="font-bold text-sm text-slate-200">Official Tournament Standings</h4>
+                  <p class="text-xs text-slate-400">Only confirmed &amp; active players are shown.</p>
+                </div>
+                <button id="td-download-standings" type="button" class="rounded-xl px-3.5 py-1.5 text-xs font-bold border border-slate-600 text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] transition flex items-center gap-1.5 cursor-pointer">
+                  <i data-lucide="download" width="12" height="12"></i> Download Graphic (PNG)
+                </button>
+              </div>
               <div id="td-standings-view">
                 <p class="text-sm text-slate-500 italic text-center py-8">Standings will appear once matches start.</p>
               </div>
@@ -3003,18 +3034,122 @@
           <input id="ms-scheduled" type="datetime-local" class="form-control text-xs">
         </div>
         <p id="ms-msg" class="text-xs text-slate-400 min-h-4"></p>
-        <div class="flex gap-3">
+        <div class="flex items-center gap-2 flex-wrap">
           <button id="ms-save-result" type="button" class="flex-1 rounded-xl py-2.5 font-bold text-sm flex items-center justify-center gap-2 cursor-pointer hover:brightness-110 transition" style="background:#d8ff45;color:#10141e;">
             <i data-lucide="check" width="16" height="16"></i>Save Result
           </button>
-          <button id="ms-save-schedule" type="button" class="rounded-xl px-4 py-2 text-xs font-bold border border-slate-600 text-slate-300 hover:border-sky-400 hover:text-sky-300 transition">
+          <button id="ms-save-schedule" type="button" class="rounded-xl px-4 py-2.5 text-xs font-bold border border-slate-600 text-slate-300 hover:border-sky-400 hover:text-sky-300 transition cursor-pointer">
             Schedule Only
+          </button>
+          <button id="ms-revoke-result" type="button" class="hidden rounded-xl px-3.5 py-2.5 text-xs font-bold border border-rose-500/40 text-rose-300 hover:bg-rose-500/15 transition flex items-center gap-1.5 cursor-pointer" title="Revoke recorded score, revert status to scheduled and restore player stats">
+            <i data-lucide="rotate-ccw" width="14" height="14"></i>Revoke
           </button>
         </div>
       </div>
     </div>
   </div>
   <!-- ===================== / MATCH SCORE MODAL ===================== -->
+
+  <!-- ===================== LIVE DRAW CEREMONY MODAL ===================== -->
+  <div id="live-draw-ceremony-modal" class="modal-overlay hidden fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/95 backdrop-blur-md">
+    <div class="modal-box rounded-3xl w-full max-w-5xl max-h-[96vh] flex flex-col overflow-hidden shadow-2xl border border-[#d8ff45]/40" style="background:#090d14;">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-[#06090e] shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-[#d8ff45]/20 border border-[#d8ff45]/60 flex items-center justify-center text-xl shadow-lg shadow-[#d8ff45]/10">
+            🎰
+          </div>
+          <div>
+            <h2 class="font-black text-base sm:text-xl tracking-tight text-white flex items-center gap-2">
+              <span>CHILLPILL LIVE DRAW CEREMONY</span>
+              <span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-red-500 text-white animate-pulse">BIG SCREEN</span>
+            </h2>
+            <p id="ldc-tournament-title" class="text-xs text-slate-400 font-mono">Official Fixture Selection &amp; Bracket Reveal</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="ldc-sound-toggle" type="button" class="h-9 px-3 rounded-xl border border-slate-700 text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer">
+            <i data-lucide="volume-2" width="14" height="14" id="ldc-sound-icon"></i>
+            <span class="hidden sm:inline">SFX: ON</span>
+          </button>
+          <button id="ldc-fullscreen-btn" type="button" class="h-9 px-3 rounded-xl border border-slate-700 text-xs font-bold text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] transition flex items-center gap-1.5 cursor-pointer">
+            <i data-lucide="maximize-2" width="14" height="14"></i>
+            <span class="hidden sm:inline">Fullscreen</span>
+          </button>
+          <button id="live-draw-ceremony-close" type="button" class="h-9 w-9 rounded-xl border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500 text-xl leading-none cursor-pointer flex items-center justify-center">×</button>
+        </div>
+      </div>
+
+      <!-- Main Stage -->
+      <div class="p-6 overflow-y-auto flex-1 flex flex-col items-center justify-between gap-6 relative" style="background:radial-gradient(ellipse at 50% 20%, rgba(216,255,69,0.06), transparent 70%);">
+        <!-- Match Tracker -->
+        <div class="text-center">
+          <div id="ldc-round-badge" class="inline-block text-xs font-black uppercase tracking-widest px-3 py-1 rounded-full bg-[#d8ff45]/15 text-[#d8ff45] border border-[#d8ff45]/40 mb-2">
+            ROUND OF 16
+          </div>
+          <h3 id="ldc-match-label" class="text-xl sm:text-2xl font-black text-white">MATCH 1 OF 8</h3>
+          <p id="ldc-status-sub" class="text-xs text-slate-400 mt-0.5">Spin the wheel to reveal opposing contenders</p>
+        </div>
+
+        <!-- Reel Cards Stage -->
+        <div class="w-full max-w-3xl grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-4 sm:gap-6 my-auto">
+          <!-- Player 1 Slot Card -->
+          <div id="ldc-card-p1" class="rounded-3xl p-6 sm:p-8 border-2 border-slate-700/80 bg-[#101622] text-center transition-all duration-300 shadow-xl flex flex-col items-center justify-center min-h-[190px]">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Contender 1</span>
+            <div class="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-3xl mb-3 shadow-inner" id="ldc-avatar-p1">
+              🎮
+            </div>
+            <p id="ldc-name-p1" class="text-xl sm:text-2xl font-black text-white truncate max-w-full">READY</p>
+            <p id="ldc-tag-p1" class="text-xs text-slate-400 font-mono mt-1">Waiting to draw...</p>
+          </div>
+
+          <!-- Center VS Emblem -->
+          <div class="flex flex-col items-center justify-center shrink-0">
+            <div id="ldc-vs-badge" class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-red-500 to-amber-500 flex items-center justify-center font-black text-xl sm:text-2xl text-white shadow-lg shadow-red-500/20 transform hover:scale-105 transition">
+              VS
+            </div>
+            <span id="ldc-badge-confirmed" class="text-[10px] font-black tracking-wider uppercase text-emerald-400 mt-2 opacity-0 transition-opacity">MATCH SET!</span>
+          </div>
+
+          <!-- Player 2 Slot Card -->
+          <div id="ldc-card-p2" class="rounded-3xl p-6 sm:p-8 border-2 border-slate-700/80 bg-[#101622] text-center transition-all duration-300 shadow-xl flex flex-col items-center justify-center min-h-[190px]">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Contender 2</span>
+            <div class="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-3xl mb-3 shadow-inner" id="ldc-avatar-p2">
+              🕹️
+            </div>
+            <p id="ldc-name-p2" class="text-xl sm:text-2xl font-black text-white truncate max-w-full">READY</p>
+            <p id="ldc-tag-p2" class="text-xs text-slate-400 font-mono mt-1">Waiting to draw...</p>
+          </div>
+        </div>
+
+        <!-- Controls Bar -->
+        <div class="flex flex-wrap items-center justify-center gap-3 w-full">
+          <button id="ldc-spin-btn" type="button" class="rounded-2xl px-8 py-3.5 font-black text-base bg-[#d8ff45] text-[#10141e] hover:brightness-110 flex items-center gap-2 transition cursor-pointer shadow-lg shadow-[#d8ff45]/20 transform active:scale-95">
+            <i data-lucide="play" width="18" height="18"></i><span id="ldc-spin-label">SPIN MATCH 1</span>
+          </button>
+          <button id="ldc-autoplay-btn" type="button" class="rounded-2xl px-5 py-3.5 font-bold text-xs border border-slate-700 text-slate-300 hover:border-sky-400 hover:text-sky-300 transition cursor-pointer flex items-center gap-1.5">
+            <i data-lucide="fast-forward" width="14" height="14"></i><span>Auto Reveal</span>
+          </button>
+          <button id="ldc-reset-ceremony-btn" type="button" class="rounded-2xl px-4 py-3.5 font-bold text-xs border border-slate-700 text-slate-400 hover:text-slate-200 transition cursor-pointer">
+            Replay
+          </button>
+        </div>
+
+        <!-- Live Revealed Fixtures Board -->
+        <div class="w-full bg-[#070b11] border border-slate-800/80 rounded-2xl p-4 mt-2">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <i data-lucide="list-ordered" width="14" height="14" class="text-[#d8ff45]"></i>
+              Decided Fixtures (<span id="ldc-revealed-count">0</span>/<span id="ldc-total-matches">0</span>)
+            </span>
+            <span class="text-[11px] text-slate-500 font-mono">Updates live as revealed</span>
+          </div>
+          <div id="ldc-fixtures-tape" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 max-h-36 overflow-y-auto pr-1"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ===================== / LIVE DRAW CEREMONY MODAL ===================== -->
 
   <!-- ===================== BULK MENU IMPORT MODAL ===================== -->
   <div id="bulk-import-modal" class="modal-overlay hidden fixed inset-0 z-50 flex items-center justify-center p-4">

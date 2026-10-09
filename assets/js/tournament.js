@@ -765,20 +765,32 @@
     showToast(`Draw generated! ${toInsert.length} matches scheduled.`);
   });
 
+  // ── BRACKET / DRAW TAB ───────────────────────────────────────────────────
   function renderBracketTab() {
     const view = document.getElementById("td-bracket-view");
+    const roundBadge = document.getElementById("td-bracket-round-badge");
     if (!view) return;
     if (!tMatches.length) {
+      if (roundBadge) roundBadge.textContent = "No Draw";
       view.innerHTML = '<p class="text-sm text-slate-500 italic text-center py-6">No draw yet. Confirm players then click Generate Draw.</p>';
       return;
     }
     const rounds = [...new Set(tMatches.map(m => m.round_name))];
+    const maxRoundNum = Math.max(...tMatches.map(m => m.round_number || 1));
+    const currentRoundMatch = tMatches.find(m => (m.round_number || 1) === maxRoundNum);
+    if (roundBadge) {
+      roundBadge.textContent = currentRoundMatch?.round_name || `Round ${maxRoundNum}`;
+    }
+
     view.innerHTML = rounds.map(rn => {
       const rMatches = tMatches.filter(m => m.round_name === rn);
       return `
         <div>
-          <p class="text-xs font-bold text-[#d8ff45] uppercase tracking-wider mb-2 mt-4 first:mt-0">${esc(rn)}</p>
-          <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          <div class="flex items-center justify-between mb-2 mt-4 first:mt-0">
+            <p class="text-xs font-bold text-[#d8ff45] uppercase tracking-wider">${esc(rn)}</p>
+            <span class="text-[11px] text-slate-500 font-mono">${rMatches.length} match${rMatches.length === 1 ? "" : "es"}</span>
+          </div>
+          <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
             ${rMatches.map(m => {
               const p1 = tPlayers.find(p => p.id === m.player1_id);
               const p2 = tPlayers.find(p => p.id === m.player2_id);
@@ -786,7 +798,7 @@
                 <div class="rounded-xl border ${m.status === "completed" ? "border-[#d8ff45]/30 bg-[#d8ff45]/5" : "border-slate-700 bg-[#0f1520]"} p-3">
                   <div class="flex items-center justify-between text-[11px] mb-2">
                     <span class="text-slate-500">Match ${m.match_number}</span>
-                    <span class="${m.status === "completed" ? "text-[#d8ff45] font-bold" : "text-slate-500"}">${m.status}</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full ${m.status === "completed" ? "bg-[#d8ff45]/20 text-[#d8ff45] font-bold" : "bg-slate-800 text-slate-400"}">${m.status}</span>
                   </div>
                   <div class="space-y-1.5 text-sm">
                     <div class="flex justify-between ${m.winner_id === m.player1_id ? "text-[#d8ff45] font-bold" : ""}">
@@ -798,13 +810,79 @@
                       <span class="mono ml-2 shrink-0">${m.status === "completed" ? (m.player2_score ?? 0) : "—"}</span>
                     </div>
                   </div>
-                  ${m.winner_id ? `<p class="text-[11px] text-[#d8ff45] mt-2 font-bold">&#127942; ${esc(tPlayers.find(p => p.id === m.winner_id)?.player_name || "")}</p>` : ""}
+                  ${m.winner_id ? `<p class="text-[11px] text-[#d8ff45] mt-2 font-bold">&#127942; Winner: ${esc(tPlayers.find(p => p.id === m.winner_id)?.player_name || "")}</p>` : ""}
                 </div>`;
             }).join("")}
           </div>
         </div>`;
     }).join("");
   }
+
+  // ── GENERATE NEXT ROUND KNOCKOUT FIXTURES ─────────────────────────────────
+  async function generateNextRound() {
+    if (!currentTournament || !window.sb) return;
+    if (currentTournament.format !== "knockout") {
+      return showToast("Next round generation is only for knockout tournaments.");
+    }
+    if (!tMatches.length) {
+      return showToast("No draw generated yet. Click Generate Draw first.");
+    }
+
+    const maxRound = Math.max(...tMatches.map(m => m.round_number || 1));
+    const curRoundMatches = tMatches.filter(m => (m.round_number || 1) === maxRound);
+
+    // Check that all matches in the current round are completed (or bye)
+    const pending = curRoundMatches.filter(m => m.status !== "completed" && m.status !== "bye");
+    if (pending.length > 0) {
+      return showToast(`Cannot generate next round yet: ${pending.length} match(es) in ${curRoundMatches[0]?.round_name || 'current round'} are still unfinished.`);
+    }
+
+    // Collect winners from current round in match_number order
+    const sortedCur = [...curRoundMatches].sort((a, b) => a.match_number - b.match_number);
+    const winners = [];
+    for (const m of sortedCur) {
+      const wid = m.winner_id || (m.status === "bye" ? m.player1_id : null);
+      if (wid && !winners.includes(wid)) winners.push(wid);
+    }
+
+    if (winners.length <= 1) {
+      return showToast("Tournament has already concluded! The champion is crowned.");
+    }
+
+    const n = winners.length;
+    const nextRoundName = n <= 2 ? "Final" : n <= 4 ? "Semi Final" : n <= 8 ? "Quarter Final" : `Round of ${n}`;
+
+    if (!confirm(`Generate ${nextRoundName} fixtures for the ${n} advancing winners?`)) return;
+
+    const tid = currentTournament.id;
+    const toInsert = [];
+    let matchNum = 1;
+    for (let i = 0; i < n; i += 2) {
+      const p1 = winners[i];
+      const p2 = winners[i + 1] || null;
+      toInsert.push({
+        tournament_id: tid,
+        round_name: nextRoundName,
+        round_number: maxRound + 1,
+        match_number: matchNum++,
+        player1_id: p1,
+        player2_id: p2,
+        status: p2 ? "scheduled" : "bye"
+      });
+    }
+
+    const { data: inserted, error } = await window.sb.from("tournament_matches").insert(toInsert).select();
+    if (error) return showToast("Error generating next round: " + error.message);
+
+    tMatches.push(...(inserted || []));
+    renderBracketTab();
+    renderMatchesTab();
+    renderStandingsTab();
+    showToast(`${nextRoundName} fixtures generated (${toInsert.length} matches)!`);
+  }
+
+  document.getElementById("td-generate-next-round")?.addEventListener("click", generateNextRound);
+  document.getElementById("td-matches-next-round-btn")?.addEventListener("click", generateNextRound);
 
   // ── MATCHES TAB ───────────────────────────────────────────────────────────
   function renderMatchesTab() {
@@ -825,10 +903,20 @@
     if (empty) empty.classList.toggle("hidden", filtered.length > 0);
     if (!filtered.length) { list.innerHTML = ""; return; }
 
+    const isKnockout = currentTournament?.format === "knockout";
+
     list.innerHTML = filtered.map(m => {
       const p1 = tPlayers.find(p => p.id === m.player1_id);
       const p2 = tPlayers.find(p => p.id === m.player2_id);
-      const sched = m.scheduled_at ? new Date(m.scheduled_at).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }) : "TBD";
+
+      // In knockout format, tournament happens in one day: only show time (or TBD)
+      let sched = "Time TBD";
+      if (m.scheduled_at) {
+        sched = isKnockout
+          ? new Date(m.scheduled_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
+          : new Date(m.scheduled_at).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" });
+      }
+
       return `
         <div class="panel rounded-xl p-4">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -839,7 +927,7 @@
                   m.status === "completed" ? "bg-[#d8ff45]/20 text-[#d8ff45]" :
                   m.status === "ongoing" ? "bg-sky-500/20 text-sky-300 animate-pulse" :
                   "bg-slate-700 text-slate-400"}">${m.status}</span>
-                ${m.station_name ? `<span class="text-[10px] text-slate-500">${esc(m.station_name)}</span>` : ""}
+                ${m.station_name ? `<span class="text-[10px] text-slate-400 font-semibold bg-slate-800 px-2 py-0.5 rounded">${esc(m.station_name)}</span>` : ""}
                 <span class="text-[10px] text-slate-500">&#128336; ${sched}</span>
               </div>
               <div class="flex items-center gap-3 text-sm">
@@ -850,12 +938,14 @@
                 <span class="font-bold truncate ${m.winner_id === m.player2_id ? "text-[#d8ff45]" : ""}">${p2 ? esc(p2.player_name) : m.status === "bye" ? "BYE" : "TBD"}</span>
               </div>
             </div>
-            <div class="shrink-0">
-              ${m.status !== "bye" ? `<button class="open-match-score-btn text-xs font-bold border rounded-lg px-3 py-2 transition ${
-                m.status === "completed" ? "border-slate-600 text-slate-400 hover:border-sky-400 hover:text-sky-300" :
-                "border-[#d8ff45]/50 text-[#d8ff45] hover:bg-[#d8ff45]/10"
-              }" data-mid="${m.id}">${m.status === "completed" ? "Edit Result" : "Enter Result"}</button>` :
-              '<span class="text-xs text-slate-500 italic">Bye</span>'}
+            <div class="shrink-0 flex items-center gap-2">
+              ${m.status !== "bye" ? `
+                <button class="open-match-score-btn text-xs font-bold border rounded-lg px-3 py-2 transition ${
+                  m.status === "completed" ? "border-slate-600 text-slate-300 hover:border-sky-400 hover:text-sky-300" :
+                  "border-[#d8ff45]/50 text-[#d8ff45] hover:bg-[#d8ff45]/10"
+                }" data-mid="${m.id}">${m.status === "completed" ? "Edit Result" : "Enter Result"}</button>
+                ${m.status === "completed" ? `<button class="quick-revoke-match-btn text-xs font-bold border border-rose-500/40 text-rose-300 hover:bg-rose-500/10 rounded-lg px-2.5 py-2 transition" data-mid="${m.id}" title="Revoke match result and restore player stats">Revoke</button>` : ""}
+              ` : '<span class="text-xs text-slate-500 italic">Bye</span>'}
             </div>
           </div>
         </div>`;
@@ -863,11 +953,13 @@
 
     list.querySelectorAll(".open-match-score-btn").forEach(btn =>
       btn.addEventListener("click", () => openMatchScoreModal(btn.dataset.mid)));
+    list.querySelectorAll(".quick-revoke-match-btn").forEach(btn =>
+      btn.addEventListener("click", () => revokeMatchResult(btn.dataset.mid)));
   }
 
   document.getElementById("td-match-round-filter")?.addEventListener("change", renderMatchesTab);
 
-  // ── Match score modal ─────────────────────────────────────────────────────
+  // ── MATCH SCORE MODAL ─────────────────────────────────────────────────────
   function openMatchScoreModal(mid) {
     const match = tMatches.find(m => m.id === mid);
     if (!match) return;
@@ -881,6 +973,12 @@
     document.getElementById("ms-station").value = match.station_name || "";
     document.getElementById("ms-scheduled").value = match.scheduled_at ? match.scheduled_at.slice(0, 16) : "";
     document.getElementById("ms-msg").textContent = "";
+
+    const revokeBtn = document.getElementById("ms-revoke-result");
+    if (revokeBtn) {
+      revokeBtn.classList.toggle("hidden", match.status !== "completed");
+    }
+
     openModal("match-score-modal");
   }
 
@@ -909,6 +1007,11 @@
     document.getElementById("ms-msg").textContent = "Saving...";
     const { error } = await window.sb.from("tournament_matches").update(payload).eq("id", mid);
     if (error) { document.getElementById("ms-msg").textContent = "Error: " + error.message; return; }
+
+    // If match was already completed previously, roll back old stats first before applying new stats
+    if (enterScore && match.status === "completed") {
+      await rollbackPlayerStats(match, match.player1_score ?? 0, match.player2_score ?? 0, match.winner_id);
+    }
 
     // Update local match
     const idx = tMatches.findIndex(m => m.id === mid);
@@ -940,68 +1043,231 @@
       const p = tPlayers.find(x => x.id === pid);
       if (!p) continue;
       const update = {
-        points: p.points + pts, wins: p.wins + (win ? 1 : 0),
-        draws: p.draws + (dr ? 1 : 0), losses: p.losses + (loss ? 1 : 0),
-        goals_for: p.goals_for + gf, goals_against: p.goals_against + ga
+        points: (p.points || 0) + pts,
+        wins: (p.wins || 0) + (win ? 1 : 0),
+        draws: (p.draws || 0) + (dr ? 1 : 0),
+        losses: (p.losses || 0) + (loss ? 1 : 0),
+        goals_for: (p.goals_for || 0) + gf,
+        goals_against: (p.goals_against || 0) + ga
       };
+
+      // In knockout format, tag status if Final
+      if (currentTournament?.format === "knockout" && match.round_name?.toLowerCase().includes("final") && !match.round_name?.toLowerCase().includes("semi") && !match.round_name?.toLowerCase().includes("quarter")) {
+        if (winnerId === pid) update.status = "winner";
+        else if (winnerId) update.status = "runner_up";
+      }
+
       await window.sb.from("tournament_players").update(update).eq("id", pid);
       Object.assign(p, update);
     }
   }
 
+  async function rollbackPlayerStats(match, s1, s2, winnerId) {
+    if (!window.sb) return;
+    const p1 = tPlayers.find(p => p.id === match.player1_id);
+    const p2 = tPlayers.find(p => p.id === match.player2_id);
+    if (!p1 || !p2) return;
+    const draw = s1 === s2;
+    const p1pts = draw ? 1 : (winnerId === p1.id ? 3 : 0);
+    const p2pts = draw ? 1 : (winnerId === p2.id ? 3 : 0);
+    const updates = [
+      [p1.id, p1pts, s1, s2, winnerId === p1.id, draw, !draw && winnerId !== p1.id],
+      [p2.id, p2pts, s2, s1, winnerId === p2.id, draw, !draw && winnerId !== p2.id]
+    ];
+    for (const [pid, pts, gf, ga, win, dr, loss] of updates) {
+      const p = tPlayers.find(x => x.id === pid);
+      if (!p) continue;
+      const update = {
+        points: Math.max(0, (p.points || 0) - pts),
+        wins: Math.max(0, (p.wins || 0) - (win ? 1 : 0)),
+        draws: Math.max(0, (p.draws || 0) - (dr ? 1 : 0)),
+        losses: Math.max(0, (p.losses || 0) - (loss ? 1 : 0)),
+        goals_for: Math.max(0, (p.goals_for || 0) - gf),
+        goals_against: Math.max(0, (p.goals_against || 0) - ga)
+      };
+      if (["winner", "runner_up", "eliminated"].includes(p.status)) {
+        update.status = "confirmed";
+      }
+      await window.sb.from("tournament_players").update(update).eq("id", pid);
+      Object.assign(p, update);
+    }
+  }
+
+  // ── REVOKE MATCH RESULT ───────────────────────────────────────────────────
+  async function revokeMatchResult(mid) {
+    if (!window.sb) return;
+    const match = tMatches.find(m => m.id === mid);
+    if (!match || match.status !== "completed") return;
+
+    if (!confirm("Revoke this match result? This will clear scores, reset the match to 'scheduled', and revert player stats.")) {
+      return;
+    }
+
+    const s1 = match.player1_score ?? 0;
+    const s2 = match.player2_score ?? 0;
+    const wid = match.winner_id;
+
+    // Rollback player stats
+    await rollbackPlayerStats(match, s1, s2, wid);
+
+    // If winner was slotted into subsequent round matches, revert that slot to null
+    if (wid) {
+      const nextRoundMatches = tMatches.filter(m => (m.round_number || 1) > (match.round_number || 1) && m.status !== "completed");
+      for (const nm of nextRoundMatches) {
+        if (nm.player1_id === wid) {
+          await window.sb.from("tournament_matches").update({ player1_id: null }).eq("id", nm.id);
+          nm.player1_id = null;
+        } else if (nm.player2_id === wid) {
+          await window.sb.from("tournament_matches").update({ player2_id: null }).eq("id", nm.id);
+          nm.player2_id = null;
+        }
+      }
+    }
+
+    const matchReset = {
+      status: "scheduled",
+      player1_score: null,
+      player2_score: null,
+      winner_id: null
+    };
+
+    const { error } = await window.sb.from("tournament_matches").update(matchReset).eq("id", mid);
+    if (error) return showToast("Revoke error: " + error.message);
+
+    Object.assign(match, matchReset);
+    closeModal("match-score-modal");
+    renderMatchesTab();
+    renderBracketTab();
+    renderStandingsTab();
+    showToast("Match result revoked successfully.");
+  }
+
+  document.getElementById("ms-revoke-result")?.addEventListener("click", () => {
+    const mid = document.getElementById("ms-match-id").value;
+    if (mid) revokeMatchResult(mid);
+  });
   document.getElementById("ms-save-result")?.addEventListener("click", () => saveMatchResult(true));
   document.getElementById("ms-save-schedule")?.addEventListener("click", () => saveMatchResult(false));
 
   // ── STANDINGS TAB ─────────────────────────────────────────────────────────
+  function getKnockoutProgression(p) {
+    if (p.status === "winner") return { label: "🥇 Champion", cls: "text-[#d8ff45] font-black bg-[#d8ff45]/20 border border-[#d8ff45]/40" };
+    if (p.status === "runner_up") return { label: "🥈 Runner-Up", cls: "text-sky-300 font-bold bg-sky-500/20 border border-sky-500/40" };
+    if (p.losses > 0 || p.status === "eliminated") return { label: "❌ Knocked Out", cls: "text-rose-400 bg-rose-500/15 border border-rose-500/30" };
+    if (p.wins > 0 && p.losses === 0) return { label: "🔥 Advanced", cls: "text-emerald-400 font-bold bg-emerald-500/20 border border-emerald-500/40" };
+    return { label: "⏳ Active", cls: "text-slate-400 bg-slate-800 border border-slate-700" };
+  }
+
   function renderStandingsTab() {
     const view = document.getElementById("td-standings-view");
     if (!view) return;
-    if (!tPlayers.length) { view.innerHTML = '<p class="text-sm text-slate-500 text-center py-8 italic">No players yet.</p>'; return; }
+
+    // RULE: Only show players that are confirmed (exclude unpaid/unconfirmed registered)
+    const confirmedPlayers = tPlayers.filter(p => p.status !== "registered");
+    if (!confirmedPlayers.length) {
+      view.innerHTML = '<p class="text-sm text-slate-500 text-center py-8 italic">No confirmed players yet. Confirm paid players from the Registrations tab.</p>';
+      return;
+    }
 
     if (currentTournament?.format === "knockout") {
-      const sorted = [...tPlayers].sort((a, b) => {
-        const rank = (p) => p.status === "winner" ? 0 : p.status === "runner_up" ? 1 : p.status === "eliminated" ? 3 : 2;
-        return rank(a) - rank(b) || b.wins - a.wins;
+      const sorted = [...confirmedPlayers].sort((a, b) => {
+        const getRank = (p) => {
+          if (p.status === "winner") return 0;
+          if (p.status === "runner_up") return 1;
+          if (p.wins > 0 && p.losses === 0) return 2; // Alive & advanced
+          if (p.losses > 0 || p.status === "eliminated") return 4; // Knocked out
+          return 3; // 0 matches played yet
+        };
+        const rankDiff = getRank(a) - getRank(b);
+        if (rankDiff !== 0) return rankDiff;
+        if (b.wins !== a.wins) return b.wins - a.wins;
+        const gdA = (a.goals_for || 0) - (a.goals_against || 0);
+        const gdB = (b.goals_for || 0) - (b.goals_against || 0);
+        if (gdB !== gdA) return gdB - gdA;
+        return (b.goals_for || 0) - (a.goals_for || 0);
       });
       view.innerHTML = renderStandingsTable(sorted, false);
     } else {
-      const groups = [...new Set(tPlayers.map(p => p.group_name).filter(Boolean))].sort();
-      if (!groups.length) { view.innerHTML = '<p class="text-sm text-slate-500 text-center py-8 italic">Draw not generated yet.</p>'; return; }
+      const groups = [...new Set(confirmedPlayers.map(p => p.group_name).filter(Boolean))].sort();
+      if (!groups.length) {
+        view.innerHTML = '<p class="text-sm text-slate-500 text-center py-8 italic">Draw not generated yet.</p>';
+        return;
+      }
       view.innerHTML = groups.map(g => {
-        const gp = [...tPlayers.filter(p => p.group_name === g)].sort((a, b) =>
-          b.points !== a.points ? b.points - a.points :
-          (b.goals_for - b.goals_against) - (a.goals_for - a.goals_against)
-        );
+        const gp = [...confirmedPlayers.filter(p => p.group_name === g)].sort((a, b) => {
+          if (b.points !== a.points) return b.points - a.points;
+          const gdA = (a.goals_for || 0) - (a.goals_against || 0);
+          const gdB = (b.goals_for || 0) - (b.goals_against || 0);
+          if (gdB !== gdA) return gdB - gdA;
+          return (b.goals_for || 0) - (a.goals_for || 0);
+        });
         return `<div class="mb-6"><p class="text-xs font-bold text-[#d8ff45] uppercase tracking-wider mb-2">Group ${esc(g)}</p>${renderStandingsTable(gp, true)}</div>`;
       }).join("");
     }
   }
 
   function renderStandingsTable(players, isGroups) {
-    const cols = isGroups ? "grid-cols-[1fr_auto_auto_auto_auto_auto_auto]" : "grid-cols-[1fr_auto_auto]";
+    // In knockout: NO raw status ("confirmed") shown! Instead show Stage Progression, P, W, L, GF, GA, GD.
+    const cols = isGroups
+      ? "grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto]"
+      : "grid-cols-[1.5fr_1.2fr_auto_auto_auto_auto_auto_auto]";
+
     return `
-      <div class="panel rounded-2xl overflow-hidden">
-        <div class="grid ${cols} text-[11px] text-slate-500 font-semibold px-4 py-2 bg-[#0f1520] border-b border-slate-700/60 gap-2">
+      <div class="panel rounded-2xl overflow-hidden border border-slate-700/60 shadow-md">
+        <div class="grid ${cols} text-[11px] text-slate-400 font-semibold px-4 py-2.5 bg-[#0f1520] border-b border-slate-700/60 gap-3">
           <span>Player</span>
-          ${isGroups ? "<span class='text-center'>P</span><span class='text-center'>W</span><span class='text-center'>D</span><span class='text-center'>L</span><span class='text-center'>GD</span><span class='text-center text-[#d8ff45]'>Pts</span>" : "<span class='text-center'>Wins</span><span>Status</span>"}
+          ${isGroups ? "" : "<span>Stage Progression</span>"}
+          <span class="text-center w-8">P</span>
+          <span class="text-center w-8">W</span>
+          ${isGroups ? "<span class='text-center w-8'>D</span>" : ""}
+          <span class="text-center w-8">L</span>
+          <span class="text-center w-9">GF</span>
+          <span class="text-center w-9">GA</span>
+          <span class="text-center w-10">GD</span>
+          ${isGroups ? "<span class='text-center w-10 text-[#d8ff45] font-bold'>Pts</span>" : ""}
         </div>
         <div class="divide-y divide-slate-800/80">
-          ${players.map((p, i) => `
-            <div class="grid ${cols} px-4 py-2.5 items-center text-sm gap-2 ${p.status === "winner" ? "bg-[#d8ff45]/5" : i < 2 && isGroups ? "bg-sky-500/5" : ""}">
-              <div class="flex items-center gap-2 min-w-0">
-                <span class="shrink-0">${p.status === "winner" ? "&#127942;" : i === 0 && isGroups ? "&#9650;" : `${i + 1}.`}</span>
-                <span class="truncate ${p.status === "winner" ? "font-bold text-[#d8ff45]" : ""}">${esc(p.player_name)}</span>
-              </div>
-              ${isGroups
-                ? `<span class='text-center text-slate-400 text-xs'>${p.wins + p.draws + p.losses}</span>
-                   <span class='text-center text-xs'>${p.wins}</span>
-                   <span class='text-center text-xs'>${p.draws}</span>
-                   <span class='text-center text-xs'>${p.losses}</span>
-                   <span class='text-center text-xs'>${p.goals_for - p.goals_against > 0 ? "+" : ""}${p.goals_for - p.goals_against}</span>
-                   <span class='text-center font-bold text-[#d8ff45]'>${p.points}</span>`
-                : `<span class='text-center text-xs'>${p.wins}</span>
-                   <span class='text-xs capitalize text-slate-400'>${p.status}</span>`}
-            </div>`).join("")}
+          ${players.map((p, i) => {
+            const isKnockout = !isGroups;
+            const prog = isKnockout ? getKnockoutProgression(p) : null;
+            const played = (p.wins || 0) + (p.draws || 0) + (p.losses || 0);
+            const gd = (p.goals_for || 0) - (p.goals_against || 0);
+            const isWinner = p.status === "winner";
+
+            return `
+              <div class="grid ${cols} px-4 py-3 items-center text-xs sm:text-sm gap-3 ${
+                isWinner ? "bg-[#d8ff45]/10" : (isGroups && i < 2 ? "bg-sky-500/5" : "")
+              }">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <span class="font-bold text-xs shrink-0 ${isWinner ? "text-[#d8ff45]" : "text-slate-500"}">
+                    ${isWinner ? "🥇" : (isGroups && i === 0 ? "▲" : `${i + 1}.`)}
+                  </span>
+                  <div class="min-w-0 truncate">
+                    <p class="font-bold truncate text-slate-100 ${isWinner ? "text-[#d8ff45]" : ""}">${esc(p.player_name)}</p>
+                    ${p.gamertag ? `<p class="text-[11px] text-slate-400 truncate">(${esc(p.gamertag)})</p>` : ""}
+                  </div>
+                </div>
+
+                ${isKnockout ? `
+                  <div>
+                    <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full inline-block ${prog.cls}">
+                      ${prog.label}
+                    </span>
+                  </div>
+                ` : ""}
+
+                <span class="text-center text-slate-400 w-8 font-mono">${played}</span>
+                <span class="text-center text-slate-200 w-8 font-bold font-mono">${p.wins || 0}</span>
+                ${isGroups ? `<span class="text-center text-slate-400 w-8 font-mono">${p.draws || 0}</span>` : ""}
+                <span class="text-center text-slate-400 w-8 font-mono">${p.losses || 0}</span>
+                <span class="text-center text-slate-300 w-9 font-mono">${p.goals_for || 0}</span>
+                <span class="text-center text-slate-400 w-9 font-mono">${p.goals_against || 0}</span>
+                <span class="text-center font-mono w-10 font-bold ${gd > 0 ? "text-emerald-400" : gd < 0 ? "text-rose-400" : "text-slate-400"}">
+                  ${gd > 0 ? `+${gd}` : gd}
+                </span>
+                ${isGroups ? `<span class="text-center font-bold text-[#d8ff45] w-10 font-mono">${p.points || 0}</span>` : ""}
+              </div>`;
+          }).join("")}
         </div>
       </div>`;
   }
@@ -1165,7 +1431,613 @@
     }
   });
 
-  // ── Expose to dashboard.js ────────────────────────────────────────────────
+  // ── LIVE DRAW CEREMONY (BIG SCREEN PRESENTATION) ─────────────────────────
+  let ldcAudioCtx = null;
+  let ldcSoundOn = true;
+  let ldcCeremonyMatches = [];
+  let ldcCurrentIndex = 0;
+  let ldcIsSpinning = false;
+  let ldcAutoPlayTimer = null;
+
+  function getLdcAudioCtx() {
+    if (!ldcSoundOn) return null;
+    if (!ldcAudioCtx && (window.AudioContext || window.webkitAudioContext)) {
+      ldcAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (ldcAudioCtx && ldcAudioCtx.state === "suspended") ldcAudioCtx.resume();
+    return ldcAudioCtx;
+  }
+
+  function playLdcTick() {
+    try {
+      const ctx = getLdcAudioCtx();
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(750 + Math.random() * 250, ctx.currentTime);
+      gain.gain.setValueAtTime(0.06, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.04);
+    } catch (_) {}
+  }
+
+  function playLdcLockChime() {
+    try {
+      const ctx = getLdcAudioCtx();
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.25);
+    } catch (_) {}
+  }
+
+  function playLdcFanfare() {
+    try {
+      const ctx = getLdcAudioCtx();
+      if (!ctx) return;
+      const notes = [523.25, 659.25, 783.99, 1046.5]; // C E G C
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        const t0 = ctx.currentTime + idx * 0.08;
+        osc.frequency.setValueAtTime(freq, t0);
+        gain.gain.setValueAtTime(0.15, t0);
+        gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + 0.35);
+      });
+    } catch (_) {}
+  }
+
+  function openLiveDrawCeremony() {
+    if (!currentTournament) return showToast("No tournament selected.");
+    const confirmed = tPlayers.filter(p => p.status === "confirmed");
+    if (!tMatches.length && confirmed.length < 4) {
+      return showToast("Need at least 4 confirmed players to launch the draw ceremony.");
+    }
+
+    // Prepare matches to reveal
+    if (!tMatches.length) {
+      // Auto-prepare a new draw sequence from confirmed players
+      const shuffled = shuffle(confirmed);
+      const tid = currentTournament.id;
+      const n = shuffled.length;
+      const roundName = n <= 2 ? "Final" : n <= 4 ? "Semi Final" : n <= 8 ? "Quarter Final" : "Round of 16";
+      ldcCeremonyMatches = [];
+      for (let i = 0; i < n; i += 2) {
+        ldcCeremonyMatches.push({
+          tournament_id: tid,
+          round_name: roundName,
+          round_number: 1,
+          match_number: Math.floor(i / 2) + 1,
+          player1_id: shuffled[i].id,
+          player2_id: shuffled[i + 1]?.id || null,
+          status: shuffled[i + 1] ? "scheduled" : "bye"
+        });
+      }
+    } else {
+      // Use latest round matches
+      const maxRound = Math.max(...tMatches.map(m => m.round_number || 1));
+      ldcCeremonyMatches = [...tMatches.filter(m => (m.round_number || 1) === maxRound)].sort((a, b) => a.match_number - b.match_number);
+    }
+
+    ldcCurrentIndex = 0;
+    ldcIsSpinning = false;
+    if (ldcAutoPlayTimer) { clearInterval(ldcAutoPlayTimer); ldcAutoPlayTimer = null; }
+
+    const titleEl = document.getElementById("ldc-tournament-title");
+    if (titleEl) titleEl.textContent = `${currentTournament.name} · ${currentTournament.game || "EA FC"}`;
+
+    const totalEl = document.getElementById("ldc-total-matches");
+    if (totalEl) totalEl.textContent = ldcCeremonyMatches.length;
+
+    const countEl = document.getElementById("ldc-revealed-count");
+    if (countEl) countEl.textContent = "0";
+
+    const tape = document.getElementById("ldc-fixtures-tape");
+    if (tape) tape.innerHTML = "";
+
+    resetLdcStageForCurrentMatch();
+    openModal("live-draw-ceremony-modal");
+  }
+
+  function resetLdcStageForCurrentMatch() {
+    const m = ldcCeremonyMatches[ldcCurrentIndex];
+    const roundBadge = document.getElementById("ldc-round-badge");
+    const matchLabel = document.getElementById("ldc-match-label");
+    const subLabel = document.getElementById("ldc-status-sub");
+    const spinLabel = document.getElementById("ldc-spin-label");
+    const spinBtn = document.getElementById("ldc-spin-btn");
+
+    const card1 = document.getElementById("ldc-card-p1");
+    const card2 = document.getElementById("ldc-card-p2");
+    const confirmedBadge = document.getElementById("ldc-badge-confirmed");
+
+    if (confirmedBadge) confirmedBadge.style.opacity = "0";
+
+    if (card1) {
+      card1.className = "rounded-3xl p-6 sm:p-8 border-2 border-slate-700/80 bg-[#101622] text-center transition-all duration-300 shadow-xl flex flex-col items-center justify-center min-h-[190px]";
+      document.getElementById("ldc-name-p1").textContent = "READY";
+      document.getElementById("ldc-tag-p1").textContent = "Waiting to spin...";
+    }
+    if (card2) {
+      card2.className = "rounded-3xl p-6 sm:p-8 border-2 border-slate-700/80 bg-[#101622] text-center transition-all duration-300 shadow-xl flex flex-col items-center justify-center min-h-[190px]";
+      document.getElementById("ldc-name-p2").textContent = "READY";
+      document.getElementById("ldc-tag-p2").textContent = "Waiting to spin...";
+    }
+
+    if (!m) {
+      if (roundBadge) roundBadge.textContent = "DRAW COMPLETED";
+      if (matchLabel) matchLabel.textContent = "ALL FIXTURES DECIDED!";
+      if (subLabel) subLabel.textContent = "The live ceremony has concluded. Fixtures are locked.";
+      if (spinLabel) spinLabel.textContent = "SAVE & CLOSE";
+      if (spinBtn) {
+        spinBtn.onclick = async () => {
+          // If matches were freshly drawn in memory, persist them
+          if (!tMatches.length && ldcCeremonyMatches.length) {
+            await window.sb.from("tournament_matches").insert(ldcCeremonyMatches);
+            await fetchTournaments();
+            if (currentTournament) await loadTournamentData(currentTournament.id);
+          }
+          closeModal("live-draw-ceremony-modal");
+        };
+      }
+      return;
+    }
+
+    if (roundBadge) roundBadge.textContent = (m.round_name || "ROUND").toUpperCase();
+    if (matchLabel) matchLabel.textContent = `MATCH ${m.match_number} OF ${ldcCeremonyMatches.length}`;
+    if (subLabel) subLabel.textContent = "Spin the reel to draw opposing contenders";
+    if (spinLabel) spinLabel.textContent = `SPIN MATCH ${m.match_number}`;
+    if (spinBtn) {
+      spinBtn.onclick = () => spinCurrentLdcMatch();
+    }
+  }
+
+  async function spinCurrentLdcMatch() {
+    if (ldcIsSpinning) return;
+    const m = ldcCeremonyMatches[ldcCurrentIndex];
+    if (!m) {
+      closeModal("live-draw-ceremony-modal");
+      return;
+    }
+
+    ldcIsSpinning = true;
+    const spinBtn = document.getElementById("ldc-spin-btn");
+    if (spinBtn) spinBtn.disabled = true;
+
+    const p1 = tPlayers.find(p => p.id === m.player1_id);
+    const p2 = tPlayers.find(p => p.id === m.player2_id);
+    const candidateNames = tPlayers.map(p => p.player_name).filter(Boolean);
+    if (!candidateNames.length) candidateNames.push("Player 1", "Player 2", "Player 3", "Player 4");
+
+    const avatars = ["🎮", "⚡", "🔥", "🏆", "🎯", "⚽", "🕹️", "👑"];
+
+    const name1El = document.getElementById("ldc-name-p1");
+    const tag1El = document.getElementById("ldc-tag-p1");
+    const card1 = document.getElementById("ldc-card-p1");
+    const avatar1 = document.getElementById("ldc-avatar-p1");
+
+    const name2El = document.getElementById("ldc-name-p2");
+    const tag2El = document.getElementById("ldc-tag-p2");
+    const card2 = document.getElementById("ldc-card-p2");
+    const avatar2 = document.getElementById("ldc-avatar-p2");
+
+    // Phase 1: Spin Slot 1
+    if (card1) card1.classList.add("border-[#d8ff45]", "shadow-[0_0_30px_rgba(216,255,69,0.3)]");
+    await runSlotReel(name1El, avatar1, candidateNames, avatars, p1 ? p1.player_name : "TBD");
+    if (tag1El) tag1El.textContent = p1?.gamertag ? `(${p1.gamertag})` : "Locked In";
+    playLdcLockChime();
+
+    // 600ms Tension Gap
+    await new Promise(r => setTimeout(r, 600));
+
+    // Phase 2: Spin Slot 2
+    if (card2) card2.classList.add("border-sky-400", "shadow-[0_0_30px_rgba(56,189,248,0.3)]");
+    const candidatePool2 = candidateNames.filter(n => n !== (p1 ? p1.player_name : ""));
+    await runSlotReel(name2El, avatar2, candidatePool2.length ? candidatePool2 : candidateNames, avatars, p2 ? p2.player_name : m.status === "bye" ? "BYE" : "TBD");
+    if (tag2El) tag2El.textContent = p2?.gamertag ? `(${p2.gamertag})` : m.status === "bye" ? "Advances" : "Locked In";
+    playLdcLockChime();
+
+    // Fanfare & Match Set celebration!
+    playLdcFanfare();
+    const confirmedBadge = document.getElementById("ldc-badge-confirmed");
+    if (confirmedBadge) {
+      confirmedBadge.style.opacity = "1";
+      confirmedBadge.className = "text-[10px] font-black tracking-wider uppercase text-emerald-400 mt-2 transition-opacity animate-bounce";
+    }
+
+    // Append to tape
+    addMatchToLdcTape(m, p1, p2);
+
+    ldcCurrentIndex++;
+    const countEl = document.getElementById("ldc-revealed-count");
+    if (countEl) countEl.textContent = ldcCurrentIndex;
+
+    ldcIsSpinning = false;
+    if (spinBtn) spinBtn.disabled = false;
+
+    // Ready for next match
+    setTimeout(() => {
+      resetLdcStageForCurrentMatch();
+    }, 1600);
+  }
+
+  function runSlotReel(textEl, avatarEl, names, avatars, finalName) {
+    return new Promise(resolve => {
+      let speed = 40;
+      let count = 0;
+      const totalSteps = 28;
+
+      function step() {
+        count++;
+        playLdcTick();
+        const randName = names[Math.floor(Math.random() * names.length)];
+        const randAvatar = avatars[Math.floor(Math.random() * avatars.length)];
+        if (textEl) textEl.textContent = randName;
+        if (avatarEl) avatarEl.textContent = randAvatar;
+
+        // Decelerate gradually
+        if (count > 16) speed += 25;
+        if (count > 22) speed += 45;
+
+        if (count >= totalSteps) {
+          if (textEl) textEl.textContent = finalName;
+          if (avatarEl) avatarEl.textContent = "⭐";
+          resolve();
+        } else {
+          setTimeout(step, speed);
+        }
+      }
+      step();
+    });
+  }
+
+  function addMatchToLdcTape(m, p1, p2) {
+    const tape = document.getElementById("ldc-fixtures-tape");
+    if (!tape) return;
+    const card = document.createElement("div");
+    card.className = "rounded-xl border border-slate-800 bg-[#0d131e] p-2.5 text-xs animate-fadeIn";
+    card.innerHTML = `
+      <div class="flex justify-between text-[10px] text-slate-500 font-mono mb-1">
+        <span>MATCH ${m.match_number}</span>
+        <span class="text-[#d8ff45]">SET</span>
+      </div>
+      <div class="font-bold text-slate-200 truncate">${p1 ? esc(p1.player_name) : "TBD"}</div>
+      <div class="text-[10px] text-slate-500 font-mono">VS</div>
+      <div class="font-bold text-slate-200 truncate">${p2 ? esc(p2.player_name) : m.status === "bye" ? "BYE" : "TBD"}</div>
+    `;
+    tape.prepend(card);
+  }
+
+  // Live Draw Ceremony controls
+  document.getElementById("td-live-draw-ceremony")?.addEventListener("click", openLiveDrawCeremony);
+  document.getElementById("live-draw-ceremony-close")?.addEventListener("click", () => {
+    if (ldcAutoPlayTimer) { clearInterval(ldcAutoPlayTimer); ldcAutoPlayTimer = null; }
+    closeModal("live-draw-ceremony-modal");
+  });
+  document.getElementById("ldc-reset-ceremony-btn")?.addEventListener("click", () => {
+    if (ldcAutoPlayTimer) { clearInterval(ldcAutoPlayTimer); ldcAutoPlayTimer = null; }
+    ldcCurrentIndex = 0;
+    const tape = document.getElementById("ldc-fixtures-tape");
+    if (tape) tape.innerHTML = "";
+    resetLdcStageForCurrentMatch();
+  });
+  document.getElementById("ldc-sound-toggle")?.addEventListener("click", () => {
+    ldcSoundOn = !ldcSoundOn;
+    const icon = document.getElementById("ldc-sound-icon");
+    const btn = document.getElementById("ldc-sound-toggle");
+    if (btn) {
+      btn.innerHTML = ldcSoundOn
+        ? '<i data-lucide="volume-2" width="14" height="14"></i><span class="hidden sm:inline">SFX: ON</span>'
+        : '<i data-lucide="volume-x" width="14" height="14"></i><span class="hidden sm:inline">SFX: OFF</span>';
+      if (window.lucide) lucide.createIcons({ nodes: [btn] });
+    }
+  });
+  document.getElementById("ldc-fullscreen-btn")?.addEventListener("click", () => {
+    const modal = document.getElementById("live-draw-ceremony-modal");
+    if (!document.fullscreenElement) {
+      modal?.requestFullscreen?.().catch(() => {});
+    } else {
+      document.exitFullscreen?.().catch(() => {});
+    }
+  });
+  document.getElementById("ldc-autoplay-btn")?.addEventListener("click", () => {
+    if (ldcAutoPlayTimer) {
+      clearInterval(ldcAutoPlayTimer);
+      ldcAutoPlayTimer = null;
+      document.getElementById("ldc-autoplay-btn").innerHTML = '<i data-lucide="fast-forward" width="14" height="14"></i><span>Auto Reveal</span>';
+      if (window.lucide) lucide.createIcons();
+      showToast("Auto-reveal paused.");
+    } else {
+      document.getElementById("ldc-autoplay-btn").innerHTML = '<i data-lucide="pause" width="14" height="14"></i><span>Pause</span>';
+      if (window.lucide) lucide.createIcons();
+      showToast("Auto-reveal started.");
+      spinCurrentLdcMatch();
+      ldcAutoPlayTimer = setInterval(() => {
+        if (ldcCurrentIndex >= ldcCeremonyMatches.length) {
+          clearInterval(ldcAutoPlayTimer);
+          ldcAutoPlayTimer = null;
+          return;
+        }
+        if (!ldcIsSpinning) spinCurrentLdcMatch();
+      }, 4200);
+    }
+  });
+
+  // ── GRAPHICS DOWNLOAD: CANVAS STANDINGS & DRAW ────────────────────────────
+  function downloadStandingsGraphic() {
+    if (!currentTournament) return showToast("No tournament loaded.");
+    const confirmed = tPlayers.filter(p => p.status !== "registered");
+    if (!confirmed.length) return showToast("No confirmed standings to export.");
+
+    const canvas = document.createElement("canvas");
+    const width = 1080;
+    const rowHeight = 54;
+    const headerHeight = 320;
+    const footerHeight = 110;
+    const height = Math.max(1350, headerHeight + (confirmed.length * rowHeight) + footerHeight);
+
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+
+    // Background gradient
+    const bgGrad = ctx.createLinearGradient(0, 0, width, height);
+    bgGrad.addColorStop(0, "#080c14");
+    bgGrad.addColorStop(0.5, "#0d1320");
+    bgGrad.addColorStop(1, "#05080f");
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, width, height);
+
+    // Accent glow top right
+    const glow = ctx.createRadialGradient(width - 100, 100, 10, width - 100, 100, 450);
+    glow.addColorStop(0, "rgba(216,255,69,0.18)");
+    glow.addColorStop(1, "transparent");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, width, 600);
+
+    // Header Badge
+    ctx.fillStyle = "#d8ff45";
+    ctx.font = "bold 24px sans-serif";
+    ctx.fillText("CHILLPILL GAMING CAFE", 60, 80);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 16px monospace";
+    ctx.fillText("OFFICIAL TOURNAMENT STANDINGS", 60, 115);
+
+    // Tournament Name
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "900 48px sans-serif";
+    ctx.fillText(currentTournament.name || "EA FC Tournament", 60, 180);
+
+    // Subtitle & details
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "18px sans-serif";
+    const fmt = currentTournament.format === "knockout" ? "Direct Knockout" : "Group Stage";
+    const dateStr = currentTournament.start_date ? new Date(currentTournament.start_date).toLocaleDateString("en-IN", { dateStyle: "long" }) : "Live Season";
+    ctx.fillText(`Game: ${currentTournament.game || "EA FC"}  ·  Format: ${fmt}  ·  Date: ${dateStr}`, 60, 220);
+
+    // Table Header Bar
+    const tableTop = 270;
+    ctx.fillStyle = "#141c2c";
+    ctx.fillRect(50, tableTop, width - 100, 44);
+
+    ctx.fillStyle = "#d8ff45";
+    ctx.font = "bold 15px monospace";
+    ctx.fillText("#", 75, tableTop + 28);
+    ctx.fillText("PLAYER", 130, tableTop + 28);
+    ctx.fillText("STAGE / STATUS", 460, tableTop + 28);
+    ctx.fillText("P", 710, tableTop + 28);
+    ctx.fillText("W", 760, tableTop + 28);
+    ctx.fillText("L", 810, tableTop + 28);
+    ctx.fillText("GF", 860, tableTop + 28);
+    ctx.fillText("GA", 920, tableTop + 28);
+    ctx.fillText("GD", 980, tableTop + 28);
+
+    // Sort players
+    const sorted = [...confirmed].sort((a, b) => {
+      const getRank = (p) => (p.status === "winner" ? 0 : p.status === "runner_up" ? 1 : (p.wins > 0 && p.losses === 0) ? 2 : p.losses > 0 ? 4 : 3);
+      const diff = getRank(a) - getRank(b);
+      if (diff !== 0) return diff;
+      return (b.wins || 0) - (a.wins || 0);
+    });
+
+    // Render Rows
+    sorted.forEach((p, idx) => {
+      const y = tableTop + 44 + (idx * rowHeight);
+
+      // Alternating row background
+      if (idx % 2 === 0) {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.02)";
+        ctx.fillRect(50, y, width - 100, rowHeight);
+      }
+
+      // Rank or Medal
+      ctx.fillStyle = p.status === "winner" ? "#d8ff45" : "#94a3b8";
+      ctx.font = "bold 18px monospace";
+      ctx.fillText(p.status === "winner" ? "★" : String(idx + 1), 75, y + 34);
+
+      // Player Name
+      ctx.fillStyle = p.status === "winner" ? "#d8ff45" : "#ffffff";
+      ctx.font = "bold 18px sans-serif";
+      const name = p.player_name + (p.gamertag ? ` (${p.gamertag})` : "");
+      ctx.fillText(name.slice(0, 26), 130, y + 34);
+
+      // Progression
+      const prog = getKnockoutProgression(p);
+      ctx.fillStyle = prog.label.includes("Champion") ? "#d8ff45" : prog.label.includes("Runner-Up") ? "#38bdf8" : prog.label.includes("Knocked") ? "#f43f5e" : "#10b981";
+      ctx.font = "bold 15px sans-serif";
+      ctx.fillText(prog.label, 460, y + 34);
+
+      // Stats
+      ctx.fillStyle = "#cbd5e1";
+      ctx.font = "16px monospace";
+      const played = (p.wins || 0) + (p.losses || 0);
+      const gd = (p.goals_for || 0) - (p.goals_against || 0);
+      ctx.fillText(String(played), 710, y + 34);
+      ctx.fillText(String(p.wins || 0), 760, y + 34);
+      ctx.fillText(String(p.losses || 0), 810, y + 34);
+      ctx.fillText(String(p.goals_for || 0), 860, y + 34);
+      ctx.fillText(String(p.goals_against || 0), 920, y + 34);
+
+      ctx.fillStyle = gd > 0 ? "#10b981" : gd < 0 ? "#f43f5e" : "#94a3b8";
+      ctx.font = "bold 16px monospace";
+      ctx.fillText(gd > 0 ? `+${gd}` : String(gd), 980, y + 34);
+
+      // Row separator
+      ctx.strokeStyle = "rgba(51, 65, 85, 0.4)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(50, y + rowHeight);
+      ctx.lineTo(width - 50, y + rowHeight);
+      ctx.stroke();
+    });
+
+    // Footer Branding
+    const footY = height - 60;
+    ctx.fillStyle = "#d8ff45";
+    ctx.font = "bold 16px sans-serif";
+    ctx.fillText("ChillPill Gaming Cafe", 60, footY);
+
+    ctx.fillStyle = "#64748b";
+    ctx.font = "14px sans-serif";
+    ctx.fillText("📍 Budhanilkantha, Kathmandu  ·  WhatsApp: +977 9765130636  ·  www.chillpill.com.np", 280, footY);
+
+    // Download image
+    const filename = `${(currentTournament.name || "Tournament").replace(/\s+/g, "_")}_Standings.png`;
+    canvas.toBlob(blob => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      showToast("Standings graphic downloaded!");
+    });
+  }
+
+  function downloadDrawGraphic() {
+    if (!currentTournament) return showToast("No tournament loaded.");
+    if (!tMatches.length) return showToast("No fixtures generated yet to download.");
+
+    const canvas = document.createElement("canvas");
+    const width = 1200;
+    const rounds = [...new Set(tMatches.map(m => m.round_name))];
+    const height = Math.max(1200, 280 + (tMatches.length * 75) + (rounds.length * 60) + 100);
+
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+
+    // Dark Background
+    const bgGrad = ctx.createLinearGradient(0, 0, width, height);
+    bgGrad.addColorStop(0, "#080c14");
+    bgGrad.addColorStop(1, "#05080f");
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, width, height);
+
+    // Header
+    ctx.fillStyle = "#d8ff45";
+    ctx.font = "bold 24px sans-serif";
+    ctx.fillText("CHILLPILL GAMING CAFE", 60, 75);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "900 42px sans-serif";
+    ctx.fillText(`${currentTournament.name || "Tournament"} — Official Draw & Fixtures`, 60, 135);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "16px sans-serif";
+    ctx.fillText(`Game: ${currentTournament.game || "EA FC"}  ·  Venue: ChillPill Arena, Budhanilkantha`, 60, 175);
+
+    let curY = 230;
+
+    rounds.forEach(rn => {
+      const rMatches = tMatches.filter(m => m.round_name === rn);
+
+      // Round Banner
+      ctx.fillStyle = "rgba(216,255,69,0.12)";
+      ctx.fillRect(60, curY, width - 120, 36);
+      ctx.fillStyle = "#d8ff45";
+      ctx.font = "bold 16px monospace";
+      ctx.fillText(rn.toUpperCase(), 75, curY + 24);
+      curY += 50;
+
+      rMatches.forEach(m => {
+        const p1 = tPlayers.find(p => p.id === m.player1_id);
+        const p2 = tPlayers.find(p => p.id === m.player2_id);
+        const isDone = m.status === "completed";
+
+        ctx.fillStyle = isDone ? "rgba(216,255,69,0.04)" : "#101622";
+        ctx.strokeStyle = isDone ? "rgba(216,255,69,0.3)" : "#1e293b";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(60, curY, width - 120, 60, 12);
+        ctx.fill();
+        ctx.stroke();
+
+        // Match info
+        ctx.fillStyle = "#64748b";
+        ctx.font = "bold 13px monospace";
+        ctx.fillText(`MATCH ${m.match_number}`, 80, curY + 36);
+
+        // Player 1
+        ctx.fillStyle = m.winner_id === m.player1_id ? "#d8ff45" : "#ffffff";
+        ctx.font = m.winner_id === m.player1_id ? "bold 18px sans-serif" : "18px sans-serif";
+        ctx.fillText(p1 ? p1.player_name : "TBD", 220, curY + 36);
+
+        // Score / VS
+        ctx.fillStyle = isDone ? "#ffffff" : "#64748b";
+        ctx.font = "900 20px monospace";
+        const scoreText = isDone ? `${m.player1_score ?? 0}  -  ${m.player2_score ?? 0}` : "VS";
+        ctx.fillText(scoreText, 560, curY + 36);
+
+        // Player 2
+        ctx.fillStyle = m.winner_id === m.player2_id ? "#d8ff45" : "#ffffff";
+        ctx.font = m.winner_id === m.player2_id ? "bold 18px sans-serif" : "18px sans-serif";
+        ctx.fillText(p2 ? p2.player_name : m.status === "bye" ? "BYE" : "TBD", 720, curY + 36);
+
+        // Status badge
+        ctx.fillStyle = isDone ? "#d8ff45" : "#94a3b8";
+        ctx.font = "bold 12px monospace";
+        ctx.fillText(m.status.toUpperCase(), 1060, curY + 36);
+
+        curY += 72;
+      });
+
+      curY += 20;
+    });
+
+    // Footer
+    ctx.fillStyle = "#64748b";
+    ctx.font = "14px sans-serif";
+    ctx.fillText("ChillPill Gaming Cafe · Budhanilkantha, Kathmandu · WhatsApp: +977 9765130636", 60, height - 40);
+
+    const filename = `${(currentTournament.name || "Tournament").replace(/\s+/g, "_")}_Fixtures.png`;
+    canvas.toBlob(blob => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      showToast("Draw graphic downloaded!");
+    });
+  }
+
+  document.getElementById("td-download-standings")?.addEventListener("click", downloadStandingsGraphic);
+  document.getElementById("td-download-draw")?.addEventListener("click", downloadDrawGraphic);
+  document.getElementById("td-matches-download-btn")?.addEventListener("click", downloadDrawGraphic);
   window._fetchTournaments = fetchTournaments;
 
   // Allow homepage registration form to insert a player via site.js

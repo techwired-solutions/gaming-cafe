@@ -358,9 +358,14 @@
               <i data-lucide="bar-chart-2" width="22" height="22" class="text-[#d8ff45]"></i>
               <span>Standings &amp; Rankings</span>
             </h2>
-            <p class="text-xs text-slate-400 mt-0.5">Live points, goal difference, and qualification status.</p>
+            <p class="text-xs text-slate-400 mt-0.5">Live progression, goal difference, and tournament scores.</p>
           </div>
-          <span id="standings-format-label" class="text-xs font-bold px-3 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700 self-start sm:self-auto"></span>
+          <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+            <span id="standings-format-label" class="text-xs font-bold px-3 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700"></span>
+            <button id="pub-download-standings" type="button" class="btn-outline rounded-xl px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 cursor-pointer hover:border-[#d8ff45] hover:text-[#d8ff45]">
+              <i data-lucide="download" width="13" height="13"></i> <span>Download PNG</span>
+            </button>
+          </div>
         </div>
 
         <div id="standings-container" class="space-y-6">
@@ -378,6 +383,9 @@
             </h2>
             <p class="text-xs text-slate-400 mt-0.5">Follow live matches, stations, and round-by-round brackets.</p>
           </div>
+          <button id="pub-download-fixtures" type="button" class="btn-outline rounded-xl px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 cursor-pointer hover:border-[#d8ff45] hover:text-[#d8ff45] self-start sm:self-auto">
+            <i data-lucide="download" width="13" height="13"></i> <span>Download PNG</span>
+          </button>
         </div>
 
         <div id="fixtures-container" class="space-y-6">

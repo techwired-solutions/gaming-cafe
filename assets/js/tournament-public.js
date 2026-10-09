@@ -340,23 +340,46 @@
       formatLabel.textContent = t.format === "knockout" ? "Knockout Ladder" : "Group Stage Table";
     }
 
-    if (!players.length) {
+    function getPublicProgression(p) {
+      if (p.status === "winner") return { label: "🥇 Champion", cls: "text-[#d8ff45] font-black bg-[#d8ff45]/20 border border-[#d8ff45]/40" };
+      if (p.status === "runner_up") return { label: "🥈 Runner-Up", cls: "text-sky-300 font-bold bg-sky-500/20 border border-sky-500/40" };
+      if (p.losses > 0 || p.status === "eliminated") return { label: "❌ Knocked Out", cls: "text-rose-400 bg-rose-500/15 border border-rose-500/30" };
+      if (p.wins > 0 && p.losses === 0) return { label: "🔥 Advanced", cls: "text-emerald-400 font-bold bg-emerald-500/20 border border-emerald-500/40" };
+      return { label: "⏳ Active", cls: "text-slate-400 bg-slate-800 border border-slate-700" };
+    }
+
+    // RULE: Only show players that are confirmed (exclude unpaid/unconfirmed registered)
+    const confirmedPlayers = players.filter((p) => p.status !== "registered");
+
+    if (!confirmedPlayers.length) {
       container.innerHTML = `
         <div class="panel rounded-3xl p-10 text-center text-slate-500 italic">
           <i data-lucide="users" width="32" height="32" class="mx-auto mb-2 text-slate-600"></i>
-          No players registered yet.
+          No confirmed players yet. Confirmations are underway!
         </div>`;
       return;
     }
 
     if (t.format === "knockout") {
-      const sorted = [...players].sort((a, b) => {
-        const rank = (p) => (p.status === "winner" ? 0 : p.status === "runner_up" ? 1 : p.status === "eliminated" ? 3 : 2);
-        return rank(a) - rank(b) || b.wins - a.wins;
+      const sorted = [...confirmedPlayers].sort((a, b) => {
+        const getRank = (p) => {
+          if (p.status === "winner") return 0;
+          if (p.status === "runner_up") return 1;
+          if (p.wins > 0 && p.losses === 0) return 2; // Alive & advanced
+          if (p.losses > 0 || p.status === "eliminated") return 4; // Knocked out
+          return 3; // 0 matches played yet
+        };
+        const rankDiff = getRank(a) - getRank(b);
+        if (rankDiff !== 0) return rankDiff;
+        if (b.wins !== a.wins) return b.wins - a.wins;
+        const gdA = (a.goals_for || 0) - (a.goals_against || 0);
+        const gdB = (b.goals_for || 0) - (b.goals_against || 0);
+        if (gdB !== gdA) return gdB - gdA;
+        return (b.goals_for || 0) - (a.goals_for || 0);
       });
       container.innerHTML = renderStandingsTable(sorted, false);
     } else {
-      const groups = [...new Set(players.map((p) => p.group_name).filter(Boolean))].sort();
+      const groups = [...new Set(confirmedPlayers.map((p) => p.group_name).filter(Boolean))].sort();
       if (!groups.length) {
         container.innerHTML = `
           <div class="panel rounded-3xl p-8 text-center text-slate-400">
@@ -369,11 +392,14 @@
 
       container.innerHTML = groups
         .map((g) => {
-          const groupPlayers = [...players.filter((p) => p.group_name === g)].sort(
-            (a, b) =>
-              b.points !== a.points
-                ? b.points - a.points
-                : b.goals_for - b.goals_against - (a.goals_for - a.goals_against)
+          const groupPlayers = [...confirmedPlayers.filter((p) => p.group_name === g)].sort(
+            (a, b) => {
+              if (b.points !== a.points) return b.points - a.points;
+              const gdA = (a.goals_for || 0) - (a.goals_against || 0);
+              const gdB = (b.goals_for || 0) - (b.goals_against || 0);
+              if (gdB !== gdA) return gdB - gdA;
+              return (b.goals_for || 0) - (a.goals_for || 0);
+            }
           );
           return `
             <div class="space-y-3">
@@ -389,30 +415,41 @@
   }
 
   function renderStandingsTable(players, isGroups) {
+    // In knockout: NO raw status ("confirmed") shown! Instead show Stage Progression, P, W, L, GF, GA, GD.
     const cols = isGroups
-      ? "grid-cols-[1fr_auto_auto_auto_auto_auto_auto]"
-      : "grid-cols-[1fr_auto_auto]";
+      ? "grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto]"
+      : "grid-cols-[1.5fr_1.2fr_auto_auto_auto_auto_auto_auto]";
 
     return `
       <div class="panel rounded-2xl overflow-hidden border border-slate-700/60 shadow-md">
         <div class="grid ${cols} text-[11px] text-slate-400 font-semibold px-4 py-2.5 bg-[#0f1520] border-b border-slate-700/60 gap-3">
           <span>Player</span>
-          ${
-            isGroups
-              ? `<span class="text-center w-8">P</span>
-                 <span class="text-center w-8">W</span>
-                 <span class="text-center w-8">D</span>
-                 <span class="text-center w-8">L</span>
-                 <span class="text-center w-10">GD</span>
-                 <span class="text-center w-10 text-[#d8ff45] font-bold">Pts</span>`
-              : `<span class="text-center w-14">Wins</span><span class="w-24 text-right">Status</span>`
-          }
+          ${isGroups ? "" : "<span>Stage Progression</span>"}
+          <span class="text-center w-8">P</span>
+          <span class="text-center w-8">W</span>
+          ${isGroups ? "<span class='text-center w-8'>D</span>" : ""}
+          <span class="text-center w-8">L</span>
+          <span class="text-center w-9">GF</span>
+          <span class="text-center w-9">GA</span>
+          <span class="text-center w-10">GD</span>
+          ${isGroups ? "<span class='text-center w-10 text-[#d8ff45] font-bold'>Pts</span>" : ""}
         </div>
         <div class="divide-y divide-slate-800/80 text-xs sm:text-sm">
           ${players
             .map((p, i) => {
               const isWinner = p.status === "winner";
               const isAdvancing = isGroups && i < 2;
+              const isKnockout = !isGroups;
+              const prog = isKnockout ? (function() {
+                if (p.status === "winner") return { label: "🥇 Champion", cls: "text-[#d8ff45] font-black bg-[#d8ff45]/20 border border-[#d8ff45]/40" };
+                if (p.status === "runner_up") return { label: "🥈 Runner-Up", cls: "text-sky-300 font-bold bg-sky-500/20 border border-sky-500/40" };
+                if (p.losses > 0 || p.status === "eliminated") return { label: "❌ Knocked Out", cls: "text-rose-400 bg-rose-500/15 border border-rose-500/30" };
+                if (p.wins > 0 && p.losses === 0) return { label: "🔥 Advanced", cls: "text-emerald-400 font-bold bg-emerald-500/20 border border-emerald-500/40" };
+                return { label: "⏳ Active", cls: "text-slate-400 bg-slate-800 border border-slate-700" };
+              })() : null;
+              const played = (p.wins || 0) + (p.draws || 0) + (p.losses || 0);
+              const gd = (p.goals_for || 0) - (p.goals_against || 0);
+
               return `
                 <div class="grid ${cols} px-4 py-3 items-center gap-3 ${
                 isWinner ? "bg-[#d8ff45]/10" : isAdvancing ? "bg-sky-500/5" : ""
@@ -430,21 +467,25 @@
                       </p>
                     </div>
                   </div>
-                  ${
-                    isGroups
-                      ? `<span class="text-center text-slate-400 w-8">${p.wins + p.draws + p.losses}</span>
-                         <span class="text-center text-slate-300 w-8 font-semibold">${p.wins}</span>
-                         <span class="text-center text-slate-400 w-8">${p.draws}</span>
-                         <span class="text-center text-slate-400 w-8">${p.losses}</span>
-                         <span class="text-center text-slate-400 w-10 mono">${
-                           p.goals_for - p.goals_against > 0 ? "+" : ""
-                         }${p.goals_for - p.goals_against}</span>
-                         <span class="text-center font-bold text-[#d8ff45] w-10 mono text-sm">${p.points}</span>`
-                      : `<span class="text-center font-bold text-slate-200 w-14">${p.wins}</span>
-                         <span class="text-right capitalize text-xs font-semibold ${
-                           isWinner ? "text-[#d8ff45]" : "text-slate-400"
-                         } w-24">${p.status}</span>`
-                  }
+
+                  ${isKnockout ? `
+                    <div>
+                      <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full inline-block ${prog.cls}">
+                        ${prog.label}
+                      </span>
+                    </div>
+                  ` : ""}
+
+                  <span class="text-center text-slate-400 w-8 font-mono">${played}</span>
+                  <span class="text-center text-slate-200 w-8 font-bold font-mono">${p.wins || 0}</span>
+                  ${isGroups ? `<span class="text-center text-slate-400 w-8 font-mono">${p.draws || 0}</span>` : ""}
+                  <span class="text-center text-slate-400 w-8 font-mono">${p.losses || 0}</span>
+                  <span class="text-center text-slate-300 w-9 font-mono">${p.goals_for || 0}</span>
+                  <span class="text-center text-slate-400 w-9 font-mono">${p.goals_against || 0}</span>
+                  <span class="text-center font-mono w-10 font-bold ${gd > 0 ? "text-emerald-400" : gd < 0 ? "text-rose-400" : "text-slate-400"}">
+                    ${gd > 0 ? `+${gd}` : gd}
+                  </span>
+                  ${isGroups ? `<span class="text-center font-bold text-[#d8ff45] w-10 font-mono">${p.points || 0}</span>` : ""}
                 </div>`;
             })
             .join("")}
@@ -467,6 +508,7 @@
       return;
     }
 
+    const isKnockout = t.format === "knockout";
     const rounds = [...new Set(matches.map((m) => m.round_name))];
 
     container.innerHTML = rounds
@@ -479,7 +521,7 @@
                 <i data-lucide="flag" width="14" height="14"></i>
                 <span>${esc(rn)}</span>
               </h3>
-              <span class="text-xs text-slate-500">${roundMatches.length} Matches</span>
+              <span class="text-xs text-slate-500 font-mono">${roundMatches.length} Matches</span>
             </div>
             <div class="grid sm:grid-cols-2 gap-3">
               ${roundMatches
@@ -489,18 +531,20 @@
                   const isDone = m.status === "completed";
                   const p1Won = isDone && m.winner_id === m.player1_id;
                   const p2Won = isDone && m.winner_id === m.player2_id;
-                  const sched = m.scheduled_at
-                    ? new Date(m.scheduled_at).toLocaleTimeString("en-IN", {
-                        hour: "2-digit",
-                        minute: "2-digit"
-                      })
-                    : "";
+
+                  // Knockout matches: tournament completes in one day, only display time!
+                  let sched = "Time TBD";
+                  if (m.scheduled_at) {
+                    sched = isKnockout
+                      ? new Date(m.scheduled_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
+                      : new Date(m.scheduled_at).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" });
+                  }
 
                   return `
                     <div class="panel rounded-2xl p-4 border border-slate-700/60 hover:border-slate-600 transition flex flex-col justify-between">
                       <div class="flex items-center justify-between text-[11px] text-slate-400 mb-2.5">
-                        <span class="font-bold text-sky-400">${esc(m.station_name || "PS5 Cabin")}</span>
-                        <span>${sched || m.status}</span>
+                        <span class="font-bold text-sky-400">${esc(m.station_name || "PS5 Arena")}</span>
+                        <span class="font-mono text-slate-400">&#128336; ${sched}</span>
                       </div>
                       <div class="space-y-2">
                         <div class="flex items-center justify-between gap-2 p-2 rounded-xl ${
@@ -631,9 +675,254 @@
       </div>`;
   }
 
+  // ── GRAPHICS DOWNLOAD: CANVAS EXPORTER ────────────────────────────────────
+  function downloadPublicStandings() {
+    if (!currentTournament) return;
+    const confirmed = tournamentPlayers.filter((p) => p.status !== "registered");
+    if (!confirmed.length) return alert("No confirmed standings to export yet.");
+
+    const canvas = document.createElement("canvas");
+    const width = 1080;
+    const rowHeight = 54;
+    const headerHeight = 320;
+    const footerHeight = 110;
+    const height = Math.max(1350, headerHeight + confirmed.length * rowHeight + footerHeight);
+
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+
+    // Background gradient
+    const bgGrad = ctx.createLinearGradient(0, 0, width, height);
+    bgGrad.addColorStop(0, "#080c14");
+    bgGrad.addColorStop(0.5, "#0d1320");
+    bgGrad.addColorStop(1, "#05080f");
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, width, height);
+
+    // Header Accent Glow
+    const glow = ctx.createRadialGradient(width - 100, 100, 10, width - 100, 100, 450);
+    glow.addColorStop(0, "rgba(216,255,69,0.18)");
+    glow.addColorStop(1, "transparent");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, width, 600);
+
+    // Header Branding
+    ctx.fillStyle = "#d8ff45";
+    ctx.font = "bold 24px sans-serif";
+    ctx.fillText("CHILLPILL GAMING CAFE", 60, 80);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 16px monospace";
+    ctx.fillText("OFFICIAL TOURNAMENT STANDINGS", 60, 115);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "900 48px sans-serif";
+    ctx.fillText(currentTournament.name || "EA FC Tournament", 60, 180);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "18px sans-serif";
+    const fmt = currentTournament.format === "knockout" ? "Direct Knockout" : "Group Stage";
+    const dateStr = currentTournament.start_date
+      ? new Date(currentTournament.start_date).toLocaleDateString("en-IN", { dateStyle: "long" })
+      : "Live Season";
+    ctx.fillText(`Game: ${currentTournament.game || "EA FC"}  ·  Format: ${fmt}  ·  Date: ${dateStr}`, 60, 220);
+
+    // Table Header Bar
+    const tableTop = 270;
+    ctx.fillStyle = "#141c2c";
+    ctx.fillRect(50, tableTop, width - 100, 44);
+
+    ctx.fillStyle = "#d8ff45";
+    ctx.font = "bold 15px monospace";
+    ctx.fillText("#", 75, tableTop + 28);
+    ctx.fillText("PLAYER", 130, tableTop + 28);
+    ctx.fillText("STAGE / STATUS", 460, tableTop + 28);
+    ctx.fillText("P", 710, tableTop + 28);
+    ctx.fillText("W", 760, tableTop + 28);
+    ctx.fillText("L", 810, tableTop + 28);
+    ctx.fillText("GF", 860, tableTop + 28);
+    ctx.fillText("GA", 920, tableTop + 28);
+    ctx.fillText("GD", 980, tableTop + 28);
+
+    // Sort players
+    const sorted = [...confirmed].sort((a, b) => {
+      const getRank = (p) => (p.status === "winner" ? 0 : p.status === "runner_up" ? 1 : p.wins > 0 && p.losses === 0 ? 2 : p.losses > 0 ? 4 : 3);
+      const diff = getRank(a) - getRank(b);
+      if (diff !== 0) return diff;
+      return (b.wins || 0) - (a.wins || 0);
+    });
+
+    sorted.forEach((p, idx) => {
+      const y = tableTop + 44 + idx * rowHeight;
+
+      if (idx % 2 === 0) {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.02)";
+        ctx.fillRect(50, y, width - 100, rowHeight);
+      }
+
+      ctx.fillStyle = p.status === "winner" ? "#d8ff45" : "#94a3b8";
+      ctx.font = "bold 18px monospace";
+      ctx.fillText(p.status === "winner" ? "★" : String(idx + 1), 75, y + 34);
+
+      ctx.fillStyle = p.status === "winner" ? "#d8ff45" : "#ffffff";
+      ctx.font = "bold 18px sans-serif";
+      const name = p.player_name + (p.gamertag ? ` (${p.gamertag})` : "");
+      ctx.fillText(name.slice(0, 26), 130, y + 34);
+
+      const prog = (function () {
+        if (p.status === "winner") return "🥇 Champion";
+        if (p.status === "runner_up") return "🥈 Runner-Up";
+        if (p.losses > 0 || p.status === "eliminated") return "❌ Knocked Out";
+        if (p.wins > 0 && p.losses === 0) return "🔥 Advanced";
+        return "⏳ Active";
+      })();
+
+      ctx.fillStyle = prog.includes("Champion") ? "#d8ff45" : prog.includes("Runner-Up") ? "#38bdf8" : prog.includes("Knocked") ? "#f43f5e" : "#10b981";
+      ctx.font = "bold 15px sans-serif";
+      ctx.fillText(prog, 460, y + 34);
+
+      ctx.fillStyle = "#cbd5e1";
+      ctx.font = "16px monospace";
+      const played = (p.wins || 0) + (p.losses || 0);
+      const gd = (p.goals_for || 0) - (p.goals_against || 0);
+      ctx.fillText(String(played), 710, y + 34);
+      ctx.fillText(String(p.wins || 0), 760, y + 34);
+      ctx.fillText(String(p.losses || 0), 810, y + 34);
+      ctx.fillText(String(p.goals_for || 0), 860, y + 34);
+      ctx.fillText(String(p.goals_against || 0), 920, y + 34);
+
+      ctx.fillStyle = gd > 0 ? "#10b981" : gd < 0 ? "#f43f5e" : "#94a3b8";
+      ctx.font = "bold 16px monospace";
+      ctx.fillText(gd > 0 ? `+${gd}` : String(gd), 980, y + 34);
+
+      ctx.strokeStyle = "rgba(51, 65, 85, 0.4)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(50, y + rowHeight);
+      ctx.lineTo(width - 50, y + rowHeight);
+      ctx.stroke();
+    });
+
+    const footY = height - 60;
+    ctx.fillStyle = "#d8ff45";
+    ctx.font = "bold 16px sans-serif";
+    ctx.fillText("ChillPill Gaming Cafe", 60, footY);
+
+    ctx.fillStyle = "#64748b";
+    ctx.font = "14px sans-serif";
+    ctx.fillText("📍 Budhanilkantha, Kathmandu  ·  WhatsApp: +977 9765130636  ·  www.chillpill.com.np", 280, footY);
+
+    const filename = `${(currentTournament.name || "Tournament").replace(/\s+/g, "_")}_Standings.png`;
+    canvas.toBlob((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+    });
+  }
+
+  function downloadPublicFixtures() {
+    if (!currentTournament) return;
+    if (!tournamentMatches.length) return alert("No fixtures generated yet to download.");
+
+    const canvas = document.createElement("canvas");
+    const width = 1200;
+    const rounds = [...new Set(tournamentMatches.map((m) => m.round_name))];
+    const height = Math.max(1200, 280 + tournamentMatches.length * 75 + rounds.length * 60 + 100);
+
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+
+    const bgGrad = ctx.createLinearGradient(0, 0, width, height);
+    bgGrad.addColorStop(0, "#080c14");
+    bgGrad.addColorStop(1, "#05080f");
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.fillStyle = "#d8ff45";
+    ctx.font = "bold 24px sans-serif";
+    ctx.fillText("CHILLPILL GAMING CAFE", 60, 75);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "900 42px sans-serif";
+    ctx.fillText(`${currentTournament.name || "Tournament"} — Official Draw & Fixtures`, 60, 135);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "16px sans-serif";
+    ctx.fillText(`Game: ${currentTournament.game || "EA FC"}  ·  Venue: ChillPill Arena, Budhanilkantha`, 60, 175);
+
+    let curY = 230;
+
+    rounds.forEach((rn) => {
+      const rMatches = tournamentMatches.filter((m) => m.round_name === rn);
+
+      ctx.fillStyle = "rgba(216,255,69,0.12)";
+      ctx.fillRect(60, curY, width - 120, 36);
+      ctx.fillStyle = "#d8ff45";
+      ctx.font = "bold 16px monospace";
+      ctx.fillText(rn.toUpperCase(), 75, curY + 24);
+      curY += 50;
+
+      rMatches.forEach((m) => {
+        const p1 = tournamentPlayers.find((p) => p.id === m.player1_id);
+        const p2 = tournamentPlayers.find((p) => p.id === m.player2_id);
+        const isDone = m.status === "completed";
+
+        ctx.fillStyle = isDone ? "rgba(216,255,69,0.04)" : "#101622";
+        ctx.strokeStyle = isDone ? "rgba(216,255,69,0.3)" : "#1e293b";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(60, curY, width - 120, 60, 12);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "#64748b";
+        ctx.font = "bold 13px monospace";
+        ctx.fillText(`MATCH ${m.match_number}`, 80, curY + 36);
+
+        ctx.fillStyle = m.winner_id === m.player1_id ? "#d8ff45" : "#ffffff";
+        ctx.font = m.winner_id === m.player1_id ? "bold 18px sans-serif" : "18px sans-serif";
+        ctx.fillText(p1 ? p1.player_name : "TBD", 220, curY + 36);
+
+        ctx.fillStyle = isDone ? "#ffffff" : "#64748b";
+        ctx.font = "900 20px monospace";
+        const scoreText = isDone ? `${m.player1_score ?? 0}  -  ${m.player2_score ?? 0}` : "VS";
+        ctx.fillText(scoreText, 560, curY + 36);
+
+        ctx.fillStyle = m.winner_id === m.player2_id ? "#d8ff45" : "#ffffff";
+        ctx.font = m.winner_id === m.player2_id ? "bold 18px sans-serif" : "18px sans-serif";
+        ctx.fillText(p2 ? p2.player_name : m.status === "bye" ? "BYE" : "TBD", 720, curY + 36);
+
+        ctx.fillStyle = isDone ? "#d8ff45" : "#94a3b8";
+        ctx.font = "bold 12px monospace";
+        ctx.fillText(m.status.toUpperCase(), 1060, curY + 36);
+
+        curY += 72;
+      });
+
+      curY += 20;
+    });
+
+    ctx.fillStyle = "#64748b";
+    ctx.font = "14px sans-serif";
+    ctx.fillText("ChillPill Gaming Cafe · Budhanilkantha, Kathmandu · WhatsApp: +977 9765130636", 60, height - 40);
+
+    const filename = `${(currentTournament.name || "Tournament").replace(/\s+/g, "_")}_Fixtures.png`;
+    canvas.toBlob((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+    });
+  }
+
   // ── INIT ──────────────────────────────────────────────────────────────────
   document.addEventListener("DOMContentLoaded", () => {
     setupTabs();
     loadTournamentHub();
+    document.getElementById("pub-download-standings")?.addEventListener("click", downloadPublicStandings);
+    document.getElementById("pub-download-fixtures")?.addEventListener("click", downloadPublicFixtures);
   });
 })();
