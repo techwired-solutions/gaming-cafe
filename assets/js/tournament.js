@@ -571,6 +571,8 @@
   }
 
   // ── REGISTRATIONS TAB ────────────────────────────────────────────────────
+  let regFilter = "all"; // "all" | "confirmed" | "registered"
+
   function renderRegistrationsTab() {
     const list = document.getElementById("td-registrations-list");
     const empty = document.getElementById("td-reg-empty");
@@ -580,39 +582,48 @@
 
     const total = tPlayers.length;
     const confirmed = tPlayers.filter(p => p.status === "confirmed").length;
+    const unpaid = tPlayers.filter(p => p.status === "registered").length;
     const maxSlots = currentTournament?.max_players || 16;
     if (count) count.textContent = `(${total})`;
-    if (summary) summary.textContent = `${total} registered · ${confirmed} confirmed · ${maxSlots - total} slots remaining`;
+    if (summary) {
+      summary.innerHTML = `<span class="font-bold text-white">${total}</span> registered &middot; <span class="font-bold text-green-400">${confirmed} / ${maxSlots}</span> paid &amp; confirmed &middot; <span class="font-bold text-[#d8ff45]">${Math.max(0, maxSlots - confirmed)}</span> slot${maxSlots - confirmed === 1 ? "" : "s"} open`;
+    }
 
     const search = (document.getElementById("td-reg-search")?.value || "").toLowerCase();
-    const filtered = tPlayers.filter(p =>
-      !search ||
-      p.player_name.toLowerCase().includes(search) ||
-      (p.gamertag || "").toLowerCase().includes(search) ||
-      (p.phone || "").includes(search)
-    );
+    const filtered = tPlayers.filter(p => {
+      if (regFilter === "confirmed" && p.status !== "confirmed") return false;
+      if (regFilter === "registered" && p.status !== "registered") return false;
+      return (
+        !search ||
+        p.player_name.toLowerCase().includes(search) ||
+        (p.gamertag || "").toLowerCase().includes(search) ||
+        (p.phone || "").includes(search)
+      );
+    });
 
     if (empty) empty.classList.toggle("hidden", filtered.length > 0);
     if (!filtered.length) { list.innerHTML = ""; return; }
 
     list.innerHTML = filtered.map((p, i) => `
-      <div class="grid grid-cols-[auto_1fr_auto_auto_auto] gap-3 px-4 py-3 items-center text-sm">
+      <div class="grid grid-cols-[auto_1fr_auto_auto_auto] gap-3 px-4 py-3 items-center text-sm ${p.status === "confirmed" ? "bg-green-500/[0.04]" : ""}">
         <span class="text-slate-500 text-xs mono w-5 text-right">${i + 1}</span>
         <div class="min-w-0">
-          <p class="font-semibold truncate">${esc(p.player_name)}${p.gamertag ? ` <span class="text-xs text-slate-500 font-normal">(${esc(p.gamertag)})</span>` : ""}</p>
+          <p class="font-semibold truncate">${esc(p.player_name)}${p.gamertag ? ` <span class="text-xs text-slate-400 font-normal">(${esc(p.gamertag)})</span>` : ""}</p>
           <p class="text-xs text-slate-400 truncate">${esc(p.phone)}${p.group_name ? ` &middot; Grp ${esc(p.group_name)}` : ""}${p.team_name ? ` &middot; ${esc(p.team_name)}` : ""}</p>
         </div>
-        <span class="text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-          p.status === "confirmed" ? "bg-green-500/20 text-green-300" :
-          p.status === "eliminated" ? "bg-red-500/10 text-red-400" :
-          p.status === "winner" ? "bg-[#d8ff45]/20 text-[#d8ff45]" :
-          p.status === "runner_up" ? "bg-sky-500/20 text-sky-300" :
-          "bg-slate-700 text-slate-400"}">${p.status}</span>
-        <div class="flex gap-1 shrink-0">
-          ${p.status === "registered" ? `<button class="confirm-player-btn text-[11px] font-bold text-green-300 border border-green-500/40 rounded-lg px-2 py-1 hover:bg-green-500/10 transition" data-pid="${p.id}">Confirm</button>` : ""}
-          ${p.status === "confirmed" ? `<button class="revoke-player-btn text-[11px] font-bold text-amber-300 border border-amber-500/40 rounded-lg px-2 py-1 hover:bg-amber-500/10 transition" data-pid="${p.id}" title="Revert to registered">Revoke</button>` : ""}
+        <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full shrink-0 ${
+          p.status === "confirmed" ? "bg-green-500/20 text-green-300 border border-green-500/40" :
+          p.status === "eliminated" ? "bg-red-500/10 text-red-400 border border-red-500/30" :
+          p.status === "winner" ? "bg-[#d8ff45]/20 text-[#d8ff45] border border-[#d8ff45]/40" :
+          p.status === "runner_up" ? "bg-sky-500/20 text-sky-300 border border-sky-500/40" :
+          "bg-amber-500/15 text-amber-300 border border-amber-500/30"}">
+          ${p.status === "confirmed" ? "✓ Paid / Confirmed" : p.status === "registered" ? "Unpaid (Registered)" : p.status}
+        </span>
+        <div class="flex gap-1.5 shrink-0">
+          ${p.status === "registered" ? `<button class="confirm-player-btn text-[11px] font-bold text-green-300 bg-green-500/10 border border-green-500/40 rounded-lg px-2.5 py-1 hover:bg-green-500/20 transition cursor-pointer flex items-center gap-1" data-pid="${p.id}" title="Mark entry fee paid & confirm tournament slot">✓ Confirm Paid</button>` : ""}
+          ${p.status === "confirmed" ? `<button class="revoke-player-btn text-[11px] font-bold text-amber-300 border border-amber-500/40 rounded-lg px-2.5 py-1 hover:bg-amber-500/10 transition cursor-pointer" data-pid="${p.id}" title="Revert to unpaid registered">Revoke</button>` : ""}
         </div>
-        <button class="remove-player-btn text-slate-500 hover:text-red-300 transition text-xl leading-none shrink-0" data-pid="${p.id}" title="Remove">&#215;</button>
+        <button class="remove-player-btn text-slate-500 hover:text-red-300 transition text-xl leading-none shrink-0 cursor-pointer" data-pid="${p.id}" title="Remove">&#215;</button>
       </div>`).join("");
 
     list.querySelectorAll(".confirm-player-btn").forEach(btn =>
@@ -625,14 +636,34 @@
 
   document.getElementById("td-reg-search")?.addEventListener("input", renderRegistrationsTab);
 
+  document.querySelectorAll(".td-reg-filter-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      regFilter = btn.dataset.filter;
+      document.querySelectorAll(".td-reg-filter-btn").forEach(b => {
+        const active = b.dataset.filter === regFilter;
+        b.className = active
+          ? "td-reg-filter-btn active rounded-lg px-2.5 py-1 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45] transition cursor-pointer"
+          : "td-reg-filter-btn rounded-lg px-2.5 py-1 text-xs font-bold border border-transparent text-slate-400 hover:text-slate-200 transition cursor-pointer";
+      });
+      renderRegistrationsTab();
+    });
+  });
+
   async function updatePlayerStatus(pid, status) {
     if (!window.sb) return;
+    const maxSlots = currentTournament?.max_players || 16;
+    const confirmedCount = tPlayers.filter(p => p.status === "confirmed").length;
+    if (status === "confirmed" && confirmedCount >= maxSlots) {
+      if (!confirm(`Notice: All ${maxSlots} target slots are already filled by confirmed players (${confirmedCount} confirmed). Do you still want to confirm this player?`)) {
+        return;
+      }
+    }
     const { error } = await window.sb.from("tournament_players").update({ status }).eq("id", pid);
     if (error) return showToast("Error: " + error.message);
     const p = tPlayers.find(x => x.id === pid);
     if (p) p.status = status;
     renderRegistrationsTab();
-    showToast(`Player ${status}.`);
+    showToast(status === "confirmed" ? "Player marked as Paid & Confirmed!" : `Player status set to ${status}.`);
   }
 
   async function removePlayer(pid) {

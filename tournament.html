@@ -240,12 +240,16 @@
               <!-- Slots filled progress bar -->
               <div class="mb-6 bg-[#10141e] rounded-xl p-3.5 border border-slate-800">
                 <div class="flex items-center justify-between text-xs mb-1.5 font-medium">
-                  <span class="text-slate-400">Tournament Slots</span>
+                  <span class="text-slate-400">Confirmed Tournament Slots</span>
                   <span id="slots-bar-text" class="text-[#d8ff45] font-bold mono">0 of 16 filled</span>
                 </div>
                 <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
                   <div id="slots-progress" class="h-full bg-gradient-to-r from-sky-400 to-[#d8ff45] transition-all duration-300" style="width: 0%;"></div>
                 </div>
+                <p class="text-[11px] text-slate-400 mt-2 flex items-center gap-1.5">
+                  <span class="text-[#d8ff45]">⚡</span>
+                  <span>Open registration: Slots are confirmed on a <strong>first-paid, first-served</strong> basis upon entry fee payment.</span>
+                </p>
               </div>
 
               <!-- ACTIVE REGISTRATION FORM -->
@@ -282,7 +286,7 @@
                 <div class="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mx-auto mb-3 text-2xl">🔒</div>
                 <h3 class="text-lg font-bold mb-1">Registration is Closed</h3>
                 <p class="text-slate-400 text-xs max-w-sm mx-auto mb-4">
-                  All slots are currently filled or the registration deadline has passed. Matches are underway!
+                  Registration for this tournament is currently closed or matches are underway.
                 </p>
                 <a href="#tab-standings" class="btn-outline inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold tab-jump" data-target="tab-standings">
                   <i data-lucide="bar-chart-2" width="14" height="14"></i> View Standings &amp; Results

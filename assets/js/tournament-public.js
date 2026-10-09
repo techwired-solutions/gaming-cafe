@@ -183,7 +183,8 @@
     }
 
     if (slotsEl) {
-      slotsEl.textContent = `${players.length} / ${t.max_players || 16}`;
+      const confirmedCount = players.filter((p) => p.status === "confirmed").length;
+      slotsEl.textContent = `${confirmedCount} / ${t.max_players || 16} Confirmed (${players.length} reg)`;
     }
 
     if (startDateEl) {
@@ -203,13 +204,18 @@
     const overviewPrizes = document.getElementById("overview-prizes");
 
     const max = t.max_players || 16;
-    const count = players.length;
-    const pct = Math.min(100, Math.round((count / max) * 100));
+    const confirmedCount = players.filter((p) => p.status === "confirmed").length;
+    const totalCount = players.length;
+    const pct = Math.min(100, Math.round((confirmedCount / max) * 100));
 
-    if (slotsText) slotsText.textContent = `${count} of ${max} slots filled`;
+    if (slotsText) {
+      slotsText.textContent = `${confirmedCount} of ${max} confirmed slots (${totalCount} registered)`;
+    }
     if (progressEl) progressEl.style.width = `${pct}%`;
 
-    const isOpen = t.status === "registration_open" && count < max;
+    // Registration remains open based on status set by admin. Any number of players can register;
+    // slots are confirmed on a first-paid, first-served basis by the admin.
+    const isOpen = t.status === "registration_open";
 
     if (regStatusBadge) {
       regStatusBadge.textContent = isOpen ? "Open" : "Closed";
@@ -269,9 +275,8 @@
         return;
       }
 
-      // Check slot limit
-      if (players.length >= (t.max_players || 16)) {
-        msg.textContent = "Sorry, all slots are now filled! You can message admin on WhatsApp for waitlist.";
+      if (t.status !== "registration_open") {
+        msg.textContent = "Registration is currently closed for this tournament.";
         msg.className = "text-xs text-amber-400";
         return;
       }
@@ -308,7 +313,7 @@
 
         if (error) throw error;
 
-        msg.textContent = "🎉 Registration successful! See you at the arena. We'll message your match slot.";
+        msg.textContent = "🎉 Registration received! Priority slots are confirmed upon entry fee payment (first-paid, first-served). Pay at the cafe or message us on WhatsApp!";
         msg.className = "text-xs text-green-400 font-bold";
         submitLabel.textContent = "Registered ✓";
         form.reset();
