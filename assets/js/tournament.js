@@ -2035,6 +2035,136 @@
     });
   }
 
+  // ── BIG SCREEN / FULLSCREEN STANDINGS VIEW ───────────────────────────────
+  function openFullscreenStandings() {
+    if (!currentTournament) return showToast("No tournament loaded.");
+    const confirmed = tPlayers.filter(p => p.status !== "registered");
+    const container = document.getElementById("fsm-standings-view");
+    const titleEl = document.getElementById("fsm-title");
+    const subEl = document.getElementById("fsm-subtitle");
+    if (!container) return;
+
+    if (titleEl) titleEl.textContent = `${(currentTournament.name || "Tournament").toUpperCase()}`;
+    if (subEl) subEl.textContent = `${currentTournament.game || "EA FC"} · Official Standings · Projected View`;
+
+    if (!confirmed.length) {
+      container.innerHTML = '<p class="text-lg text-slate-400 italic text-center py-16">No confirmed players yet.</p>';
+      openModal("fullscreen-standings-modal");
+      return;
+    }
+
+    const isGroups = currentTournament.format !== "knockout";
+
+    if (!isGroups) {
+      const sorted = [...confirmed].sort((a, b) => {
+        const getRank = (p) => (p.status === "winner" ? 0 : p.status === "runner_up" ? 1 : (p.wins > 0 && p.losses === 0) ? 2 : p.losses > 0 ? 4 : 3);
+        const diff = getRank(a) - getRank(b);
+        if (diff !== 0) return diff;
+        if (b.wins !== a.wins) return (b.wins || 0) - (a.wins || 0);
+        const gdA = (a.goals_for || 0) - (a.goals_against || 0);
+        const gdB = (b.goals_for || 0) - (b.goals_against || 0);
+        if (gdB !== gdA) return gdB - gdA;
+        return (b.goals_for || 0) - (a.goals_for || 0);
+      });
+      container.innerHTML = renderBigScreenTable(sorted, false);
+    } else {
+      const groups = [...new Set(confirmed.map(p => p.group_name).filter(Boolean))].sort();
+      if (!groups.length) {
+        container.innerHTML = '<p class="text-lg text-slate-400 italic text-center py-16">Group draw not generated yet.</p>';
+      } else {
+        container.innerHTML = groups.map(g => {
+          const gp = [...confirmed.filter(p => p.group_name === g)].sort((a, b) => {
+            if (b.points !== a.points) return b.points - a.points;
+            const gdA = (a.goals_for || 0) - (a.goals_against || 0);
+            const gdB = (b.goals_for || 0) - (b.goals_against || 0);
+            if (gdB !== gdA) return gdB - gdA;
+            return (b.goals_for || 0) - (a.goals_for || 0);
+          });
+          return `<div class="mb-6"><p class="text-sm font-black text-[#d8ff45] uppercase tracking-wider mb-2">Group ${esc(g)}</p>${renderBigScreenTable(gp, true)}</div>`;
+        }).join("");
+      }
+    }
+
+    openModal("fullscreen-standings-modal");
+  }
+
+  function renderBigScreenTable(players, isGroups) {
+    const cols = isGroups
+      ? "grid-cols-[2fr_auto_auto_auto_auto_auto_auto_auto]"
+      : "grid-cols-[2.5fr_1.8fr_auto_auto_auto_auto_auto_auto]";
+
+    return `
+      <div class="panel rounded-3xl overflow-hidden border-2 border-slate-700/80 shadow-2xl bg-[#0c121d]">
+        <div class="grid ${cols} text-xs font-black uppercase tracking-wider px-6 py-3.5 bg-[#070b12] border-b border-slate-700 text-slate-400 gap-4">
+          <span>CONTENDER</span>
+          ${isGroups ? "" : "<span>STAGE PROGRESSION</span>"}
+          <span class="text-center w-10">P</span>
+          <span class="text-center w-10">W</span>
+          ${isGroups ? "<span class='text-center w-10'>D</span>" : ""}
+          <span class="text-center w-10">L</span>
+          <span class="text-center w-12">GF</span>
+          <span class="text-center w-12">GA</span>
+          <span class="text-center w-12">GD</span>
+          ${isGroups ? "<span class='text-center w-14 text-[#d8ff45] font-black'>PTS</span>" : ""}
+        </div>
+        <div class="divide-y divide-slate-800">
+          ${players.map((p, i) => {
+            const isWinner = p.status === "winner";
+            const isAdvancing = isGroups && i < 2;
+            const isKnockout = !isGroups;
+            const prog = isKnockout ? getKnockoutProgression(p) : null;
+            const played = (p.wins || 0) + (p.draws || 0) + (p.losses || 0);
+            const gd = (p.goals_for || 0) - (p.goals_against || 0);
+
+            return `
+              <div class="grid ${cols} px-6 py-4 items-center gap-4 ${
+                isWinner ? "bg-[#d8ff45]/15 font-black" : isAdvancing ? "bg-sky-500/10" : ""
+              }">
+                <div class="flex items-center gap-3 min-w-0">
+                  <span class="font-black text-sm shrink-0 ${isWinner ? "text-[#d8ff45]" : "text-slate-400"}">
+                    ${isWinner ? "🥇" : i === 0 && isGroups ? "▲" : `${i + 1}.`}
+                  </span>
+                  <div class="min-w-0 truncate">
+                    <p class="font-extrabold text-base sm:text-lg text-white truncate ${isWinner ? "text-[#d8ff45]" : ""}">${esc(p.player_name)}</p>
+                    ${p.gamertag ? `<p class="text-xs text-slate-400 font-mono truncate">@${esc(p.gamertag)}</p>` : ""}
+                  </div>
+                </div>
+
+                ${isKnockout ? `
+                  <div>
+                    <span class="text-xs font-black px-3 py-1 rounded-full inline-block ${prog.cls}">
+                      ${prog.label}
+                    </span>
+                  </div>
+                ` : ""}
+
+                <span class="text-center text-slate-300 w-10 font-mono text-sm">${played}</span>
+                <span class="text-center text-white font-black w-10 font-mono text-sm">${p.wins || 0}</span>
+                ${isGroups ? `<span class="text-center text-slate-400 w-10 font-mono text-sm">${p.draws || 0}</span>` : ""}
+                <span class="text-center text-slate-400 w-10 font-mono text-sm">${p.losses || 0}</span>
+                <span class="text-center text-slate-200 w-12 font-mono text-sm">${p.goals_for || 0}</span>
+                <span class="text-center text-slate-400 w-12 font-mono text-sm">${p.goals_against || 0}</span>
+                <span class="text-center font-mono w-12 font-black text-sm ${gd > 0 ? "text-emerald-400" : gd < 0 ? "text-rose-400" : "text-slate-400"}">
+                  ${gd > 0 ? `+${gd}` : gd}
+                </span>
+                ${isGroups ? `<span class="text-center font-black text-[#d8ff45] w-14 font-mono text-base">${p.points || 0}</span>` : ""}
+              </div>`;
+          }).join("")}
+        </div>
+      </div>`;
+  }
+
+  document.getElementById("td-fullscreen-standings")?.addEventListener("click", openFullscreenStandings);
+  document.getElementById("fullscreen-standings-close")?.addEventListener("click", () => closeModal("fullscreen-standings-modal"));
+  document.getElementById("fsm-toggle-fullscreen-btn")?.addEventListener("click", () => {
+    const modal = document.getElementById("fullscreen-standings-modal");
+    if (!document.fullscreenElement) {
+      modal?.requestFullscreen?.().catch(() => {});
+    } else {
+      document.exitFullscreen?.().catch(() => {});
+    }
+  });
+
   document.getElementById("td-download-standings")?.addEventListener("click", downloadStandingsGraphic);
   document.getElementById("td-download-draw")?.addEventListener("click", downloadDrawGraphic);
   document.getElementById("td-matches-download-btn")?.addEventListener("click", downloadDrawGraphic);

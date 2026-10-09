@@ -1463,9 +1463,14 @@
                   <h4 class="font-bold text-sm text-slate-200">Official Tournament Standings</h4>
                   <p class="text-xs text-slate-400">Only confirmed &amp; active players are shown.</p>
                 </div>
-                <button id="td-download-standings" type="button" class="rounded-xl px-3.5 py-1.5 text-xs font-bold border border-slate-600 text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] transition flex items-center gap-1.5 cursor-pointer">
-                  <i data-lucide="download" width="12" height="12"></i> Download Graphic (PNG)
-                </button>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <button id="td-fullscreen-standings" type="button" class="rounded-xl px-3.5 py-1.5 text-xs font-bold bg-[#d8ff45] text-[#10141e] hover:brightness-110 transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-[#d8ff45]/10">
+                    <i data-lucide="maximize-2" width="13" height="13"></i> Big Screen / Fullscreen
+                  </button>
+                  <button id="td-download-standings" type="button" class="rounded-xl px-3.5 py-1.5 text-xs font-bold border border-slate-600 text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] transition flex items-center gap-1.5 cursor-pointer">
+                    <i data-lucide="download" width="12" height="12"></i> Download Graphic (PNG)
+                  </button>
+                </div>
               </div>
               <div id="td-standings-view">
                 <p class="text-sm text-slate-500 italic text-center py-8">Standings will appear once matches start.</p>
@@ -3150,6 +3155,40 @@
     </div>
   </div>
   <!-- ===================== / LIVE DRAW CEREMONY MODAL ===================== -->
+
+  <!-- ===================== FULLSCREEN STANDINGS MODAL ===================== -->
+  <div id="fullscreen-standings-modal" class="modal-overlay hidden fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/95 backdrop-blur-md">
+    <div class="modal-box rounded-3xl w-full max-w-6xl max-h-[96vh] flex flex-col overflow-hidden shadow-2xl border border-[#d8ff45]/40" style="background:#090d14;">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-[#06090e] shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-[#d8ff45]/20 border border-[#d8ff45]/60 flex items-center justify-center text-xl shadow-lg shadow-[#d8ff45]/10">
+            🏆
+          </div>
+          <div>
+            <h2 class="font-black text-base sm:text-xl tracking-tight text-white flex items-center gap-2">
+              <span id="fsm-title">OFFICIAL TOURNAMENT STANDINGS</span>
+              <span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-red-500 text-white animate-pulse">BIG SCREEN</span>
+            </h2>
+            <p id="fsm-subtitle" class="text-xs text-slate-400 font-mono">ChillPill Arena · Live Leaderboard</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="fsm-toggle-fullscreen-btn" type="button" class="h-9 px-3 rounded-xl border border-slate-700 text-xs font-bold text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] transition flex items-center gap-1.5 cursor-pointer">
+            <i data-lucide="maximize-2" width="14" height="14"></i>
+            <span class="hidden sm:inline">Toggle Fullscreen</span>
+          </button>
+          <button id="fullscreen-standings-close" type="button" class="h-9 w-9 rounded-xl border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500 text-xl leading-none cursor-pointer flex items-center justify-center">×</button>
+        </div>
+      </div>
+
+      <!-- Leaderboard Content -->
+      <div class="p-6 overflow-y-auto flex-1">
+        <div id="fsm-standings-view" class="space-y-4"></div>
+      </div>
+    </div>
+  </div>
+  <!-- ===================== / FULLSCREEN STANDINGS MODAL ===================== -->
 
   <!-- ===================== BULK MENU IMPORT MODAL ===================== -->
   <div id="bulk-import-modal" class="modal-overlay hidden fixed inset-0 z-50 flex items-center justify-center p-4">
