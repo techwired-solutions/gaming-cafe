@@ -592,6 +592,9 @@
                   <button type="button" data-dept="food" class="rev-dept-btn px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer text-slate-400 hover:text-white">
                     🍟 Food &amp; Drinks Only
                   </button>
+                  <button type="button" data-dept="tournament" class="rev-dept-btn px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer text-slate-400 hover:text-white">
+                    🏆 Tournaments Only
+                  </button>
                 </div>
               </div>
 
@@ -849,6 +852,67 @@
                 </div>
                 <p class="text-[11px] text-slate-500 mt-2">Total Gross Orders: <span id="rev-bardali-gross-total" class="mono text-slate-300 font-medium">रु 0</span></p>
               </div>
+          </div>
+
+          <!-- Tournament Revenue & Profit Audit Panel -->
+          <div id="rev-tournament-panel" class="panel rounded-2xl p-5 mt-5 transition-all">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 class="font-bold text-lg flex items-center gap-2">
+                  <i data-lucide="trophy" width="18" height="18" class="text-[#d8ff45]"></i> Tournament Revenue &amp; Net Profit Audit
+                </h3>
+                <p class="text-xs text-slate-400 mt-0.5">Track tournament registration entry fees, cash prizes paid, cafe expenses, and net tournament profit.</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="rev-trn-summary-badge" class="text-xs font-bold px-3 py-1 rounded-full bg-[#d8ff45]/15 text-[#d8ff45] border border-[#d8ff45]/30">Net Profit: रु 0</span>
+              </div>
+            </div>
+
+            <!-- Tournament Financial KPI Grid -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+              <div class="bg-[#111722] border border-slate-700/80 rounded-xl p-3.5">
+                <span class="text-xs text-slate-400 font-medium">Entry Fees Collected (Gross)</span>
+                <p id="rev-trn-gross-fees" class="mono text-xl font-bold text-slate-100 mt-1.5">रु 0</p>
+                <p class="text-[11px] text-slate-500 mt-0.5"><span id="rev-trn-paid-players-count">0</span> paid participants</p>
+              </div>
+              <div class="bg-[#111722] border border-amber-500/30 rounded-xl p-3.5">
+                <span class="text-xs text-amber-300 font-medium">Cash Prizes Awarded</span>
+                <p id="rev-trn-prizes-paid" class="mono text-xl font-bold text-amber-300 mt-1.5">रु 0</p>
+                <p class="text-[11px] text-slate-500 mt-0.5">Distributed to winners</p>
+              </div>
+              <div class="bg-[#111722] border border-rose-500/30 rounded-xl p-3.5">
+                <span class="text-xs text-rose-300 font-medium">Cafe Organizing Expenses</span>
+                <p id="rev-trn-expenses-amount" class="mono text-xl font-bold text-rose-300 mt-1.5">रु 0</p>
+                <p class="text-[11px] text-slate-500 mt-0.5">Trophies, snacks, referees</p>
+              </div>
+              <div class="bg-[#111722] border border-[#d8ff45]/40 rounded-xl p-3.5 bg-[#d8ff45]/5">
+                <span class="text-xs text-[#d8ff45] font-bold">Net Cafe Tournament Profit</span>
+                <p id="rev-trn-net-profit" class="mono text-2xl font-black text-[#d8ff45] mt-1.5">रु 0</p>
+                <p class="text-[11px] text-slate-400 mt-0.5">Entry Fees &minus; (Prizes + Expenses)</p>
+              </div>
+            </div>
+
+            <!-- Tournaments Financial Audit Table -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr class="border-b border-slate-700 text-slate-400 text-xs uppercase tracking-wider font-semibold">
+                    <th class="pb-2.5 pr-3">Tournament</th>
+                    <th class="pb-2.5 pr-3">Game &amp; Date</th>
+                    <th class="pb-2.5 pr-3 text-center">Paid Players</th>
+                    <th class="pb-2.5 pr-3 text-right">Entry Fee</th>
+                    <th class="pb-2.5 pr-3 text-right text-slate-200">Total Entry Fees</th>
+                    <th class="pb-2.5 pr-3 text-right text-amber-300">Prizes Paid</th>
+                    <th class="pb-2.5 pr-3 text-right text-rose-300">Cafe Expenses</th>
+                    <th class="pb-2.5 pr-3 text-right text-[#d8ff45] font-bold">Net Profit</th>
+                    <th class="pb-2.5 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="rev-tournament-table-body" class="divide-y divide-slate-800">
+                  <!-- Rendered dynamically -->
+                </tbody>
+              </table>
+              <p id="rev-tournament-empty" class="text-sm text-slate-500 py-6 text-center italic hidden">No tournament records found.</p>
             </div>
           </div>
 
@@ -2937,16 +3001,36 @@
               </select>
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1" for="tm-max-players">Max Players *</label>
-              <select id="tm-max-players" class="form-control">
-                <option value="8">8 Players</option>
-                <option value="16" selected>16 Players</option>
-                <option value="32">32 Players</option>
-              </select>
+              <label class="block text-xs text-slate-400 mb-1" for="tm-max-players">Max Players * (Any count supported)</label>
+              <input id="tm-max-players" type="number" min="2" max="128" value="16" class="form-control mono" placeholder="e.g. 16, 20, 24" list="tm-player-presets" required>
+              <datalist id="tm-player-presets">
+                <option value="8"></option>
+                <option value="10"></option>
+                <option value="12"></option>
+                <option value="16"></option>
+                <option value="18"></option>
+                <option value="20"></option>
+                <option value="24"></option>
+                <option value="32"></option>
+                <option value="48"></option>
+                <option value="64"></option>
+              </datalist>
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1" for="tm-entry-fee">Entry Fee (रु)</label>
+              <label class="block text-xs text-slate-400 mb-1" for="tm-entry-fee">Entry Fee per Player (रु)</label>
               <input id="tm-entry-fee" type="number" min="0" class="form-control mono" placeholder="0">
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="tm-cash-prizes">Cash Prizes Paid (रु)</label>
+              <input id="tm-cash-prizes" type="number" min="0" class="form-control mono" placeholder="0">
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1" for="tm-expenses-amount">Cafe Event Expenses (रु)</label>
+              <input id="tm-expenses-amount" type="number" min="0" class="form-control mono" placeholder="0">
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block text-xs text-slate-400 mb-1" for="tm-expenses-notes">Expenses Breakdown / Notes</label>
+              <input id="tm-expenses-notes" type="text" class="form-control text-xs" placeholder="e.g. Trophies Rs 1,000, Refreshments Rs 800, Banner Rs 500">
             </div>
             <div>
               <label class="block text-xs text-slate-400 mb-1" for="tm-reg-deadline">Registration Deadline</label>
@@ -2962,13 +3046,18 @@
             </div>
           </div>
 
-          <!-- Prize Pool -->
+          <!-- Prize Pool & Honors -->
           <div>
             <div class="flex items-center justify-between mb-2">
-              <label class="text-xs text-slate-400 font-medium">Prize Pool</label>
-              <button type="button" id="tm-add-prize" class="text-xs font-bold text-[#d8ff45] flex items-center gap-1 cursor-pointer hover:underline">
-                <i data-lucide="plus" width="13" height="13"></i>Add Prize
-              </button>
+              <label class="text-xs text-slate-400 font-medium">Prize Pool &amp; Honors</label>
+              <div class="flex items-center gap-2">
+                <button type="button" id="tm-add-golden-boot" class="text-xs font-bold text-amber-300 flex items-center gap-1 cursor-pointer hover:underline">
+                  ⚽ Top Scorer Prize
+                </button>
+                <button type="button" id="tm-add-prize" class="text-xs font-bold text-[#d8ff45] flex items-center gap-1 cursor-pointer hover:underline">
+                  <i data-lucide="plus" width="13" height="13"></i>Add Prize
+                </button>
+              </div>
             </div>
             <div id="tm-prize-rows" class="space-y-2">
               <div class="tm-prize-row grid grid-cols-[140px_1fr_auto] gap-2 items-center">
@@ -3015,6 +3104,70 @@
     </div>
   </div>
   <!-- ===================== / CREATE / EDIT TOURNAMENT MODAL ===================== -->
+
+  <!-- ===================== TOURNAMENT EXPENSES & PRIZES AUDIT MODAL ===================== -->
+  <div id="tournament-expense-modal" class="modal-overlay hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="modal-box rounded-2xl w-full max-w-lg" style="background:#131b27;border:1px solid #1e293b;">
+      <div class="flex items-center justify-between px-5 pt-5 pb-4 border-b border-slate-700/60">
+        <div>
+          <h2 class="font-bold text-base flex items-center gap-2">
+            <i data-lucide="calculator" width="18" height="18" class="text-[#d8ff45]"></i>
+            <span id="texp-modal-title">Tournament Financial Audit</span>
+          </h2>
+          <p id="texp-modal-subtitle" class="text-xs text-slate-400 mt-0.5">Edit cash prizes paid and cafe event organizing costs</p>
+        </div>
+        <button id="tournament-expense-modal-close" type="button" class="h-8 w-8 rounded-lg border border-slate-600 text-slate-300 hover:text-red-300 hover:border-red-400 text-lg leading-none cursor-pointer flex items-center justify-center">×</button>
+      </div>
+      <form id="tournament-expense-form" class="px-5 py-5 space-y-4">
+        <input type="hidden" id="texp-tournament-id">
+        
+        <div class="bg-[#0e131d] border border-slate-800 rounded-xl p-3 flex justify-between items-center text-xs">
+          <div>
+            <span class="text-slate-400">Total Entry Fees Collected:</span>
+            <p id="texp-fees-collected" class="mono text-base font-bold text-slate-200 mt-0.5">रु 0</p>
+          </div>
+          <div class="text-right">
+            <span class="text-slate-400">Paid Participants:</span>
+            <p id="texp-paid-players" class="mono text-base font-bold text-sky-400 mt-0.5">0</p>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1" for="texp-prizes-paid">Cash Prizes Paid to Players (रु)</label>
+          <input id="texp-prizes-paid" type="number" min="0" class="form-control mono" placeholder="0">
+          <p class="text-[11px] text-slate-500 mt-1">Total cash prize money disbursed to winner, finalist, etc.</p>
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1" for="texp-expenses-amount">Cafe Event Expenses (रु)</label>
+          <input id="texp-expenses-amount" type="number" min="0" class="form-control mono" placeholder="0">
+          <p class="text-[11px] text-slate-500 mt-1">Expenses borne by the cafe (trophies, refreshments, referees, banners)</p>
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1" for="texp-expenses-notes">Expenses Itemized Notes</label>
+          <input id="texp-expenses-notes" type="text" class="form-control text-xs" placeholder="e.g. Trophies Rs 1,000, Water/Red Bull Rs 500">
+        </div>
+
+        <!-- Live Net Profit Preview -->
+        <div class="bg-[#111722] border border-[#d8ff45]/30 rounded-xl p-3 flex items-center justify-between">
+          <div>
+            <span class="text-xs text-slate-400 font-medium">Estimated Net Cafe Profit:</span>
+            <p class="text-[11px] text-slate-500">Entry Fees &minus; (Prizes + Expenses)</p>
+          </div>
+          <p id="texp-net-preview" class="mono text-xl font-black text-[#d8ff45]">रु 0</p>
+        </div>
+
+        <p id="texp-form-msg" class="text-xs text-slate-400 min-h-4"></p>
+        <div class="flex gap-3 pt-1">
+          <button type="submit" class="flex-1 rounded-xl py-2.5 font-bold text-sm flex items-center justify-center gap-2 cursor-pointer hover:brightness-110 transition" style="background:#d8ff45;color:#10141e;">
+            <i data-lucide="check" width="16" height="16"></i>Save Financial Record
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <!-- ===================== / TOURNAMENT EXPENSES & PRIZES AUDIT MODAL ===================== -->
 
   <!-- ===================== MATCH SCORE MODAL ===================== -->
   <div id="match-score-modal" class="modal-overlay hidden fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -3113,6 +3266,74 @@
     </div>
   </div>
   <!-- ===================== / RESET TOURNAMENT MODAL ===================== -->
+
+  <!-- ===================== TOURNAMENT EXPENSES & PRIZES FINANCIAL MODAL ===================== -->
+  <div id="tournament-expense-modal" class="modal-overlay hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+    <div class="panel rounded-3xl w-full max-w-lg p-6 space-y-4 border border-slate-700/80 shadow-2xl bg-[#0e1420]">
+      <div class="flex items-start justify-between pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-[#d8ff45]/15 border border-[#d8ff45]/40 flex items-center justify-center text-[#d8ff45] text-lg font-bold">
+            💰
+          </div>
+          <div>
+            <h3 class="font-bold text-base text-white">Record Tournament Expenses &amp; Payouts</h3>
+            <p id="texp-modal-subtitle" class="text-xs text-slate-400 mt-0.5">Track financial performance and net profit</p>
+          </div>
+        </div>
+        <button id="tournament-expense-modal-close" type="button" class="text-slate-400 hover:text-white text-2xl leading-none cursor-pointer">&times;</button>
+      </div>
+
+      <form id="tournament-expense-form" class="space-y-4">
+        <input type="hidden" id="texp-tournament-id">
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Tournament Name</label>
+          <input type="text" id="texp-tournament-name" class="form-control text-xs" readonly>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Total Entry Fees (Gross)</label>
+            <input type="text" id="texp-entry-fees-gross" class="form-control text-xs mono font-bold text-slate-200" readonly>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Cash Prizes Paid (रु)</label>
+            <input type="number" id="texp-cash-prizes" min="0" step="1" class="form-control text-xs mono text-amber-300 font-bold" placeholder="0">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Cafe Event Expenses (रु)</label>
+          <input type="number" id="texp-expenses-amount" min="0" step="1" class="form-control text-xs mono text-rose-300 font-bold" placeholder="0">
+          <p class="text-[11px] text-slate-500 mt-1">Expenses incurred by cafe: trophies, certificates, banners, refreshments, staff overtime, etc.</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Expenses Breakdown &amp; Notes</label>
+          <textarea id="texp-expenses-notes" rows="2" class="form-control text-xs" placeholder="e.g. Trophy: Rs 800, Cold Drinks for players: Rs 500, Poster print: Rs 200"></textarea>
+        </div>
+
+        <!-- Projected Profit Preview -->
+        <div class="p-3.5 rounded-xl border border-slate-700/80 bg-[#121927] flex items-center justify-between">
+          <div>
+            <span class="text-xs text-slate-300 font-semibold">Net Tournament Profit to Cafe</span>
+            <p class="text-[11px] text-slate-400">Gross Entry Fees &minus; (Prizes + Expenses)</p>
+          </div>
+          <div class="text-right">
+            <p id="texp-projected-profit" class="mono text-xl font-black text-[#d8ff45]">रु 0</p>
+          </div>
+        </div>
+
+        <p id="texp-form-msg" class="text-xs text-rose-400 min-h-[16px]"></p>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+          <button type="button" id="tournament-expense-modal-cancel" class="px-4 py-2 text-xs font-bold rounded-xl border border-slate-700 text-slate-300 hover:text-white transition cursor-pointer">Cancel</button>
+          <button type="submit" id="texp-submit-btn" class="px-5 py-2 text-xs font-bold rounded-xl bg-[#d8ff45] text-[#10141e] hover:brightness-110 transition cursor-pointer">Save Financials</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <!-- ===================== / TOURNAMENT EXPENSES & PRIZES FINANCIAL MODAL ===================== -->
 
   <!-- ===================== LIVE DRAW CEREMONY MODAL ===================== -->
   <div id="live-draw-ceremony-modal" class="modal-overlay hidden fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/95 backdrop-blur-md">

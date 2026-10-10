@@ -4428,7 +4428,55 @@
   function getRevDeptLabel(dept) {
     if (dept === "station") return "Station Gameplay Only";
     if (dept === "food") return "Food & Drinks Only";
+    if (dept === "tournament") return "Tournaments Only";
     return "All Revenue";
+  }
+
+  let tournamentsFinancials = [];
+
+  async function fetchTournamentFinances() {
+    if (!window.sb) return;
+    try {
+      const [tRes, pRes] = await Promise.all([
+        window.sb
+          .from("tournaments")
+          .select("id, title, name, game, status, start_date, created_at, entry_fee, max_players, cash_prizes_paid, expenses_amount, expenses_notes")
+          .order("created_at", { ascending: false }),
+        window.sb
+          .from("tournament_players")
+          .select("id, tournament_id, payment_status, status")
+      ]);
+      if (tRes.error) throw tRes.error;
+      const tList = tRes.data || [];
+      const pList = pRes.data || [];
+
+      tournamentsFinancials = tList.map((t) => {
+        const paidPlayers = pList.filter(
+          (p) => p.tournament_id === t.id && (p.payment_status === "paid" || p.status === "confirmed")
+        ).length;
+        const entryFee = Number(t.entry_fee) || 0;
+        const grossFees = paidPlayers * entryFee;
+        const cashPrizes = Number(t.cash_prizes_paid) || 0;
+        const expenses = Number(t.expenses_amount) || 0;
+        const netProfit = grossFees - (cashPrizes + expenses);
+        return {
+          ...t,
+          paidPlayers,
+          entryFee,
+          grossFees,
+          cashPrizes,
+          expenses,
+          netProfit
+        };
+      });
+    } catch (err) {
+      console.warn("Could not load tournament financials:", err);
+    }
+  }
+
+  function filterTournamentByPeriod(t, period, customDate) {
+    const iso = t.start_date || t.created_at;
+    return filterRecordByPeriod({ created_at: iso }, period, customDate);
   }
 
   function computeRecordRevenue(record) {
@@ -4491,6 +4539,19 @@
 
   function buildDailyMap(paid, dept = "all") {
     const map = {};
+    if (dept === "tournament") {
+      tournamentsFinancials.forEach((t) => {
+        const ds = getDateStr(t.start_date || t.created_at);
+        if (!ds) return;
+        if (!map[ds]) map[ds] = { total: 0, gross: 0, cash: 0, online: 0, sessions: [] };
+        map[ds].total += t.netProfit;
+        map[ds].gross += t.grossFees;
+        map[ds].online += t.grossFees;
+        map[ds].sessions.push({ ...t, isTournament: true });
+      });
+      return map;
+    }
+
     paid.forEach((r) => {
       const ds = getDateStr(r.paid_at || r.created_at);
       if (!ds) return;
@@ -4538,9 +4599,9 @@
     if (!ctx) return;
     if (revDailyChart) { revDailyChart.destroy(); revDailyChart = null; }
 
-    const chartLabel = dept === "station" ? "Station Revenue (रु)" : dept === "food" ? "Food Net Profit (रु)" : "Revenue (रु)";
-    const barColor = dept === "station" ? "rgba(56,189,248,0.7)" : dept === "food" ? "rgba(251,191,36,0.7)" : "rgba(216,255,69,0.7)";
-    const barBorder = dept === "station" ? "#38bdf8" : dept === "food" ? "#fbbf24" : "#d8ff45";
+    const chartLabel = dept === "station" ? "Station Revenue (रु)" : dept === "food" ? "Food Net Profit (रु)" : dept === "tournament" ? "Tournament Net Profit (रु)" : "Revenue (रु)";
+    const barColor = dept === "station" ? "rgba(56,189,248,0.7)" : dept === "food" ? "rgba(251,191,36,0.7)" : dept === "tournament" ? "rgba(168,85,247,0.7)" : "rgba(216,255,69,0.7)";
+    const barBorder = dept === "station" ? "#38bdf8" : dept === "food" ? "#fbbf24" : dept === "tournament" ? "#a855f7" : "#d8ff45";
 
     revDailyChart = new Chart(ctx, {
       type: "bar",
@@ -4626,6 +4687,8 @@
   function initRevenueFiltersOnce() {
     if (revFiltersWired) return;
     revFiltersWired = true;
+
+    initTournamentExpenseModalOnce();
 
     // Department / Category filter buttons
     document.querySelectorAll(".rev-dept-btn").forEach((btn) => {
@@ -4750,6 +4813,19 @@
 
     const totalPartnerPayables = totalBrosPayable + totalBardaliPayable;
 
+    // Filter tournaments matching period
+    const periodTournaments = tournamentsFinancials.filter((t) => filterTournamentByPeriod(t, revSelectedPeriod, revCustomDate));
+    const totalTrnGross = periodTournaments.reduce((s, t) => s + (t.grossFees || 0), 0);
+    const totalTrnPrizes = periodTournaments.reduce((s, t) => s + (t.cashPrizes || 0), 0);
+    const totalTrnExpenses = periodTournaments.reduce((s, t) => s + (t.expenses || 0), 0);
+    const totalTrnNet = totalTrnGross - (totalTrnPrizes + totalTrnExpenses);
+
+    if (revSelectedDept === "all") {
+      totalGross += totalTrnGross;
+      totalNet += totalTrnNet;
+      totalOnline += totalTrnGross;
+    }
+
     // Primary Top KPI Card (adapts dynamically to department)
     const totalEl = document.getElementById("revenue-total");
     const grossEl = document.getElementById("revenue-gross-total");
@@ -4766,11 +4842,16 @@
       if (grossEl) grossEl.textContent = inr(totalFoodGross);
       if (badgeEl) badgeEl.textContent = "🍟 Food Net Cafe Profit";
       if (descEl) descEl.textContent = "ChillPill Food (100%) + Partner Commissions";
+    } else if (revSelectedDept === "tournament") {
+      if (totalEl) totalEl.textContent = inr(totalTrnNet);
+      if (grossEl) grossEl.textContent = inr(totalTrnGross);
+      if (badgeEl) badgeEl.textContent = "🏆 Tournaments Net Profit";
+      if (descEl) descEl.textContent = "Entry Fees − (Cash Prizes + Cafe Expenses)";
     } else {
       if (totalEl) totalEl.textContent = inr(totalNet);
       if (grossEl) grossEl.textContent = inr(totalGross);
       if (badgeEl) badgeEl.textContent = "Net Cafe Earnings";
-      if (descEl) descEl.textContent = "Station Time + Own Food + Commissions";
+      if (descEl) descEl.textContent = "Station Time + Own Food + Comm + Tournaments";
     }
 
     // Food Orders Price vs Actual Revenue to ChillPill
@@ -4829,6 +4910,8 @@
         const rev = computeRecordRevenue(r);
         return rev.foodTotal > 0;
       });
+    } else if (revSelectedDept === "tournament") {
+      displayedSessions = [];
     }
 
     const countEl = document.getElementById("rev-active-filter-count");
@@ -5065,7 +5148,182 @@
     renderRevenueChart(dailyMap, revSelectedDept);
     renderDailyTable(dailyMap);
 
+    // Render tournament revenue audit panel
+    const trnPanelEl = document.getElementById("rev-tournament-panel");
+    if (trnPanelEl) {
+      trnPanelEl.classList.toggle("ring-2", revSelectedDept === "tournament");
+      trnPanelEl.classList.toggle("ring-[#d8ff45]/40", revSelectedDept === "tournament");
+    }
+    renderTournamentRevenuePanel(periodTournaments);
+
     if (window.lucide) window.lucide.createIcons();
+  }
+
+  function renderTournamentRevenuePanel(periodTournaments) {
+    const totalFeesEl = document.getElementById("rev-trn-gross-fees");
+    const paidPlayersEl = document.getElementById("rev-trn-paid-players-count");
+    const prizesPaidEl = document.getElementById("rev-trn-prizes-paid");
+    const expAmountEl = document.getElementById("rev-trn-expenses-amount");
+    const netProfitEl = document.getElementById("rev-trn-net-profit");
+    const badgeEl = document.getElementById("rev-trn-summary-badge");
+    const tbody = document.getElementById("rev-tournament-table-body");
+    const emptyEl = document.getElementById("rev-tournament-empty");
+
+    const totalGross = periodTournaments.reduce((s, t) => s + (t.grossFees || 0), 0);
+    const totalPrizes = periodTournaments.reduce((s, t) => s + (t.cashPrizes || 0), 0);
+    const totalExpenses = periodTournaments.reduce((s, t) => s + (t.expenses || 0), 0);
+    const totalNet = totalGross - (totalPrizes + totalExpenses);
+    const totalPlayers = periodTournaments.reduce((s, t) => s + (t.paidPlayers || 0), 0);
+
+    if (totalFeesEl) totalFeesEl.textContent = inr(totalGross);
+    if (paidPlayersEl) paidPlayersEl.textContent = totalPlayers;
+    if (prizesPaidEl) prizesPaidEl.textContent = inr(totalPrizes);
+    if (expAmountEl) expAmountEl.textContent = inr(totalExpenses);
+    if (netProfitEl) {
+      netProfitEl.textContent = inr(totalNet);
+      netProfitEl.className = `mono text-2xl font-black mt-1.5 ${totalNet >= 0 ? "text-[#d8ff45]" : "text-rose-400"}`;
+    }
+    if (badgeEl) {
+      badgeEl.textContent = `Net Profit: ${inr(totalNet)}`;
+      badgeEl.className = `text-xs font-bold px-3 py-1 rounded-full border ${
+        totalNet >= 0
+          ? "bg-[#d8ff45]/15 text-[#d8ff45] border-[#d8ff45]/30"
+          : "bg-rose-500/15 text-rose-400 border-rose-500/30"
+      }`;
+    }
+
+    if (!tbody) return;
+    if (!periodTournaments.length) {
+      tbody.innerHTML = "";
+      if (emptyEl) emptyEl.classList.remove("hidden");
+      return;
+    }
+    if (emptyEl) emptyEl.classList.add("hidden");
+
+    tbody.innerHTML = periodTournaments
+      .map((t) => {
+        const netColor = t.netProfit >= 0 ? "text-[#d8ff45]" : "text-rose-400";
+        const dateStr = t.start_date ? fmtDateTime(t.start_date) : fmtDateTime(t.created_at);
+        const expNotes = t.expenses_notes ? `<span class="block text-[10px] text-slate-400 truncate max-w-[140px]" title="${esc(t.expenses_notes)}">${esc(t.expenses_notes)}</span>` : "";
+        return `
+          <tr class="hover:bg-white/5 transition-colors">
+            <td class="py-2.5 pr-3 font-semibold text-slate-200">
+              ${esc(t.title || t.name || "Tournament")}
+              <span class="block text-[10px] font-normal text-slate-500 uppercase">${esc(t.status || "ongoing")}</span>
+            </td>
+            <td class="py-2.5 pr-3 text-xs text-slate-400">
+              <span class="font-medium text-slate-300">${esc(t.game || "EA FC")}</span>
+              <span class="block text-[10px] text-slate-500">${dateStr}</span>
+            </td>
+            <td class="py-2.5 pr-3 text-center mono font-semibold text-sky-400">${t.paidPlayers}</td>
+            <td class="py-2.5 pr-3 text-right mono text-slate-400">${inr(t.entryFee)}</td>
+            <td class="py-2.5 pr-3 text-right mono font-semibold text-slate-100">${inr(t.grossFees)}</td>
+            <td class="py-2.5 pr-3 text-right mono text-amber-300 font-semibold">${inr(t.cashPrizes)}</td>
+            <td class="py-2.5 pr-3 text-right mono text-rose-300">
+              ${inr(t.expenses)}
+              ${expNotes}
+            </td>
+            <td class="py-2.5 pr-3 text-right mono font-bold ${netColor}">${inr(t.netProfit)}</td>
+            <td class="py-2.5 text-right">
+              <button type="button" class="rev-edit-trn-exp-btn px-2.5 py-1 rounded-lg text-xs font-semibold border border-slate-700 bg-slate-800 text-slate-300 hover:text-[#d8ff45] hover:border-[#d8ff45] transition cursor-pointer" data-id="${t.id}">
+                Edit
+              </button>
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    tbody.querySelectorAll(".rev-edit-trn-exp-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const tId = btn.dataset.id;
+        const found = tournamentsFinancials.find((item) => item.id === tId);
+        if (found) openTournamentExpenseModal(found);
+      });
+    });
+  }
+
+  function openTournamentExpenseModal(t) {
+    const modal = document.getElementById("tournament-expense-modal");
+    if (!modal) return;
+    document.getElementById("texp-tournament-id").value = t.id;
+    document.getElementById("texp-modal-title").textContent = `${t.title || t.name || "Tournament"} Finances`;
+    document.getElementById("texp-fees-collected").textContent = inr(t.grossFees || 0);
+    document.getElementById("texp-paid-players").textContent = `${t.paidPlayers || 0} players`;
+    document.getElementById("texp-prizes-paid").value = t.cashPrizes || 0;
+    document.getElementById("texp-expenses-amount").value = t.expenses || 0;
+    document.getElementById("texp-expenses-notes").value = t.expenses_notes || "";
+
+    function updatePreview() {
+      const p = Number(document.getElementById("texp-prizes-paid").value) || 0;
+      const e = Number(document.getElementById("texp-expenses-amount").value) || 0;
+      const net = (t.grossFees || 0) - (p + e);
+      const prevEl = document.getElementById("texp-net-preview");
+      if (prevEl) {
+        prevEl.textContent = inr(net);
+        prevEl.className = `mono text-xl font-black ${net >= 0 ? "text-[#d8ff45]" : "text-rose-400"}`;
+      }
+    }
+    updatePreview();
+
+    document.getElementById("texp-prizes-paid").oninput = updatePreview;
+    document.getElementById("texp-expenses-amount").oninput = updatePreview;
+
+    const msgEl = document.getElementById("texp-form-msg");
+    if (msgEl) { msgEl.textContent = ""; msgEl.className = "text-xs text-slate-400 min-h-4"; }
+
+    openModal("tournament-expense-modal");
+  }
+
+  function initTournamentExpenseModalOnce() {
+    const form = document.getElementById("tournament-expense-form");
+    if (!form || form._wired) return;
+    form._wired = true;
+
+    document.getElementById("tournament-expense-modal-close")?.addEventListener("click", () => {
+      closeModal("tournament-expense-modal");
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const tId = document.getElementById("texp-tournament-id").value;
+      if (!tId || !window.sb) return;
+
+      const prizes = Number(document.getElementById("texp-prizes-paid").value) || 0;
+      const expenses = Number(document.getElementById("texp-expenses-amount").value) || 0;
+      const notes = (document.getElementById("texp-expenses-notes").value || "").trim();
+
+      const msgEl = document.getElementById("texp-form-msg");
+      if (msgEl) {
+        msgEl.textContent = "Saving...";
+        msgEl.className = "text-xs text-slate-300 min-h-4";
+      }
+
+      try {
+        const { error } = await window.sb
+          .from("tournaments")
+          .update({
+            cash_prizes_paid: prizes,
+            expenses_amount: expenses,
+            expenses_notes: notes,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", tId);
+
+        if (error) throw error;
+
+        showToast("Tournament financials updated!");
+        closeModal("tournament-expense-modal");
+        await fetchTournamentFinances();
+        renderRevenue();
+      } catch (err) {
+        console.error("Failed to update tournament expenses:", err);
+        if (msgEl) {
+          msgEl.textContent = "Error saving: " + err.message;
+          msgEl.className = "text-xs text-rose-400 min-h-4";
+        }
+      }
+    });
   }
 
   // ---------- staff management (admin) ----------
@@ -5813,6 +6071,7 @@
       fetchExpenses(),
       fetchNotices(),
       fetchCapitalContributions(),
+      fetchTournamentFinances(),
       typeof window._fetchTournaments === "function" ? window._fetchTournaments() : Promise.resolve()
     ]);
   }
@@ -5830,6 +6089,8 @@
       .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, fetchExpenses)
       .on("postgres_changes", { event: "*", schema: "public", table: "notices" }, fetchNotices)
       .on("postgres_changes", { event: "*", schema: "public", table: "capital_contributions" }, fetchCapitalContributions)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tournaments" }, async () => { await fetchTournamentFinances(); renderRevenue(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "tournament_players" }, async () => { await fetchTournamentFinances(); renderRevenue(); })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") setConnectionStatus(true, "Live");
       });

@@ -32,7 +32,21 @@
   };
   const FORMAT_LABEL = { knockout: "Direct Knockout", group_stage: "Group Stage + Knockout" };
 
-  // ── Utility ───────────────────────────────────────────────────────────────
+  // ── Utility & Bracket Math ──────────────────────────────────────────────
+  function getNextPowerOf2(n) {
+    let p = 1;
+    while (p < n) p *= 2;
+    return Math.max(2, p);
+  }
+
+  function getKnockoutRoundName(roundNumber, totalRounds) {
+    const remaining = Math.pow(2, totalRounds - roundNumber + 1);
+    if (remaining === 2) return "Final";
+    if (remaining === 4) return "Semi Final";
+    if (remaining === 8) return "Quarter Final";
+    return `Round of ${remaining}`;
+  }
+
   function esc(str) {
     return String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
@@ -719,10 +733,195 @@
     return a;
   }
 
+  // ── AUTOMATIC KNOCKOUT PROGRESSION TREE ───────────────────────────────────
+  async function advanceWinnerToNextRoundSlot(match, winnerId) {
+    if (!currentTournament || !window.sb || !winnerId) return;
+    if (currentTournament.format !== "knockout") return;
+
+    const curRound = match.round_number || 1;
+    const nextRound = curRound + 1;
+    const nextMatchNum = Math.ceil(match.match_number / 2);
+    const isOdd = match.match_number % 2 === 1;
+
+    let targetMatch = tMatches.find(m => (m.round_number || 1) === nextRound && m.match_number === nextMatchNum);
+
+    if (targetMatch) {
+      const update = isOdd ? { player1_id: winnerId } : { player2_id: winnerId };
+      const { error } = await window.sb.from("tournament_matches").update(update).eq("id", targetMatch.id);
+      if (!error) {
+        Object.assign(targetMatch, update);
+      }
+    } else {
+      // Auto-create next round match if it wasn't pre-generated (fallback for custom brackets)
+      const curRoundMatches = tMatches.filter(m => (m.round_number || 1) === curRound);
+      const nextRoundCount = Math.max(1, Math.ceil(curRoundMatches.length / 2));
+      const nextRoundName = nextRoundCount === 1 ? "Final" : nextRoundCount === 2 ? "Semi Final" : nextRoundCount === 4 ? "Quarter Final" : `Round of ${nextRoundCount * 2}`;
+
+      const newMatchPayload = {
+        tournament_id: currentTournament.id,
+        round_name: nextRoundName,
+        round_number: nextRound,
+        match_number: nextMatchNum,
+        player1_id: isOdd ? winnerId : null,
+        player2_id: !isOdd ? winnerId : null,
+        status: "scheduled"
+      };
+
+      const { data: inserted, error } = await window.sb.from("tournament_matches").insert(newMatchPayload).select().single();
+      if (!error && inserted) {
+        tMatches.push(inserted);
+      }
+    }
+  }
+
+  async function rollbackWinnerFromNextRoundSlot(match, oldWinnerId) {
+    if (!currentTournament || !window.sb || !oldWinnerId) return;
+    if (currentTournament.format !== "knockout") return;
+
+    const curRound = match.round_number || 1;
+    const nextRound = curRound + 1;
+    const nextMatchNum = Math.ceil(match.match_number / 2);
+    const isOdd = match.match_number % 2 === 1;
+
+    const targetMatch = tMatches.find(m => (m.round_number || 1) === nextRound && m.match_number === nextMatchNum);
+    if (targetMatch) {
+      const update = isOdd ? { player1_id: null } : { player2_id: null };
+      await window.sb.from("tournament_matches").update(update).eq("id", targetMatch.id);
+      Object.assign(targetMatch, update);
+    }
+  }
+
+  // ── TOURNAMENT HONORS & GOLDEN BOOT CALCULATION ─────────────────────────
+  function calculateTournamentHonors() {
+    const confirmed = tPlayers.filter(p => p.status !== "registered");
+    if (!confirmed.length) return null;
+
+    // 1. Champion
+    let champion = confirmed.find(p => p.status === "winner");
+    // 2. Runner-Up
+    let runnerUp = confirmed.find(p => p.status === "runner_up");
+
+    const finalMatch = tMatches.find(m => m.round_name?.toLowerCase() === "final" && m.status === "completed");
+    if (finalMatch) {
+      if (!champion && finalMatch.winner_id) {
+        champion = confirmed.find(p => p.id === finalMatch.winner_id);
+      }
+      if (!runnerUp && finalMatch.winner_id) {
+        const loserId = finalMatch.winner_id === finalMatch.player1_id ? finalMatch.player2_id : finalMatch.player1_id;
+        runnerUp = confirmed.find(p => p.id === loserId);
+      }
+    }
+
+    // 3. Semi-Finalists
+    const semiMatches = tMatches.filter(m => m.round_name?.toLowerCase() === "semi final" && m.status === "completed");
+    const semiFinalists = [];
+    semiMatches.forEach(sm => {
+      if (sm.winner_id) {
+        const loserId = sm.winner_id === sm.player1_id ? sm.player2_id : sm.player1_id;
+        const loser = confirmed.find(p => p.id === loserId);
+        if (loser && !semiFinalists.some(x => x.id === loser.id)) {
+          semiFinalists.push(loser);
+        }
+      }
+    });
+
+    // 4. Highest Goal Scorer (Golden Boot)
+    const scorers = confirmed
+      .filter(p => (p.goals_for || 0) > 0)
+      .sort((a, b) => {
+        if ((b.goals_for || 0) !== (a.goals_for || 0)) return (b.goals_for || 0) - (a.goals_for || 0);
+        const playedA = (a.wins || 0) + (a.draws || 0) + (a.losses || 0);
+        const playedB = (b.wins || 0) + (b.draws || 0) + (b.losses || 0);
+        return playedA - playedB; // fewer matches played = superior goals-per-match
+      });
+
+    const topScorer = scorers.length > 0 ? scorers[0] : null;
+    const jointTopScorers = scorers.filter(p => (p.goals_for || 0) === (topScorer?.goals_for || 0));
+
+    return {
+      champion,
+      runnerUp,
+      semiFinalists,
+      topScorer,
+      jointTopScorers,
+      topGoals: topScorer?.goals_for || 0
+    };
+  }
+
+  function renderHonorsCardHtml(honors) {
+    if (!honors) return "";
+    const champName = honors.champion ? esc(honors.champion.player_name) : "TBD";
+    const champTag = honors.champion?.gamertag ? `(${esc(honors.champion.gamertag)})` : "";
+    const runnerName = honors.runnerUp ? esc(honors.runnerUp.player_name) : "TBD";
+    const runnerTag = honors.runnerUp?.gamertag ? `(${esc(honors.runnerUp.gamertag)})` : "";
+    const semisText = honors.semiFinalists.length
+      ? honors.semiFinalists.map(s => esc(s.player_name)).join(", ")
+      : "In Progress (TBD)";
+
+    let goldenBootText = "In Contention";
+    let goldenBootSub = "Live goal tracking";
+    if (honors.topScorer) {
+      const names = honors.jointTopScorers.map(s => esc(s.player_name)).join(" & ");
+      goldenBootText = `${names}`;
+      const p = honors.topScorer;
+      const matchesCount = (p.wins || 0) + (p.draws || 0) + (p.losses || 0);
+      const gpm = matchesCount > 0 ? (p.goals_for / matchesCount).toFixed(1) : p.goals_for;
+      goldenBootSub = `⚽ ${p.goals_for} Goals (${gpm} GPM) · ${matchesCount} Matches`;
+    }
+
+    return `
+      <div class="panel rounded-2xl p-4 sm:p-5 mb-5 border border-[#d8ff45]/30 bg-gradient-to-br from-[#0c121d] via-[#101826] to-[#0b1019] shadow-xl">
+        <div class="flex items-center justify-between mb-3.5">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">🏆</span>
+            <div>
+              <h4 class="text-xs font-black uppercase tracking-wider text-white">Tournament Honors &amp; Awards</h4>
+              <p class="text-[11px] text-slate-400">Podium contenders and Golden Boot highest goal scorer</p>
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <!-- 🥇 Champion -->
+          <div class="rounded-xl border border-[#d8ff45]/40 bg-[#d8ff45]/5 p-3 flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-[#d8ff45]/20 flex items-center justify-center text-xl shrink-0">🥇</div>
+            <div class="min-w-0">
+              <span class="text-[10px] uppercase tracking-wider text-[#d8ff45] font-bold">Champion (Winner)</span>
+              <p class="font-extrabold text-sm text-white truncate">${champName} <span class="text-xs text-slate-400 font-normal">${champTag}</span></p>
+            </div>
+          </div>
+          <!-- 🥈 Runner-Up -->
+          <div class="rounded-xl border border-sky-500/30 bg-sky-500/5 p-3 flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-sky-500/20 flex items-center justify-center text-xl shrink-0">🥈</div>
+            <div class="min-w-0">
+              <span class="text-[10px] uppercase tracking-wider text-sky-400 font-bold">Finalist (Runner-Up)</span>
+              <p class="font-extrabold text-sm text-white truncate">${runnerName} <span class="text-xs text-slate-400 font-normal">${runnerTag}</span></p>
+            </div>
+          </div>
+          <!-- 🥉 Semi-Finalists -->
+          <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-xl shrink-0">🥉</div>
+            <div class="min-w-0">
+              <span class="text-[10px] uppercase tracking-wider text-amber-400 font-bold">Semi-Finalists</span>
+              <p class="font-bold text-xs text-slate-200 truncate">${semisText}</p>
+            </div>
+          </div>
+          <!-- ⚽ Golden Boot -->
+          <div class="rounded-xl border border-[#d8ff45]/40 bg-gradient-to-r from-amber-500/10 to-[#d8ff45]/10 p-3 flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-[#d8ff45]/20 flex items-center justify-center text-xl shrink-0">⚽</div>
+            <div class="min-w-0">
+              <span class="text-[10px] uppercase tracking-wider text-[#d8ff45] font-bold">Highest Goal Scorer</span>
+              <p class="font-extrabold text-sm text-white truncate">${goldenBootText}</p>
+              <p class="text-[10px] text-slate-400 font-mono truncate">${goldenBootSub}</p>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
   document.getElementById("td-generate-draw")?.addEventListener("click", async () => {
     if (!currentTournament || !window.sb) return;
     const confirmed = tPlayers.filter(p => p.status === "confirmed");
-    if (confirmed.length < 4) return showToast("Need at least 4 confirmed players to conduct a draw.");
+    if (confirmed.length < 2) return showToast("Need at least 2 confirmed players to conduct a draw.");
 
     const hasMatches = tMatches.length > 0;
     const msg = hasMatches
@@ -762,15 +961,27 @@
       if (window.lucide) lucide.createIcons();
       return;
     }
-    const rounds = [...new Set(tMatches.map(m => m.round_name))];
-    const maxRoundNum = Math.max(...tMatches.map(m => m.round_number || 1));
+
+    // Sort round numbers ascending: Round 1, Round 2 (Quarters), Round 3 (Semis), Final
+    const roundNumbers = [...new Set(tMatches.map(m => m.round_number || 1))].sort((a, b) => a - b);
+    const maxRoundNum = Math.max(...roundNumbers);
     const currentRoundMatch = tMatches.find(m => (m.round_number || 1) === maxRoundNum);
     if (roundBadge) {
       roundBadge.textContent = currentRoundMatch?.round_name || `Round ${maxRoundNum}`;
     }
 
-    view.innerHTML = rounds.map(rn => {
-      const rMatches = tMatches.filter(m => m.round_name === rn);
+    const autoProgNotice = currentTournament?.format === "knockout" ? `
+      <div class="flex items-center justify-between mb-4 p-3 rounded-xl bg-sky-500/10 border border-sky-500/30 text-xs">
+        <span class="text-sky-300 font-semibold flex items-center gap-2">
+          <i data-lucide="zap" width="14" height="14"></i>
+          <span>Auto-Progression Active: Match 1 winner faces Match 2 winner, Match 3 faces Match 4, etc. Saving a match advances the winner automatically!</span>
+        </span>
+      </div>` : "";
+
+    view.innerHTML = autoProgNotice + roundNumbers.map(rNum => {
+      const rMatches = tMatches.filter(m => (m.round_number || 1) === rNum).sort((a, b) => a.match_number - b.match_number);
+      const rn = rMatches[0]?.round_name || `Round ${rNum}`;
+
       return `
         <div>
           <div class="flex items-center justify-between mb-2 mt-4 first:mt-0">
@@ -781,91 +992,51 @@
             ${rMatches.map(m => {
               const p1 = tPlayers.find(p => p.id === m.player1_id);
               const p2 = tPlayers.find(p => p.id === m.player2_id);
+              const isBye = m.status === "bye";
+
+              const p1Label = p1
+                ? esc(p1.player_name)
+                : (rNum > 1 ? `<span class="text-slate-500 italic">Winner Match ${2 * m.match_number - 1}</span>` : "TBD");
+
+              const p2Label = p2
+                ? esc(p2.player_name)
+                : (isBye
+                  ? '<span class="text-emerald-400 font-bold">🌟 LUCKY BYE</span>'
+                  : (rNum > 1 ? `<span class="text-slate-500 italic">Winner Match ${2 * m.match_number}</span>` : "TBD"));
+
               return `
-                <div class="rounded-xl border ${m.status === "completed" ? "border-[#d8ff45]/30 bg-[#d8ff45]/5" : "border-slate-700 bg-[#0f1520]"} p-3">
+                <div class="rounded-xl border ${m.status === "completed" ? "border-[#d8ff45]/30 bg-[#d8ff45]/5" : isBye ? "border-emerald-500/30 bg-emerald-500/5" : "border-slate-700 bg-[#0f1520]"} p-3">
                   <div class="flex items-center justify-between text-[11px] mb-2">
                     <span class="text-slate-500">Match ${m.match_number}</span>
-                    <span class="text-[10px] px-2 py-0.5 rounded-full ${m.status === "completed" ? "bg-[#d8ff45]/20 text-[#d8ff45] font-bold" : "bg-slate-800 text-slate-400"}">${m.status}</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full ${m.status === "completed" ? "bg-[#d8ff45]/20 text-[#d8ff45] font-bold" : isBye ? "bg-emerald-500/20 text-emerald-300 font-bold" : "bg-slate-800 text-slate-400"}">${isBye ? "BYE / ADVANCES" : m.status}</span>
                   </div>
                   <div class="space-y-1.5 text-sm">
-                    <div class="flex justify-between ${m.winner_id === m.player1_id ? "text-[#d8ff45] font-bold" : ""}">
-                      <span class="truncate">${p1 ? esc(p1.player_name) : "TBD"}</span>
+                    <div class="flex justify-between ${m.winner_id && m.winner_id === m.player1_id ? "text-[#d8ff45] font-bold" : ""}">
+                      <span class="truncate">${p1Label}</span>
                       <span class="mono ml-2 shrink-0">${m.status === "completed" ? (m.player1_score ?? 0) : "—"}</span>
                     </div>
-                    <div class="flex justify-between ${m.winner_id === m.player2_id ? "text-[#d8ff45] font-bold" : ""}">
-                      <span class="truncate">${p2 ? esc(p2.player_name) : m.status === "bye" ? "BYE" : "TBD"}</span>
+                    <div class="flex justify-between ${m.winner_id && m.winner_id === m.player2_id ? "text-[#d8ff45] font-bold" : ""}">
+                      <span class="truncate">${p2Label}</span>
                       <span class="mono ml-2 shrink-0">${m.status === "completed" ? (m.player2_score ?? 0) : "—"}</span>
                     </div>
                   </div>
-                  ${m.winner_id ? `<p class="text-[11px] text-[#d8ff45] mt-2 font-bold">&#127942; Winner: ${esc(tPlayers.find(p => p.id === m.winner_id)?.player_name || "")}</p>` : ""}
+                  ${m.winner_id ? `<p class="text-[11px] text-[#d8ff45] mt-2 font-bold">&#127942; Advanced: ${esc(tPlayers.find(p => p.id === m.winner_id)?.player_name || "")}</p>` : ""}
                 </div>`;
             }).join("")}
           </div>
         </div>`;
     }).join("");
+
+    if (window.lucide) lucide.createIcons({ nodes: [view] });
   }
 
-  // ── GENERATE NEXT ROUND KNOCKOUT FIXTURES ─────────────────────────────────
+  // ── GENERATE NEXT ROUND KNOCKOUT FIXTURES (FALLBACK / MANUAL SYNC) ────────
   async function generateNextRound() {
     if (!currentTournament || !window.sb) return;
     if (currentTournament.format !== "knockout") {
-      return showToast("Next round generation is only for knockout tournaments.");
+      return showToast("Knockout rounds advance automatically as scores are saved.");
     }
-    if (!tMatches.length) {
-      return showToast("No draw generated yet. Click Generate Draw first.");
-    }
-
-    const maxRound = Math.max(...tMatches.map(m => m.round_number || 1));
-    const curRoundMatches = tMatches.filter(m => (m.round_number || 1) === maxRound);
-
-    // Check that all matches in the current round are completed (or bye)
-    const pending = curRoundMatches.filter(m => m.status !== "completed" && m.status !== "bye");
-    if (pending.length > 0) {
-      return showToast(`Cannot generate next round yet: ${pending.length} match(es) in ${curRoundMatches[0]?.round_name || 'current round'} are still unfinished.`);
-    }
-
-    // Collect winners from current round in match_number order
-    const sortedCur = [...curRoundMatches].sort((a, b) => a.match_number - b.match_number);
-    const winners = [];
-    for (const m of sortedCur) {
-      const wid = m.winner_id || (m.status === "bye" ? m.player1_id : null);
-      if (wid && !winners.includes(wid)) winners.push(wid);
-    }
-
-    if (winners.length <= 1) {
-      return showToast("Tournament has already concluded! The champion is crowned.");
-    }
-
-    const n = winners.length;
-    const nextRoundName = n <= 2 ? "Final" : n <= 4 ? "Semi Final" : n <= 8 ? "Quarter Final" : `Round of ${n}`;
-
-    if (!confirm(`Generate ${nextRoundName} fixtures for the ${n} advancing winners?`)) return;
-
-    const tid = currentTournament.id;
-    const toInsert = [];
-    let matchNum = 1;
-    for (let i = 0; i < n; i += 2) {
-      const p1 = winners[i];
-      const p2 = winners[i + 1] || null;
-      toInsert.push({
-        tournament_id: tid,
-        round_name: nextRoundName,
-        round_number: maxRound + 1,
-        match_number: matchNum++,
-        player1_id: p1,
-        player2_id: p2,
-        status: p2 ? "scheduled" : "bye"
-      });
-    }
-
-    const { data: inserted, error } = await window.sb.from("tournament_matches").insert(toInsert).select();
-    if (error) return showToast("Error generating next round: " + error.message);
-
-    tMatches.push(...(inserted || []));
-    renderBracketTab();
-    renderMatchesTab();
-    renderStandingsTab();
-    showToast(`${nextRoundName} fixtures generated (${toInsert.length} matches)!`);
+    showToast("Knockout progression is automated! When each match completes, the winner immediately advances to their pre-assigned slot.");
   }
 
   document.getElementById("td-generate-next-round")?.addEventListener("click", generateNextRound);
@@ -1009,15 +1180,44 @@
     // Update local match
     const idx = tMatches.findIndex(m => m.id === mid);
     if (idx !== -1) tMatches[idx] = { ...tMatches[idx], ...payload };
+    const updatedMatch = tMatches[idx] || { ...match, ...payload };
 
-    // Update player stats if result entered
-    if (enterScore) await updatePlayerStats(match, s1, s2, payload.winner_id);
+    // Update player stats and tree progression if result entered
+    if (enterScore) {
+      await updatePlayerStats(match, s1, s2, payload.winner_id);
+
+      // Auto-advance winner to next round slot in knockout format
+      if (currentTournament?.format === "knockout" && payload.winner_id) {
+        await advanceWinnerToNextRoundSlot(updatedMatch, payload.winner_id);
+      }
+
+      // In knockout format, check if Final completed to crown Champion & Finalist
+      const isFinal = match.round_name?.toLowerCase() === "final" ||
+        (currentTournament?.format === "knockout" && !tMatches.some(m => (m.round_number || 1) > (match.round_number || 1)));
+
+      if (currentTournament?.format === "knockout" && isFinal && payload.winner_id) {
+        const loserId = payload.winner_id === match.player1_id ? match.player2_id : match.player1_id;
+        if (loserId) {
+          await window.sb.from("tournament_players").update({ status: "runner_up" }).eq("id", loserId);
+          const lp = tPlayers.find(p => p.id === loserId);
+          if (lp) lp.status = "runner_up";
+        }
+        await window.sb.from("tournament_players").update({ status: "winner" }).eq("id", payload.winner_id);
+        const wp = tPlayers.find(p => p.id === payload.winner_id);
+        if (wp) wp.status = "winner";
+
+        await window.sb.from("tournaments").update({ status: "completed", updated_at: new Date().toISOString() }).eq("id", currentTournament.id);
+        currentTournament.status = "completed";
+        const tIdx = tournaments.findIndex(t => t.id === currentTournament.id);
+        if (tIdx !== -1) tournaments[tIdx].status = "completed";
+      }
+    }
 
     closeModal("match-score-modal");
     renderMatchesTab();
     renderBracketTab();
     renderStandingsTab();
-    showToast(enterScore ? "Match result saved!" : "Match scheduled.");
+    showToast(enterScore ? "Match result saved & winner advanced!" : "Match scheduled.");
   }
 
   async function updatePlayerStats(match, s1, s2, winnerId) {
@@ -1286,6 +1486,9 @@
       return;
     }
 
+    const honors = calculateTournamentHonors();
+    const honorsHtml = renderHonorsCardHtml(honors);
+
     if (currentTournament?.format === "knockout") {
       const sorted = [...confirmedPlayers].sort((a, b) => {
         const getRank = (p) => {
@@ -1303,14 +1506,14 @@
         if (gdB !== gdA) return gdB - gdA;
         return (b.goals_for || 0) - (a.goals_for || 0);
       });
-      view.innerHTML = renderStandingsTable(sorted, false);
+      view.innerHTML = honorsHtml + renderStandingsTable(sorted, false);
     } else {
       const groups = [...new Set(confirmedPlayers.map(p => p.group_name).filter(Boolean))].sort();
       if (!groups.length) {
-        view.innerHTML = '<p class="text-sm text-slate-500 text-center py-8 italic">Draw not generated yet.</p>';
+        view.innerHTML = honorsHtml + '<p class="text-sm text-slate-500 text-center py-8 italic">Draw not generated yet.</p>';
         return;
       }
-      view.innerHTML = groups.map(g => {
+      view.innerHTML = honorsHtml + groups.map(g => {
         const gp = [...confirmedPlayers.filter(p => p.group_name === g)].sort((a, b) => {
           if (b.points !== a.points) return b.points - a.points;
           const gdA = (a.goals_for || 0) - (a.goals_against || 0);
@@ -1449,6 +1652,12 @@
       document.getElementById("tm-format").value = tournament.format || "knockout";
       document.getElementById("tm-max-players").value = tournament.max_players || 16;
       document.getElementById("tm-entry-fee").value = tournament.entry_fee || 0;
+      const cpEl = document.getElementById("tm-cash-prizes");
+      if (cpEl) cpEl.value = tournament.cash_prizes_paid || 0;
+      const expEl = document.getElementById("tm-expenses-amount");
+      if (expEl) expEl.value = tournament.expenses_amount || 0;
+      const expNotesEl = document.getElementById("tm-expenses-notes");
+      if (expNotesEl) expNotesEl.value = tournament.expenses_notes || "";
       document.getElementById("tm-description").value = tournament.description || "";
       document.getElementById("tm-rules").value = tournament.rules || "";
       document.getElementById("tm-show-homepage").checked = !!tournament.show_on_homepage;
@@ -1462,6 +1671,12 @@
       label.textContent = "Create Tournament";
       document.getElementById("tm-id").value = "";
       document.getElementById("tm-game").value = "EA FC 25";
+      const cpEl = document.getElementById("tm-cash-prizes");
+      if (cpEl) cpEl.value = "0";
+      const expEl = document.getElementById("tm-expenses-amount");
+      if (expEl) expEl.value = "0";
+      const expNotesEl = document.getElementById("tm-expenses-notes");
+      if (expNotesEl) expNotesEl.value = "";
       addPrizeRow("1st Place", "");
       addPrizeRow("2nd Place", "");
     }
@@ -1475,6 +1690,12 @@
     if (addPrizeBtn) {
       e.preventDefault();
       addPrizeRow();
+      return;
+    }
+    const addGbBtn = e.target.closest("#tm-add-golden-boot");
+    if (addGbBtn) {
+      e.preventDefault();
+      addPrizeRow("⚽ Highest Goal Scorer", "Trophy / Cash Prize");
       return;
     }
     const removePrizeBtn = e.target.closest(".tm-prize-remove");
@@ -1519,6 +1740,9 @@
       format: document.getElementById("tm-format").value,
       max_players: Number(document.getElementById("tm-max-players").value) || 16,
       entry_fee: Number(document.getElementById("tm-entry-fee").value) || 0,
+      cash_prizes_paid: Number(document.getElementById("tm-cash-prizes")?.value) || 0,
+      expenses_amount: Number(document.getElementById("tm-expenses-amount")?.value) || 0,
+      expenses_notes: document.getElementById("tm-expenses-notes")?.value.trim() || null,
       description: document.getElementById("tm-description").value.trim() || null,
       rules: document.getElementById("tm-rules").value.trim() || null,
       show_on_homepage: document.getElementById("tm-show-homepage").checked,
@@ -1623,8 +1847,8 @@
   function openLiveDrawCeremony(forceNewDraw = false) {
     if (!currentTournament) return showToast("No tournament selected.");
     const confirmed = tPlayers.filter(p => p.status === "confirmed");
-    if (!tMatches.length && confirmed.length < 4) {
-      return showToast("Need at least 4 confirmed players to launch the draw ceremony.");
+    if (!tMatches.length && confirmed.length < 2) {
+      return showToast("Need at least 2 confirmed players to launch the draw ceremony.");
     }
 
     // Prepare matches in memory
@@ -1632,21 +1856,58 @@
       // Auto-prepare a new draw sequence from confirmed players in memory ONLY
       const shuffled = shuffle(confirmed);
       const tid = currentTournament.id;
-      const n = shuffled.length;
+      const P = shuffled.length;
       ldcCeremonyMatches = [];
 
       if (currentTournament.format === "knockout") {
-        const roundName = n <= 2 ? "Final" : n <= 4 ? "Semi Final" : n <= 8 ? "Quarter Final" : "Round of 16";
-        for (let i = 0; i < n; i += 2) {
-          ldcCeremonyMatches.push({
-            tournament_id: tid,
-            round_name: roundName,
-            round_number: 1,
-            match_number: Math.floor(i / 2) + 1,
-            player1_id: shuffled[i].id,
-            player2_id: shuffled[i + 1]?.id || null,
-            status: shuffled[i + 1] ? "scheduled" : "bye"
-          });
+        const B = getNextPowerOf2(P);
+        const numByes = B - P;
+        const round1MatchCount = B / 2;
+        const totalRounds = Math.log2(B);
+        const round1Name = getKnockoutRoundName(1, totalRounds);
+
+        // Distribute numByes cleanly across Round 1 matches
+        const isByeMatch = new Array(round1MatchCount).fill(false);
+        if (numByes > 0) {
+          const step = round1MatchCount / numByes;
+          for (let b = 0; b < numByes; b++) {
+            const idx = Math.floor(b * step);
+            isByeMatch[idx] = true;
+          }
+        }
+
+        let pIdx = 0;
+        for (let m = 0; m < round1MatchCount; m++) {
+          if (isByeMatch[m]) {
+            const p1 = shuffled[pIdx++];
+            ldcCeremonyMatches.push({
+              tournament_id: tid,
+              round_name: round1Name,
+              round_number: 1,
+              match_number: m + 1,
+              player1_id: p1 ? p1.id : null,
+              player2_id: null,
+              status: "bye",
+              winner_id: p1 ? p1.id : null,
+              score1: 0,
+              score2: 0
+            });
+          } else {
+            const p1 = shuffled[pIdx++];
+            const p2 = shuffled[pIdx++];
+            ldcCeremonyMatches.push({
+              tournament_id: tid,
+              round_name: round1Name,
+              round_number: 1,
+              match_number: m + 1,
+              player1_id: p1 ? p1.id : null,
+              player2_id: p2 ? p2.id : null,
+              status: p2 ? "scheduled" : "bye",
+              winner_id: !p2 && p1 ? p1.id : null,
+              score1: 0,
+              score2: 0
+            });
+          }
         }
       } else {
         // Group stage: groups of 4, round-robin within groups
@@ -1665,7 +1926,9 @@
                 match_number: mNum++,
                 player1_id: grp[a].id,
                 player2_id: grp[b].id,
-                status: "scheduled"
+                status: "scheduled",
+                score1: 0,
+                score2: 0
               });
             }
           }
@@ -1673,8 +1936,8 @@
       }
     } else {
       // Replaying an existing already-published round
-      const maxRound = Math.max(...tMatches.map(m => m.round_number || 1));
-      ldcCeremonyMatches = [...tMatches.filter(m => (m.round_number || 1) === maxRound)].sort((a, b) => a.match_number - b.match_number);
+      const minRound = Math.min(...tMatches.map(m => m.round_number || 1));
+      ldcCeremonyMatches = [...tMatches.filter(m => (m.round_number || 1) === minRound)].sort((a, b) => a.match_number - b.match_number);
     }
 
     ldcCurrentIndex = 0;
@@ -1713,8 +1976,57 @@
         }
       }
 
+      let allMatchesToInsert = [...ldcCeremonyMatches];
+
+      // If knockout, pre-generate all subsequent rounds up to the final!
+      if (currentTournament.format === "knockout") {
+        const round1MatchCount = ldcCeremonyMatches.length;
+        const B = round1MatchCount * 2;
+        const totalRounds = Math.log2(B);
+
+        // Pre-build all rounds 2..totalRounds
+        const futureRoundsMap = {};
+        for (let r = 2; r <= totalRounds; r++) {
+          const roundMatchesCount = B / Math.pow(2, r);
+          const roundName = getKnockoutRoundName(r, totalRounds);
+          futureRoundsMap[r] = [];
+          for (let m = 1; m <= roundMatchesCount; m++) {
+            futureRoundsMap[r].push({
+              tournament_id: tid,
+              round_name: roundName,
+              round_number: r,
+              match_number: m,
+              player1_id: null,
+              player2_id: null,
+              status: "scheduled",
+              score1: 0,
+              score2: 0
+            });
+          }
+        }
+
+        // Auto-seed Round 1 byes into Round 2 slots!
+        ldcCeremonyMatches.forEach(m => {
+          if (m.status === "bye" && m.winner_id && futureRoundsMap[2]) {
+            const nextMatchNum = Math.ceil(m.match_number / 2);
+            const target = futureRoundsMap[2].find(fm => fm.match_number === nextMatchNum);
+            if (target) {
+              if (m.match_number % 2 === 1) {
+                target.player1_id = m.winner_id;
+              } else {
+                target.player2_id = m.winner_id;
+              }
+            }
+          }
+        });
+
+        for (let r = 2; r <= totalRounds; r++) {
+          allMatchesToInsert = allMatchesToInsert.concat(futureRoundsMap[r]);
+        }
+      }
+
       await window.sb.from("tournament_matches").delete().eq("tournament_id", tid);
-      const { data: inserted, error } = await window.sb.from("tournament_matches").insert(ldcCeremonyMatches).select();
+      const { data: inserted, error } = await window.sb.from("tournament_matches").insert(allMatchesToInsert).select();
       if (error) throw error;
 
       if (["draft", "registration_closed"].includes(currentTournament.status)) {
@@ -1724,7 +2036,7 @@
 
       await loadTournamentData(tid);
       closeModal("live-draw-ceremony-modal");
-      showToast(`Official draw published! ${ldcCeremonyMatches.length} matches scheduled.`);
+      showToast(`Official draw published! ${allMatchesToInsert.length} matches created.`);
     } catch (err) {
       console.error("Failed publishing draw:", err);
       showToast("Save error: " + err.message);
@@ -1769,7 +2081,7 @@
 
     if (roundBadge) roundBadge.textContent = (m.round_name || "ROUND").toUpperCase();
     if (matchLabel) matchLabel.textContent = `MATCH ${m.match_number} OF ${ldcCeremonyMatches.length}`;
-    if (subLabel) subLabel.textContent = "Spin the reel to draw opposing contenders";
+    if (subLabel) subLabel.textContent = m.status === "bye" ? "Draw will award a lucky Bye pass" : "Spin the reel to draw opposing contenders";
     if (spinLabel) spinLabel.textContent = `SPIN MATCH ${m.match_number}`;
     if (spinBtn) {
       spinBtn.onclick = () => spinCurrentLdcMatch();
@@ -1815,11 +2127,19 @@
     await new Promise(r => setTimeout(r, 600));
 
     // Phase 2: Spin Slot 2
-    if (card2) card2.classList.add("border-sky-400", "shadow-[0_0_30px_rgba(56,189,248,0.3)]");
-    const candidatePool2 = candidateNames.filter(n => n !== (p1 ? p1.player_name : ""));
-    await runSlotReel(name2El, avatar2, candidatePool2.length ? candidatePool2 : candidateNames, avatars, p2 ? p2.player_name : m.status === "bye" ? "BYE" : "TBD");
-    if (tag2El) tag2El.textContent = p2?.gamertag ? `(${p2.gamertag})` : m.status === "bye" ? "Advances" : "Locked In";
-    playLdcLockChime();
+    if (m.status === "bye") {
+      if (card2) card2.classList.add("border-amber-400", "shadow-[0_0_30px_rgba(251,191,36,0.3)]");
+      const byeTags = ["🌟 LUCKY BYE", "⚡ AUTO ADVANCES", "✨ FREE PASS", "🌟 LUCKY DRAW"];
+      await runSlotReel(name2El, avatar2, byeTags, ["🌟", "🎫", "🏆", "✨"], "🌟 LUCKY BYE");
+      if (tag2El) tag2El.textContent = "Auto-Advances to Round 2!";
+      playLdcLockChime();
+    } else {
+      if (card2) card2.classList.add("border-sky-400", "shadow-[0_0_30px_rgba(56,189,248,0.3)]");
+      const candidatePool2 = candidateNames.filter(n => n !== (p1 ? p1.player_name : ""));
+      await runSlotReel(name2El, avatar2, candidatePool2.length ? candidatePool2 : candidateNames, avatars, p2 ? p2.player_name : "TBD");
+      if (tag2El) tag2El.textContent = p2?.gamertag ? `(${p2.gamertag})` : "Locked In";
+      playLdcLockChime();
+    }
 
     // Fanfare & Match Set celebration!
     playLdcFanfare();
@@ -1880,14 +2200,15 @@
     if (!tape) return;
     const card = document.createElement("div");
     card.className = "rounded-xl border border-slate-800 bg-[#0d131e] p-2.5 text-xs animate-fadeIn";
+    const p2Text = m.status === "bye" ? '<span class="text-amber-400 font-bold">🌟 LUCKY BYE</span>' : (p2 ? esc(p2.player_name) : "TBD");
     card.innerHTML = `
       <div class="flex justify-between text-[10px] text-slate-500 font-mono mb-1">
         <span>MATCH ${m.match_number}</span>
-        <span class="text-[#d8ff45]">SET</span>
+        <span class="${m.status === 'bye' ? 'text-amber-400' : 'text-[#d8ff45]'}">${m.status === 'bye' ? 'BYE' : 'SET'}</span>
       </div>
       <div class="font-bold text-slate-200 truncate">${p1 ? esc(p1.player_name) : "TBD"}</div>
       <div class="text-[10px] text-slate-500 font-mono">VS</div>
-      <div class="font-bold text-slate-200 truncate">${p2 ? esc(p2.player_name) : m.status === "bye" ? "BYE" : "TBD"}</div>
+      <div class="font-bold text-slate-200 truncate">${p2Text}</div>
     `;
     tape.prepend(card);
   }

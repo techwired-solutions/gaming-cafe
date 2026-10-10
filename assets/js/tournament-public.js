@@ -127,7 +127,7 @@
       // Render all views
       renderHeroHeader(t, tournamentPlayers);
       renderOverviewTab(t, tournamentPlayers);
-      renderStandingsTab(t, tournamentPlayers);
+      renderStandingsTab(t, tournamentPlayers, tournamentMatches);
       renderFixturesTab(t, tournamentPlayers, tournamentMatches);
       renderPrizesTab(t);
       renderChampionsTab(t, tournamentPlayers);
@@ -330,8 +330,135 @@
     });
   }
 
+  // ── TOURNAMENT HONORS & GOLDEN BOOT CALCULATION ─────────────────────────
+  function calculateTournamentHonors(t, players, matches) {
+    const confirmed = players.filter((p) => p.status !== "registered");
+    if (!confirmed.length) return null;
+
+    let champion = confirmed.find((p) => p.status === "winner");
+    let runnerUp = confirmed.find((p) => p.status === "runner_up");
+
+    const finalMatch = (matches || []).find(
+      (m) => m.round_name?.toLowerCase() === "final" && m.status === "completed"
+    );
+    if (finalMatch) {
+      if (!champion && finalMatch.winner_id) {
+        champion = confirmed.find((p) => p.id === finalMatch.winner_id);
+      }
+      if (!runnerUp && finalMatch.winner_id) {
+        const loserId = finalMatch.winner_id === finalMatch.player1_id ? finalMatch.player2_id : finalMatch.player1_id;
+        runnerUp = confirmed.find((p) => p.id === loserId);
+      }
+    }
+
+    const semiMatches = (matches || []).filter(
+      (m) => m.round_name?.toLowerCase() === "semi final" && m.status === "completed"
+    );
+    const semiFinalists = [];
+    semiMatches.forEach((sm) => {
+      if (sm.winner_id) {
+        const loserId = sm.winner_id === sm.player1_id ? sm.player2_id : sm.player1_id;
+        const loser = confirmed.find((p) => p.id === loserId);
+        if (loser && !semiFinalists.some((x) => x.id === loser.id)) {
+          semiFinalists.push(loser);
+        }
+      }
+    });
+
+    const scorers = confirmed
+      .filter((p) => (p.goals_for || 0) > 0)
+      .sort((a, b) => {
+        if ((b.goals_for || 0) !== (a.goals_for || 0)) return (b.goals_for || 0) - (a.goals_for || 0);
+        const playedA = (a.wins || 0) + (a.draws || 0) + (a.losses || 0);
+        const playedB = (b.wins || 0) + (b.draws || 0) + (b.losses || 0);
+        return playedA - playedB;
+      });
+
+    const topScorer = scorers.length > 0 ? scorers[0] : null;
+    const jointTopScorers = scorers.filter((p) => (p.goals_for || 0) === (topScorer?.goals_for || 0));
+
+    return {
+      champion,
+      runnerUp,
+      semiFinalists,
+      topScorer,
+      jointTopScorers,
+      topGoals: topScorer?.goals_for || 0
+    };
+  }
+
+  function renderHonorsCardHtml(honors) {
+    if (!honors) return "";
+    const champName = honors.champion ? esc(honors.champion.player_name) : "TBD";
+    const champTag = honors.champion?.gamertag ? `(${esc(honors.champion.gamertag)})` : "";
+    const runnerName = honors.runnerUp ? esc(honors.runnerUp.player_name) : "TBD";
+    const runnerTag = honors.runnerUp?.gamertag ? `(${esc(honors.runnerUp.gamertag)})` : "";
+    const semisText = honors.semiFinalists.length
+      ? honors.semiFinalists.map((s) => esc(s.player_name)).join(", ")
+      : "In Progress (TBD)";
+
+    let goldenBootText = "In Contention";
+    let goldenBootSub = "Live goal tracking";
+    if (honors.topScorer) {
+      const names = honors.jointTopScorers.map((s) => esc(s.player_name)).join(" & ");
+      goldenBootText = `${names}`;
+      const p = honors.topScorer;
+      const matchesCount = (p.wins || 0) + (p.draws || 0) + (p.losses || 0);
+      const gpm = matchesCount > 0 ? (p.goals_for / matchesCount).toFixed(1) : p.goals_for;
+      goldenBootSub = `⚽ ${p.goals_for} Goals (${gpm} GPM) · ${matchesCount} Matches`;
+    }
+
+    return `
+      <div class="panel rounded-2xl p-4 sm:p-5 mb-5 border border-[#d8ff45]/30 bg-gradient-to-br from-[#0c121d] via-[#101826] to-[#0b1019] shadow-xl">
+        <div class="flex items-center justify-between mb-3.5">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">🏆</span>
+            <div>
+              <h4 class="text-xs font-black uppercase tracking-wider text-white">Tournament Honors &amp; Awards</h4>
+              <p class="text-[11px] text-slate-400">Podium contenders and Golden Boot highest goal scorer</p>
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <!-- 🥇 Champion -->
+          <div class="rounded-xl border border-[#d8ff45]/40 bg-[#d8ff45]/5 p-3 flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-[#d8ff45]/20 flex items-center justify-center text-xl shrink-0">🥇</div>
+            <div class="min-w-0">
+              <span class="text-[10px] uppercase tracking-wider text-[#d8ff45] font-bold">Champion (Winner)</span>
+              <p class="font-extrabold text-sm text-white truncate">${champName} <span class="text-xs text-slate-400 font-normal">${champTag}</span></p>
+            </div>
+          </div>
+          <!-- 🥈 Runner-Up -->
+          <div class="rounded-xl border border-sky-400/40 bg-sky-400/5 p-3 flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-sky-400/20 flex items-center justify-center text-xl shrink-0">🥈</div>
+            <div class="min-w-0">
+              <span class="text-[10px] uppercase tracking-wider text-sky-300 font-bold">Runner-Up (Finalist)</span>
+              <p class="font-extrabold text-sm text-white truncate">${runnerName} <span class="text-xs text-slate-400 font-normal">${runnerTag}</span></p>
+            </div>
+          </div>
+          <!-- 🥉 Semi-Finalists -->
+          <div class="rounded-xl border border-amber-400/30 bg-amber-400/5 p-3 flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-400/20 flex items-center justify-center text-xl shrink-0">🥉</div>
+            <div class="min-w-0">
+              <span class="text-[10px] uppercase tracking-wider text-amber-300 font-bold">Semi-Finalists</span>
+              <p class="font-extrabold text-xs text-slate-200 truncate" title="${semisText}">${semisText}</p>
+            </div>
+          </div>
+          <!-- ⚽ Golden Boot -->
+          <div class="rounded-xl border border-emerald-400/30 bg-emerald-400/5 p-3 flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-emerald-400/20 flex items-center justify-center text-xl shrink-0">⚽</div>
+            <div class="min-w-0">
+              <span class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">Highest Goal Scorer</span>
+              <p class="font-extrabold text-sm text-white truncate">${goldenBootText}</p>
+              <span class="text-[10px] text-slate-400 block">${goldenBootSub}</span>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
   // ── TAB 2: STANDINGS & POINTS ─────────────────────────────────────────────
-  function renderStandingsTab(t, players) {
+  function renderStandingsTab(t, players, matches) {
     const container = document.getElementById("standings-container");
     const formatLabel = document.getElementById("standings-format-label");
     if (!container) return;
@@ -339,6 +466,9 @@
     if (formatLabel) {
       formatLabel.textContent = t.format === "knockout" ? "Knockout Ladder" : "Group Stage Table";
     }
+
+    const honors = calculateTournamentHonors(t, players, matches || tournamentMatches);
+    const honorsHtml = renderHonorsCardHtml(honors);
 
     function getPublicProgression(p) {
       if (p.status === "winner") return { label: "🥇 Champion", cls: "text-[#d8ff45] font-black bg-[#d8ff45]/20 border border-[#d8ff45]/40" };
@@ -353,6 +483,7 @@
 
     if (!confirmedPlayers.length) {
       container.innerHTML = `
+        ${honorsHtml}
         <div class="panel rounded-3xl p-10 text-center text-slate-500 italic">
           <i data-lucide="users" width="32" height="32" class="mx-auto mb-2 text-slate-600"></i>
           No confirmed players yet. Confirmations are underway!
@@ -377,11 +508,12 @@
         if (gdB !== gdA) return gdB - gdA;
         return (b.goals_for || 0) - (a.goals_for || 0);
       });
-      container.innerHTML = renderStandingsTable(sorted, false);
+      container.innerHTML = honorsHtml + renderStandingsTable(sorted, false);
     } else {
       const groups = [...new Set(confirmedPlayers.map((p) => p.group_name).filter(Boolean))].sort();
       if (!groups.length) {
         container.innerHTML = `
+          ${honorsHtml}
           <div class="panel rounded-3xl p-8 text-center text-slate-400">
             <i data-lucide="shuffle" width="28" height="28" class="mx-auto mb-2 text-[#d8ff45]"></i>
             <p class="font-bold">Group Draw in Progress</p>
@@ -390,27 +522,29 @@
         return;
       }
 
-      container.innerHTML = groups
-        .map((g) => {
-          const groupPlayers = [...confirmedPlayers.filter((p) => p.group_name === g)].sort(
-            (a, b) => {
-              if (b.points !== a.points) return b.points - a.points;
-              const gdA = (a.goals_for || 0) - (a.goals_against || 0);
-              const gdB = (b.goals_for || 0) - (b.goals_against || 0);
-              if (gdB !== gdA) return gdB - gdA;
-              return (b.goals_for || 0) - (a.goals_for || 0);
-            }
-          );
-          return `
-            <div class="space-y-3">
-              <div class="flex items-center gap-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-[#d8ff45]"></span>
-                <h3 class="text-sm font-bold text-[#d8ff45] uppercase tracking-wider">Group ${esc(g)}</h3>
-              </div>
-              ${renderStandingsTable(groupPlayers, true)}
-            </div>`;
-        })
-        .join("");
+      container.innerHTML =
+        honorsHtml +
+        groups
+          .map((g) => {
+            const groupPlayers = [...confirmedPlayers.filter((p) => p.group_name === g)].sort(
+              (a, b) => {
+                if (b.points !== a.points) return b.points - a.points;
+                const gdA = (a.goals_for || 0) - (a.goals_against || 0);
+                const gdB = (b.goals_for || 0) - (b.goals_against || 0);
+                if (gdB !== gdA) return gdB - gdA;
+                return (b.goals_for || 0) - (a.goals_for || 0);
+              }
+            );
+            return `
+              <div class="space-y-3">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-[#d8ff45]"></span>
+                  <h3 class="text-sm font-bold text-[#d8ff45] uppercase tracking-wider">Group ${esc(g)}</h3>
+                </div>
+                ${renderStandingsTable(groupPlayers, true)}
+              </div>`;
+          })
+          .join("");
     }
   }
 
@@ -509,17 +643,21 @@
     }
 
     const isKnockout = t.format === "knockout";
-    const rounds = [...new Set(matches.map((m) => m.round_name))];
+    const roundNumbers = [...new Set(matches.map((m) => m.round_number || 1))].sort((a, b) => a - b);
 
-    container.innerHTML = rounds
+    container.innerHTML = roundNumbers
       .map((rn) => {
-        const roundMatches = matches.filter((m) => m.round_name === rn);
+        const roundMatches = matches
+          .filter((m) => (m.round_number || 1) === rn)
+          .sort((a, b) => a.match_number - b.match_number);
+        const roundName = roundMatches[0]?.round_name || `Round ${rn}`;
+
         return `
           <div class="space-y-3">
             <div class="flex items-center justify-between border-b border-slate-700/60 pb-2">
               <h3 class="text-sm font-bold text-[#d8ff45] uppercase tracking-wider flex items-center gap-2">
                 <i data-lucide="flag" width="14" height="14"></i>
-                <span>${esc(rn)}</span>
+                <span>${esc(roundName)}</span>
               </h3>
               <span class="text-xs text-slate-500 font-mono">${roundMatches.length} Matches</span>
             </div>
@@ -528,7 +666,7 @@
                 .map((m) => {
                   const p1 = players.find((p) => p.id === m.player1_id);
                   const p2 = players.find((p) => p.id === m.player2_id);
-                  const isDone = m.status === "completed";
+                  const isDone = m.status === "completed" || m.status === "bye";
                   const p1Won = isDone && m.winner_id === m.player1_id;
                   const p2Won = isDone && m.winner_id === m.player2_id;
 
@@ -539,6 +677,20 @@
                       ? new Date(m.scheduled_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
                       : new Date(m.scheduled_at).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" });
                   }
+
+                  const prevM1 = (m.match_number * 2) - 1;
+                  const prevM2 = m.match_number * 2;
+                  const p1Default = (m.round_number || 1) > 1 ? `Winner Match ${prevM1}` : "TBD";
+                  const p2Default = m.status === "bye" ? "🌟 LUCKY BYE" : ((m.round_number || 1) > 1 ? `Winner Match ${prevM2}` : "TBD");
+
+                  const p1Text = p1
+                    ? esc(p1.player_name)
+                    : `<span class="italic text-slate-500 font-mono text-[11px]">${p1Default}</span>`;
+                  const p2Text = p2
+                    ? esc(p2.player_name)
+                    : (m.status === "bye"
+                        ? '<span class="text-amber-400 font-bold">🌟 LUCKY BYE</span>'
+                        : `<span class="italic text-slate-500 font-mono text-[11px]">${p2Default}</span>`);
 
                   return `
                     <div class="panel rounded-2xl p-4 border border-slate-700/60 hover:border-slate-600 transition flex flex-col justify-between">
@@ -552,26 +704,26 @@
                         }">
                           <div class="min-w-0 truncate text-xs sm:text-sm">
                             <span class="${p1Won ? "text-[#d8ff45]" : "text-slate-200"}">
-                              ${p1 ? esc(p1.player_name) : "TBD"}
+                              ${p1Text}
                             </span>
                             ${p1?.gamertag ? `<span class="text-[10px] text-slate-400 ml-1.5 font-normal">(${esc(p1.gamertag)})</span>` : ""}
                           </div>
                           <span class="mono font-bold text-sm shrink-0 px-2 py-0.5 rounded ${
                             isDone ? "text-white" : "text-slate-500"
-                          }">${isDone ? m.player1_score ?? 0 : "-"}</span>
+                          }">${isDone ? (m.status === "bye" ? "ADV" : (m.player1_score ?? 0)) : "-"}</span>
                         </div>
                         <div class="flex items-center justify-between gap-2 p-2 rounded-xl ${
                           p2Won ? "bg-[#d8ff45]/15 border border-[#d8ff45]/30 font-bold" : "bg-[#111722]"
                         }">
                           <div class="min-w-0 truncate text-xs sm:text-sm">
                             <span class="${p2Won ? "text-[#d8ff45]" : "text-slate-200"}">
-                              ${p2 ? esc(p2.player_name) : m.status === "bye" ? "BYE" : "TBD"}
+                              ${p2Text}
                             </span>
                             ${p2?.gamertag ? `<span class="text-[10px] text-slate-400 ml-1.5 font-normal">(${esc(p2.gamertag)})</span>` : ""}
                           </div>
                           <span class="mono font-bold text-sm shrink-0 px-2 py-0.5 rounded ${
                             isDone ? "text-white" : "text-slate-500"
-                          }">${isDone ? m.player2_score ?? 0 : "-"}</span>
+                          }">${isDone ? (m.status === "bye" ? "BYE" : (m.player2_score ?? 0)) : "-"}</span>
                         </div>
                       </div>
                     </div>`;
@@ -629,6 +781,8 @@
     const winner = players.find((p) => p.status === "winner");
     const runnerUp = players.find((p) => p.status === "runner_up");
     const third = players.find((p) => p.status === "third");
+    const honors = calculateTournamentHonors(t, players, tournamentMatches);
+    const topScorer = honors?.topScorer;
 
     if (t.status === "completed" && championsTabBtn) {
       championsTabBtn.classList.remove("hidden");
@@ -645,6 +799,28 @@
         </div>`;
       return;
     }
+
+    const goldenBootCard = topScorer ? `
+      <!-- ⚽ Golden Boot (Top Scorer) -->
+      <div class="sm:col-span-3 panel rounded-3xl p-5 border border-emerald-400/40 bg-emerald-500/5 flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 shadow-lg">
+        <div class="flex items-center gap-3.5">
+          <span class="text-3xl sm:text-4xl">⚽</span>
+          <div>
+            <span class="text-[10px] font-black uppercase tracking-wider text-emerald-400">Golden Boot Award · Top Goal Scorer</span>
+            <p class="font-extrabold text-base text-white mt-0.5">${esc(topScorer.player_name)} ${topScorer.gamertag ? `<span class="text-xs text-slate-400 font-normal">(${esc(topScorer.gamertag)})</span>` : ""}</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="rounded-xl bg-[#111722] border border-slate-700 px-3 py-1.5 text-center">
+            <span class="text-[10px] text-slate-400 block">Goals</span>
+            <span class="mono font-black text-emerald-300 text-sm">${topScorer.goals_for || 0}</span>
+          </div>
+          <div class="rounded-xl bg-[#111722] border border-slate-700 px-3 py-1.5 text-center">
+            <span class="text-[10px] text-slate-400 block">Matches</span>
+            <span class="mono font-bold text-slate-200 text-sm">${(topScorer.wins || 0) + (topScorer.draws || 0) + (topScorer.losses || 0)}</span>
+          </div>
+        </div>
+      </div>` : "";
 
     container.innerHTML = `
       <!-- Runner Up (Silver) -->
@@ -672,7 +848,8 @@
         <p class="text-xs font-bold text-slate-400 uppercase">3rd Place</p>
         <p class="font-extrabold text-lg text-slate-100 mt-1">${third ? esc(third.player_name) : "Semi-Finalist"}</p>
         <p class="text-xs text-slate-400">${third?.gamertag ? esc(third.gamertag) : ""}</p>
-      </div>`;
+      </div>
+      ${goldenBootCard}`;
   }
 
   // ── GRAPHICS DOWNLOAD: CANVAS EXPORTER ────────────────────────────────────

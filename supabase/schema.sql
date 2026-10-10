@@ -488,6 +488,9 @@ create table if not exists public.tournaments (
   max_players integer not null default 16,
   entry_fee numeric not null default 0,
   prize_pool jsonb not null default '[]'::jsonb,
+  expenses_amount numeric not null default 0,
+  expenses_notes text,
+  cash_prizes_paid numeric not null default 0,
   rules text,
   registration_deadline timestamptz,
   start_date timestamptz,
@@ -496,6 +499,11 @@ create table if not exists public.tournaments (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Backwards-compatible alteration for existing tables
+alter table public.tournaments add column if not exists expenses_amount numeric not null default 0;
+alter table public.tournaments add column if not exists expenses_notes text;
+alter table public.tournaments add column if not exists cash_prizes_paid numeric not null default 0;
 
 -- tournament_players: registered participants
 create table if not exists public.tournament_players (
