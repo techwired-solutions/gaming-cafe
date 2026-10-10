@@ -1021,11 +1021,22 @@
                     </div>
                   </div>
                   ${m.winner_id ? `<p class="text-[11px] text-[#d8ff45] mt-2 font-bold">&#127942; Advanced: ${esc(tPlayers.find(p => p.id === m.winner_id)?.player_name || "")}</p>` : ""}
+                  ${!isBye ? `
+                    <div class="mt-2.5 pt-2 border-t border-slate-800/80 flex justify-end">
+                      <button class="bracket-score-btn text-[11px] font-bold border rounded-lg px-2.5 py-1 transition cursor-pointer ${
+                        m.status === "completed" ? "border-slate-600 text-slate-300 hover:border-sky-400 hover:text-sky-300" :
+                        "border-[#d8ff45]/50 text-[#d8ff45] hover:bg-[#d8ff45]/10"
+                      }" data-mid="${m.id}">${m.status === "completed" ? "Edit Result" : "Enter Result"}</button>
+                    </div>
+                  ` : ""}
                 </div>`;
             }).join("")}
           </div>
         </div>`;
     }).join("");
+
+    view.querySelectorAll(".bracket-score-btn").forEach(btn =>
+      btn.addEventListener("click", () => openMatchScoreModal(btn.dataset.mid)));
 
     if (window.lucide) lucide.createIcons({ nodes: [view] });
   }
@@ -1034,9 +1045,61 @@
   async function generateNextRound() {
     if (!currentTournament || !window.sb) return;
     if (currentTournament.format !== "knockout") {
-      return showToast("Knockout rounds advance automatically as scores are saved.");
+      return showToast("Group stage tournaments require group completion before knockout.");
     }
-    showToast("Knockout progression is automated! When each match completes, the winner immediately advances to their pre-assigned slot.");
+
+    const tid = currentTournament.id;
+    const round1Matches = tMatches.filter(m => (m.round_number || 1) === 1);
+    if (!round1Matches.length) {
+      return showToast("No Round 1 fixtures found. Launch Draw Ceremony or Reset Draw first.");
+    }
+
+    const B = round1Matches.length * 2;
+    const totalRounds = Math.log2(B);
+    const existingRounds = new Set(tMatches.map(m => m.round_number || 1));
+
+    // Check if any rounds are missing (e.g. Quarter Finals, Semis, Final)
+    const missingMatches = [];
+    for (let r = 2; r <= totalRounds; r++) {
+      if (!existingRounds.has(r)) {
+        const roundMatchesCount = B / Math.pow(2, r);
+        const roundName = getKnockoutRoundName(r, totalRounds);
+        for (let m = 1; m <= roundMatchesCount; m++) {
+          missingMatches.push({
+            tournament_id: tid,
+            round_name: roundName,
+            round_number: r,
+            match_number: m,
+            player1_id: null,
+            player2_id: null,
+            status: "scheduled",
+            score1: 0,
+            score2: 0
+          });
+        }
+      }
+    }
+
+    if (missingMatches.length) {
+      showToast("Generating missing knockout fixtures...");
+      const { data: inserted, error } = await window.sb.from("tournament_matches").insert(missingMatches).select();
+      if (error) {
+        return showToast("Error generating fixtures: " + error.message);
+      }
+      if (inserted) {
+        tMatches = tMatches.concat(inserted);
+      }
+    }
+
+    // Now auto-seed any completed Round 1 matches / Byes into their next slots
+    for (const m of tMatches) {
+      if ((m.status === "completed" || m.status === "bye") && m.winner_id) {
+        await advanceWinnerToNextRoundSlot(m, m.winner_id);
+      }
+    }
+
+    await loadTournamentData(tid);
+    showToast("Knockout bracket synced! All rounds (Quarter Finals, Semis, Final) are ready. Click 'Enter Result' on any match card to enter scores.");
   }
 
   document.getElementById("td-generate-next-round")?.addEventListener("click", generateNextRound);
@@ -1049,7 +1112,10 @@
     const filter = document.getElementById("td-match-round-filter");
     if (!list) return;
 
-    const rounds = [...new Set(tMatches.map(m => m.round_name))];
+    // Sort matches by round_number ascending, then match_number
+    const sortedAll = [...tMatches].sort((a, b) => ((a.round_number || 1) - (b.round_number || 1)) || (a.match_number - b.match_number));
+    const rounds = [...new Set(sortedAll.map(m => m.round_name))];
+
     if (filter) {
       const cur = filter.value;
       filter.innerHTML = '<option value="all">All Rounds</option>' +
@@ -1057,7 +1123,7 @@
     }
 
     const activeFilter = filter?.value || "all";
-    const filtered = activeFilter === "all" ? tMatches : tMatches.filter(m => m.round_name === activeFilter);
+    const filtered = activeFilter === "all" ? sortedAll : sortedAll.filter(m => m.round_name === activeFilter);
     if (empty) empty.classList.toggle("hidden", filtered.length > 0);
     if (!filtered.length) { list.innerHTML = ""; return; }
 
@@ -1075,30 +1141,45 @@
           : new Date(m.scheduled_at).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" });
       }
 
+      const prevM1 = (m.match_number * 2) - 1;
+      const prevM2 = m.match_number * 2;
+      const p1Default = (m.round_number || 1) > 1 ? `Winner Match ${prevM1}` : "TBD";
+      const p2Default = m.status === "bye" ? "🌟 LUCKY BYE" : ((m.round_number || 1) > 1 ? `Winner Match ${prevM2}` : "TBD");
+
+      const p1Label = p1
+        ? esc(p1.player_name)
+        : `<span class="italic text-slate-500 font-mono text-[11px]">${p1Default}</span>`;
+      const p2Label = p2
+        ? esc(p2.player_name)
+        : (m.status === "bye"
+            ? '<span class="text-amber-400 font-bold">🌟 LUCKY BYE</span>'
+            : `<span class="italic text-slate-500 font-mono text-[11px]">${p2Default}</span>`);
+
       return `
         <div class="panel rounded-xl p-4">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 mb-1.5 flex-wrap">
-                <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wide">${esc(m.round_name)}</span>
+                <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wide">${esc(m.round_name)} &middot; Match ${m.match_number}</span>
                 <span class="text-[10px] px-2 py-0.5 rounded-full ${
                   m.status === "completed" ? "bg-[#d8ff45]/20 text-[#d8ff45]" :
                   m.status === "ongoing" ? "bg-sky-500/20 text-sky-300 animate-pulse" :
+                  m.status === "bye" ? "bg-amber-500/20 text-amber-300 font-bold" :
                   "bg-slate-700 text-slate-400"}">${m.status}</span>
                 ${m.station_name ? `<span class="text-[10px] text-slate-400 font-semibold bg-slate-800 px-2 py-0.5 rounded">${esc(m.station_name)}</span>` : ""}
                 <span class="text-[10px] text-slate-500">&#128336; ${sched}</span>
               </div>
               <div class="flex items-center gap-3 text-sm">
-                <span class="font-bold truncate ${m.winner_id === m.player1_id ? "text-[#d8ff45]" : ""}">${p1 ? esc(p1.player_name) : "TBD"}</span>
+                <span class="font-bold truncate ${m.winner_id === m.player1_id ? "text-[#d8ff45]" : ""}">${p1Label}</span>
                 <span class="mono font-black text-lg shrink-0 ${m.status === "completed" ? "text-white" : "text-slate-700"}">
-                  ${m.status === "completed" ? `${m.player1_score ?? 0}&ndash;${m.player2_score ?? 0}` : "vs"}
+                  ${m.status === "completed" ? `${m.player1_score ?? 0}&ndash;${m.player2_score ?? 0}` : (m.status === "bye" ? "ADV" : "vs")}
                 </span>
-                <span class="font-bold truncate ${m.winner_id === m.player2_id ? "text-[#d8ff45]" : ""}">${p2 ? esc(p2.player_name) : m.status === "bye" ? "BYE" : "TBD"}</span>
+                <span class="font-bold truncate ${m.winner_id === m.player2_id ? "text-[#d8ff45]" : ""}">${p2Label}</span>
               </div>
             </div>
             <div class="shrink-0 flex items-center gap-2">
               ${m.status !== "bye" ? `
-                <button class="open-match-score-btn text-xs font-bold border rounded-lg px-3 py-2 transition ${
+                <button class="open-match-score-btn text-xs font-bold border rounded-lg px-3 py-2 transition cursor-pointer ${
                   m.status === "completed" ? "border-slate-600 text-slate-300 hover:border-sky-400 hover:text-sky-300" :
                   "border-[#d8ff45]/50 text-[#d8ff45] hover:bg-[#d8ff45]/10"
                 }" data-mid="${m.id}">${m.status === "completed" ? "Edit Result" : "Enter Result"}</button>
@@ -1107,7 +1188,7 @@
                     <i data-lucide="rotate-ccw" width="12" height="12"></i>Reset
                   </button>
                 ` : ""}
-              ` : '<span class="text-xs text-slate-500 italic">Bye</span>'}
+              ` : '<span class="text-xs text-amber-400 font-semibold italic">🌟 Lucky Bye</span>'}
             </div>
           </div>
         </div>`;
