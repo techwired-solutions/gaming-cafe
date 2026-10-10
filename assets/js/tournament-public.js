@@ -25,6 +25,19 @@
     cancelled: { label: "Cancelled", cls: "bg-red-500/20 text-red-300 border border-red-500/40" }
   };
 
+  function isKnockoutFinalMatch(match, allMatches) {
+    if (!match) return false;
+    const rName = (match.round_name || "").trim().toLowerCase();
+    if (rName === "final" || rName === "finals" || rName === "grand final") return true;
+    if (allMatches && allMatches.length) {
+      const curRound = match.round_number || 1;
+      const curRoundMatches = allMatches.filter(m => (m.round_number || 1) === curRound);
+      const higherRoundMatches = allMatches.filter(m => (m.round_number || 1) > curRound);
+      if (curRoundMatches.length === 1 && higherRoundMatches.length === 0) return true;
+    }
+    return false;
+  }
+
   // ── TAB SWITCHING ─────────────────────────────────────────────────────────
   function switchTab(tabId) {
     const contents = document.querySelectorAll(".tab-content");
@@ -123,6 +136,25 @@
 
       tournamentPlayers = players || [];
       tournamentMatches = matches || [];
+
+      // Auto-heal / filter phantom matches
+      if (t.format === "knockout") {
+        const completedFinal = tournamentMatches.find(m => isKnockoutFinalMatch(m, tournamentMatches) && m.status === "completed");
+        if (completedFinal) {
+          tournamentMatches = tournamentMatches.filter(m =>
+            !((m.round_number || 1) > (completedFinal.round_number || 1) ||
+              (m.id !== completedFinal.id && isKnockoutFinalMatch(m, tournamentMatches) && m.status !== "completed"))
+          );
+          if (completedFinal.winner_id) {
+            const w = tournamentPlayers.find(p => p.id === completedFinal.winner_id);
+            if (w) w.status = "winner";
+            const loserId = completedFinal.winner_id === completedFinal.player1_id ? completedFinal.player2_id : completedFinal.player1_id;
+            const r = loserId ? tournamentPlayers.find(p => p.id === loserId) : null;
+            if (r) r.status = "runner_up";
+            t.status = "completed";
+          }
+        }
+      }
 
       // Render all views
       renderHeroHeader(t, tournamentPlayers);
@@ -339,7 +371,7 @@
     let runnerUp = confirmed.find((p) => p.status === "runner_up");
 
     const finalMatch = (matches || []).find(
-      (m) => m.round_name?.toLowerCase() === "final" && m.status === "completed"
+      (m) => isKnockoutFinalMatch(m, matches) && m.status === "completed"
     );
     if (finalMatch) {
       if (!champion && finalMatch.winner_id) {
@@ -643,20 +675,48 @@
     }
 
     const isKnockout = t.format === "knockout";
-    const roundNumbers = [...new Set(matches.map((m) => m.round_number || 1))].sort((a, b) => a - b);
+    const completedFinal = matches.find((m) => isKnockoutFinalMatch(m, matches) && m.status === "completed");
+    const activeMatches = completedFinal
+      ? matches.filter((m) => !((m.round_number || 1) > (completedFinal.round_number || 1) || (m.id !== completedFinal.id && isKnockoutFinalMatch(m, matches) && m.status !== "completed")))
+      : matches;
 
-    container.innerHTML = roundNumbers
+    const roundNumbers = [...new Set(activeMatches.map((m) => m.round_number || 1))].sort((a, b) => a - b);
+    const championId = completedFinal?.winner_id || players.find((p) => p.status === "winner")?.id;
+    const champion = championId ? players.find((p) => p.id === championId) : null;
+    const runnerUpId = completedFinal ? (completedFinal.winner_id === completedFinal.player1_id ? completedFinal.player2_id : completedFinal.player1_id) : players.find((p) => p.status === "runner_up")?.id;
+    const runnerUp = runnerUpId ? players.find((p) => p.id === runnerUpId) : null;
+
+    let championBanner = "";
+    if (champion) {
+      championBanner = `
+        <div class="panel rounded-3xl p-5 sm:p-6 mb-6 border-2 border-[#d8ff45] bg-[#d8ff45]/10 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div class="flex items-center gap-4">
+            <span class="text-4xl">🥇</span>
+            <div>
+              <span class="text-[10px] font-black uppercase tracking-wider text-[#d8ff45] block">Official Tournament Champion</span>
+              <h3 class="text-xl sm:text-2xl font-black text-white mt-0.5">${esc(champion.player_name)} ${champion.gamertag ? `<span class="text-sm font-normal text-slate-300">(${esc(champion.gamertag)})</span>` : ""}</h3>
+              <p class="text-xs text-slate-300 mt-1">${runnerUp ? `Won the Grand Final against <span class="font-bold text-white">${esc(runnerUp.player_name)}</span>` : "Crowned Tournament Champion!"}${completedFinal && completedFinal.player1_score != null ? ` · Score: <span class="mono font-bold text-white">${completedFinal.player1_score} - ${completedFinal.player2_score}</span>` : ""}</p>
+            </div>
+          </div>
+          <div class="shrink-0">
+            <span class="px-4 py-1.5 rounded-full bg-[#d8ff45] text-[#10141e] font-black text-xs uppercase tracking-wider shadow-lg">Tournament Complete</span>
+          </div>
+        </div>`;
+    }
+
+    const fixturesHtml = roundNumbers
       .map((rn) => {
-        const roundMatches = matches
+        const roundMatches = activeMatches
           .filter((m) => (m.round_number || 1) === rn)
           .sort((a, b) => a.match_number - b.match_number);
         const roundName = roundMatches[0]?.round_name || `Round ${rn}`;
+        const isFinalRound = isKnockoutFinalMatch(roundMatches[0], activeMatches);
 
         return `
           <div class="space-y-3">
             <div class="flex items-center justify-between border-b border-slate-700/60 pb-2">
               <h3 class="text-sm font-bold text-[#d8ff45] uppercase tracking-wider flex items-center gap-2">
-                <i data-lucide="flag" width="14" height="14"></i>
+                <i data-lucide="${isFinalRound ? 'trophy' : 'flag'}" width="14" height="14"></i>
                 <span>${esc(roundName)}</span>
               </h3>
               <span class="text-xs text-slate-500 font-mono">${roundMatches.length} Matches</span>
@@ -669,6 +729,7 @@
                   const isDone = m.status === "completed" || m.status === "bye";
                   const p1Won = isDone && m.winner_id === m.player1_id;
                   const p2Won = isDone && m.winner_id === m.player2_id;
+                  const isMatchFinal = isKnockoutFinalMatch(m, activeMatches);
 
                   // Knockout matches: tournament completes in one day, only display time!
                   let sched = "Time TBD";
@@ -693,9 +754,9 @@
                         : `<span class="italic text-slate-500 font-mono text-[11px]">${p2Default}</span>`);
 
                   return `
-                    <div class="panel rounded-2xl p-4 border border-slate-700/60 hover:border-slate-600 transition flex flex-col justify-between">
+                    <div class="panel rounded-2xl p-4 border ${isMatchFinal && isDone ? 'border-2 border-[#d8ff45]/70 bg-[#d8ff45]/5 shadow-lg shadow-[#d8ff45]/15' : 'border-slate-700/60 hover:border-slate-600'} transition flex flex-col justify-between">
                       <div class="flex items-center justify-between text-[11px] text-slate-400 mb-2.5">
-                        <span class="font-bold text-sky-400">${esc(m.station_name || "PS5 Arena")}</span>
+                        <span class="font-bold ${isMatchFinal ? 'text-[#d8ff45]' : 'text-sky-400'}">${isMatchFinal ? '🏆 GRAND FINAL' : esc(m.station_name || "PS5 Arena")}</span>
                         <span class="font-mono text-slate-400">&#128336; ${sched}</span>
                       </div>
                       <div class="space-y-2">
@@ -726,6 +787,7 @@
                           }">${isDone ? (m.status === "bye" ? "BYE" : (m.player2_score ?? 0)) : "-"}</span>
                         </div>
                       </div>
+                      ${isMatchFinal && m.winner_id ? `<div class="mt-2.5 pt-2 border-t border-slate-700/60 text-[11px] text-[#d8ff45] font-black">🥇 CHAMPION: ${esc(players.find(p => p.id === m.winner_id)?.player_name || "")}</div>` : ""}
                     </div>`;
                 })
                 .join("")}
@@ -733,6 +795,8 @@
           </div>`;
       })
       .join("");
+
+    container.innerHTML = championBanner + fixturesHtml;
   }
 
   // ── TAB 4: PRIZES & RULES ─────────────────────────────────────────────────
@@ -778,10 +842,10 @@
     const championsTabBtn = document.getElementById("tab-btn-champions");
     if (!container) return;
 
-    const winner = players.find((p) => p.status === "winner");
-    const runnerUp = players.find((p) => p.status === "runner_up");
-    const third = players.find((p) => p.status === "third");
     const honors = calculateTournamentHonors(t, players, tournamentMatches);
+    const winner = players.find((p) => p.status === "winner") || honors?.champion;
+    const runnerUp = players.find((p) => p.status === "runner_up") || honors?.runnerUp;
+    const third = players.find((p) => p.status === "third");
     const topScorer = honors?.topScorer;
 
     if (t.status === "completed" && championsTabBtn) {
