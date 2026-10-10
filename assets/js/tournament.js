@@ -1073,8 +1073,8 @@
             player1_id: null,
             player2_id: null,
             status: "scheduled",
-            score1: 0,
-            score2: 0
+            player1_score: null,
+            player2_score: null
           });
         }
       }
@@ -1970,8 +1970,8 @@
               player2_id: null,
               status: "bye",
               winner_id: p1 ? p1.id : null,
-              score1: 0,
-              score2: 0
+              player1_score: null,
+              player2_score: null
             });
           } else {
             const p1 = shuffled[pIdx++];
@@ -1985,8 +1985,8 @@
               player2_id: p2 ? p2.id : null,
               status: p2 ? "scheduled" : "bye",
               winner_id: !p2 && p1 ? p1.id : null,
-              score1: 0,
-              score2: 0
+              player1_score: null,
+              player2_score: null
             });
           }
         }
@@ -2008,8 +2008,8 @@
                 player1_id: grp[a].id,
                 player2_id: grp[b].id,
                 status: "scheduled",
-                score1: 0,
-                score2: 0
+                player1_score: null,
+                player2_score: null
               });
             }
           }
@@ -2080,8 +2080,8 @@
               player1_id: null,
               player2_id: null,
               status: "scheduled",
-              score1: 0,
-              score2: 0
+              player1_score: null,
+              player2_score: null
             });
           }
         }
