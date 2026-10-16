@@ -3100,7 +3100,7 @@
       editTarget = record;
       document.getElementById("edit-heading").textContent = `${record.customer_name || "—"} · ${record.status || "Session"}`;
       document.getElementById("edit-station").value = record.station_name || "";
-      document.getElementById("edit-game").value = record.game || "";
+
       document.getElementById("edit-customer-name").value = record.customer_name || "";
       document.getElementById("edit-customer-phone").value = record.customer_phone || "";
       // Populate extra stations
@@ -3386,7 +3386,7 @@
       const allStationNames = [station, ...extraStations.map((e) => e.station)].filter(Boolean).join(", ");
       const updatePayload = {
         station_name: station,
-        game: document.getElementById("edit-game").value.trim(),
+
         customer_name: customerName,
         customer_phone: customerPhone,
         start_time: startIso,
@@ -3748,7 +3748,7 @@
     if (stations && stations.length && stations[0].rate) {
       document.getElementById("mr-rate").value = stations[0].rate;
     }
-    document.getElementById("mr-game").value = "";
+
     document.getElementById("mr-customer-name").value = "";
     document.getElementById("mr-customer-phone").value = "";
     document.getElementById("mr-notes").value = "";
@@ -4088,7 +4088,7 @@
         const recordPayload = {
           type: "Walk-in",
           station_name: station,
-          game: document.getElementById("mr-game").value.trim() || null,
+
           customer_name: customerName,
           customer_phone: customerPhone || "—",
           start_time: startIso,
@@ -4359,7 +4359,6 @@
   function startSessionFromWaiting(entry) {
     pendingWaitingId = entry.id;
     document.getElementById("station-name").value = "";
-    document.getElementById("game-name").value = "";
     document.getElementById("customer-name").value = entry.customer_name || "";
     document.getElementById("customer-phone").value = entry.customer_phone || "";
     document.getElementById("session-status").value = "Active";
@@ -7305,7 +7304,7 @@ Here is the menu image:`;
       const { error } = await window.sb.from("sessions").insert({
         type: status === "Booked" ? "Booked" : "Walk-in",
         station_name: station,
-        game: document.getElementById("game-name").value.trim(),
+
         customer_name: customer,
         customer_phone: phone,
         start_time: startIso,
