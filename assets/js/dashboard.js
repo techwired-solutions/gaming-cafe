@@ -750,45 +750,113 @@
     return { total, foodTotal, timeCost, duration, rate, extraCost };
   }
 
-  // ---- Extra Stations helpers ----
-  // Build a single extra-station row (used by both New Session and Edit modal).
-  function buildExtraStationRow(prefix, stationName, durationMin, rate, stationsList) {
+  // ---- Extra Stations helpers (per-station independent time tracking) ----
+  // Each station slot records its own start time, end time, duration and rate.
+  // This lets staff log e.g. Station 1: 1:00–1:45 PM and Racing Sim: 1:45–2:00 PM
+  // within a single customer session, with different rates billed separately.
+  function buildExtraStationRow(prefix, stationName, durationMin, rate, stationsList, startTimeStr, endTimeStr) {
     const row = document.createElement("div");
-    row.className = "extra-station-row grid grid-cols-[1fr_auto_auto_auto] gap-2 items-end bg-[#111722] border border-slate-700/60 rounded-xl p-2.5";
+    row.className = "extra-station-row border border-slate-700/60 rounded-xl p-3 space-y-2 bg-[#111722]";
     const stOpts = stationsList.map((s) => `<option value="${s.name}">`).join("");
-    const listId = `${prefix}-es-datalist-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const listId = `${prefix}-es-dl-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+    const safeRate = rate || 300;
+    const safeDur  = durationMin || 0;
+    const safeStart = startTimeStr || "";
+    const safeEnd   = endTimeStr   || "";
     row.innerHTML = `
-      <div>
-        <label class="block text-[11px] text-slate-400 mb-1">Station</label>
-        <input class="form-control text-xs py-1.5" type="text" list="${listId}" placeholder="Station name" value="${stationName || ""}" data-role="es-station">
-        <datalist id="${listId}">${stOpts}</datalist>
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex-1 min-w-0">
+          <label class="block text-[11px] text-slate-400 mb-1">Station name</label>
+          <input class="form-control text-xs py-1.5" type="text" list="${listId}"
+            placeholder="e.g. Racing Simulator" value="${(stationName||"").replace(/"/g,"&quot;")}" data-role="es-station">
+          <datalist id="${listId}">${stOpts}</datalist>
+        </div>
+        <button type="button" class="es-remove-btn flex-shrink-0 mt-5 h-8 w-8 rounded-xl border border-red-500/30
+          text-red-400 hover:bg-red-500/10 flex items-center justify-center cursor-pointer transition" title="Remove">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
       </div>
-      <div>
-        <label class="block text-[11px] text-slate-400 mb-1">Duration (min)</label>
-        <input class="form-control text-xs py-1.5 w-20" type="number" min="0" value="${durationMin || 60}" data-role="es-duration">
+      <div class="grid grid-cols-[1fr_1fr_auto_1fr] gap-2 items-end">
+        <div>
+          <label class="block text-[11px] text-slate-400 mb-1">Start time</label>
+          <input class="form-control text-xs py-1.5" type="time" value="${safeStart}" data-role="es-start">
+        </div>
+        <div>
+          <label class="block text-[11px] text-slate-400 mb-1">End time</label>
+          <input class="form-control text-xs py-1.5" type="time" value="${safeEnd}" data-role="es-end">
+        </div>
+        <div class="pb-1 text-slate-400 text-xs self-end text-center">or</div>
+        <div>
+          <label class="block text-[11px] text-slate-400 mb-1">Duration (min)</label>
+          <input class="form-control text-xs py-1.5" type="number" min="0" value="${safeDur}" data-role="es-duration">
+        </div>
       </div>
-      <div>
-        <label class="block text-[11px] text-slate-400 mb-1">Rate (रु/hr)</label>
-        <input class="form-control text-xs py-1.5 w-20" type="number" min="0" value="${rate || 300}" data-role="es-rate">
-      </div>
-      <button type="button" class="es-remove-btn self-end mb-0.5 h-9 w-9 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 flex items-center justify-center cursor-pointer transition" title="Remove this station">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>`;
-    // Autofill rate when station name changes
-    const stInput = row.querySelector('[data-role="es-station"]');
-    const rateInput = row.querySelector('[data-role="es-rate"]');
-    const durInput = row.querySelector('[data-role="es-duration"]');
-    function autofillRate() {
-      const match = stations.find((s) => s.name.trim().toLowerCase() === stInput.value.trim().toLowerCase());
-      if (match && match.rate != null) rateInput.value = match.rate;
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex-1">
+          <label class="block text-[11px] text-slate-400 mb-1">Rate (रु/hr)</label>
+          <input class="form-control text-xs py-1.5" type="number" min="0" value="${safeRate}" data-role="es-rate">
+        </div>
+        <div class="flex-1 text-right pt-4">
+          <span class="text-[11px] text-slate-500">Subtotal</span>
+          <div class="mono text-sm font-bold text-sky-400 es-subtotal-display">${inr(Math.round((safeDur/60)*safeRate))}</div>
+        </div>
+      </div>`;
+
+    const stInput   = row.querySelector('[data-role="es-station"]');
+    const startInp  = row.querySelector('[data-role="es-start"]');
+    const endInp    = row.querySelector('[data-role="es-end"]');
+    const durInp    = row.querySelector('[data-role="es-duration"]');
+    const rateInp   = row.querySelector('[data-role="es-rate"]');
+    const subtotEl  = row.querySelector('.es-subtotal-display');
+
+    function updateSubtotal() {
+      const d = Math.max(0, Number(durInp.value) || 0);
+      const r = Math.max(0, Number(rateInp.value) || 0);
+      subtotEl.textContent = inr(Math.round((d/60)*r));
     }
-    stInput.addEventListener("change", () => { autofillRate(); refreshExtraStations(prefix); });
-    rateInput.addEventListener("input", () => refreshExtraStations(prefix));
-    durInput.addEventListener("input", () => refreshExtraStations(prefix));
+
+    // Sync start + duration → end
+    function syncEnd() {
+      const startMin = parseTimeToMinutes(startInp.value);
+      const dur = Math.max(0, Number(durInp.value) || 0);
+      if (startMin != null && dur > 0) {
+        endInp.value = minutesToTimeStr(startMin + dur);
+      }
+      updateSubtotal();
+      refreshExtraStations(prefix);
+    }
+    // Sync start + end → duration
+    function syncDur() {
+      const startMin = parseTimeToMinutes(startInp.value);
+      const endMin   = parseTimeToMinutes(endInp.value);
+      if (startMin != null && endMin != null) {
+        let diff = endMin - startMin;
+        if (diff < 0) diff += 1440; // past midnight
+        durInp.value = diff;
+      }
+      updateSubtotal();
+      refreshExtraStations(prefix);
+    }
+
+    startInp.addEventListener("change", () => { syncEnd(); });
+    durInp.addEventListener("input",   () => { syncEnd(); });
+    endInp.addEventListener("change",  () => { syncDur(); });
+    rateInp.addEventListener("input",  () => { updateSubtotal(); refreshExtraStations(prefix); });
+
+    stInput.addEventListener("change", () => {
+      const match = stations.find((s) => s.name.trim().toLowerCase() === stInput.value.trim().toLowerCase());
+      if (match && match.rate != null) { rateInp.value = match.rate; updateSubtotal(); }
+      refreshExtraStations(prefix);
+    });
+
     row.querySelector(".es-remove-btn").addEventListener("click", () => {
       row.remove();
       refreshExtraStations(prefix);
     });
+
+    updateSubtotal();
     return row;
   }
 
@@ -805,17 +873,16 @@
   }
 
   function refreshExtraStations(prefix) {
-    const container = document.getElementById(`${prefix}-extra-stations-rows`);
-    const emptyEl   = document.getElementById(`${prefix}-extra-stations-empty`);
-    const subtotal  = document.getElementById(`${prefix}-extra-stations-subtotal`);
+    const container   = document.getElementById(`${prefix}-extra-stations-rows`);
+    const emptyEl     = document.getElementById(`${prefix}-extra-stations-empty`);
+    const subtotalDiv = document.getElementById(`${prefix}-extra-stations-subtotal`);
     const subtotalVal = document.getElementById(`${prefix}-extra-subtotal-val`);
     if (!container) return;
     const rows = container.querySelectorAll(".extra-station-row");
     if (emptyEl) emptyEl.classList.toggle("hidden", rows.length > 0);
     const cost = calcExtraStationsCost(prefix);
-    if (subtotal) subtotal.classList.toggle("hidden", rows.length === 0);
+    if (subtotalDiv) subtotalDiv.classList.toggle("hidden", rows.length === 0);
     if (subtotalVal) subtotalVal.textContent = inr(cost);
-    // Trigger parent recalc
     if (prefix === "ns") calculateAmount();
     else if (prefix === "edit") recalcEditModal();
   }
@@ -825,10 +892,12 @@
     if (!container) return [];
     const result = [];
     container.querySelectorAll(".extra-station-row").forEach((row) => {
-      const stn = (row.querySelector('[data-role="es-station"]').value || "").trim();
-      const dur = Math.max(0, Number(row.querySelector('[data-role="es-duration"]').value) || 0);
-      const rt  = Math.max(0, Number(row.querySelector('[data-role="es-rate"]').value)     || 0);
-      if (stn) result.push({ station: stn, duration_minutes: dur, rate: rt, amount: Math.round((dur / 60) * rt) });
+      const stn   = (row.querySelector('[data-role="es-station"]').value || "").trim();
+      const dur   = Math.max(0, Number(row.querySelector('[data-role="es-duration"]').value) || 0);
+      const rt    = Math.max(0, Number(row.querySelector('[data-role="es-rate"]').value)     || 0);
+      const start = row.querySelector('[data-role="es-start"]').value  || null;
+      const end   = row.querySelector('[data-role="es-end"]').value    || null;
+      if (stn) result.push({ station: stn, start_time: start, end_time: end, duration_minutes: dur, rate: rt, amount: Math.round((dur/60)*rt) });
     });
     return result;
   }
@@ -844,10 +913,11 @@
     if (!container) return;
     container.innerHTML = "";
     (extraStations || []).forEach((es) => {
-      container.appendChild(buildExtraStationRow(prefix, es.station, es.duration_minutes, es.rate, stations));
+      container.appendChild(buildExtraStationRow(prefix, es.station, es.duration_minutes, es.rate, stations, es.start_time, es.end_time));
     });
     refreshExtraStations(prefix);
   }
+
 
   // Per-compartment pricing: PS5 stations bill रु300/hr, PS4 रु250/hr by
   // default — used both as the fallback when a station is added without an

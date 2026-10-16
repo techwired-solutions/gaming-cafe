@@ -193,6 +193,42 @@
     [data-theme="light"] .bg-slate-900\/70    { background: rgba(240,244,250,.7) !important; }
     [data-theme="light"] .bg-\[\#d8ff45\]\/12, [data-theme="light"] .bg-\[\#d8ff45\]\/15, [data-theme="light"] .bg-\[\#d8ff45\]\/20 { background: rgba(95,136,0,.11) !important; }
     [data-theme="light"] .bg-\[\#d8ff45\]     { background-color: #5f8800 !important; }
+    /* ---- Food row: source select, price input, price span ---- */
+    /* bg-[#161d2a] = food source select background */
+    [data-theme="light"] .fr-source { background-color: #f0f4fa !important; border-color: var(--line) !important; color: var(--text-primary) !important; }
+    /* bg-[#101520] = unit price input background */
+    [data-theme="light"] .fr-unit-price { background-color: #ffffff !important; border-color: var(--line) !important; color: #3d6600 !important; }
+    /* price span next to row */
+    [data-theme="light"] .fr-price { color: #3d6600 !important; }
+    /* food row remove button */
+    [data-theme="light"] .fr-remove { border-color: var(--line) !important; color: var(--text-muted) !important; }
+    /* ---- Food total card (bg-[#0f1520]) ---- */
+    [data-theme="light"] .bg-\[\#0f1520\] { background-color: #eef2fa !important; border-color: var(--line) !important; }
+    /* ---- Station chips ---- */
+    /* inactive chip: bg-slate-900/80 */
+    [data-theme="light"] .station-chip:not(.active) { background-color: #eef2fa !important; border-color: #c0cfe8 !important; color: var(--text-secondary) !important; }
+    [data-theme="light"] .station-chip.active { background-color: rgba(95,136,0,.14) !important; border-color: rgba(95,136,0,.6) !important; color: #3d6600 !important; }
+    /* ---- Quick-add chips: bg-slate-800/80 (ChillPill button) ---- */
+    [data-theme="light"] .quick-add-source-chip.bg-slate-800\/80,
+    [data-theme="light"] [class*="bg-slate-800"] { background-color: #eef2fa !important; border-color: #c0cfe8 !important; color: var(--text-secondary) !important; }
+    /* Override the slate-800 quick-add chip specifically (ChillPill) */
+    [data-theme="light"] .quick-add-source-chip:not([class*="sky"]):not([class*="amber"]):not([class*="purple"]) {
+      background-color: #eef2fa !important; border-color: #c0cfe8 !important; color: var(--text-secondary) !important;
+    }
+    /* Sky (custom) chip in light mode */
+    [data-theme="light"] .bg-sky-500\/10 { background-color: rgba(14,107,154,.09) !important; }
+    [data-theme="light"] .border-sky-500\/40 { border-color: rgba(14,107,154,.4) !important; }
+    /* Amber (Bro's) chip */
+    [data-theme="light"] .bg-amber-500\/10 { background-color: rgba(146,88,10,.08) !important; }
+    [data-theme="light"] .border-amber-500\/40 { border-color: rgba(146,88,10,.4) !important; }
+    /* Purple (Bardali) chip */
+    [data-theme="light"] .bg-purple-500\/10 { background-color: rgba(91,48,152,.08) !important; }
+    [data-theme="light"] .border-purple-500\/40 { border-color: rgba(91,48,152,.4) !important; }
+    /* Extra station row bg */
+    [data-theme="light"] .extra-station-row { background-color: #f4f7fc !important; border-color: var(--line) !important; }
+    /* Edit preset chips */
+    [data-theme="light"] .edit-preset-chip { background-color: #eef2fa !important; border-color: #c0cfe8 !important; color: var(--text-secondary) !important; }
+
 
     /* ---- Thermal Receipt Print Styles (58mm / 80mm roll) ---- */
     #thermal-receipt-area { display: none; }
