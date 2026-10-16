@@ -308,6 +308,29 @@
     [data-theme="light"] #btn-copy-linkypot:hover,
     [data-theme="light"] #btn-refresh-linkypot:hover { border-color: #a0b3d0 !important; color: var(--text-primary) !important; }
 
+    /* ---- Count badges (bg-slate-700) ---- */
+    [data-theme="light"] #waiting-count,
+    [data-theme="light"] #record-count { background-color: #dde5f0 !important; color: var(--text-secondary) !important; }
+
+    /* ---- Food row: responsive 2-row layout on mobile ---- */
+    /* Row 1: source | qty | unit-price | total | remove */
+    /* Row 2: menu item select (full width) */
+    @media (max-width: 639px) {
+      .fr-row {
+        display: grid !important;
+        grid-template-columns: 1fr auto auto auto auto !important;
+        grid-template-rows: auto auto !important;
+        gap: 0.4rem !important;
+      }
+      .fr-row .fr-source     { grid-column: 1 / 2; grid-row: 1; width: 100% !important; min-width: 0; }
+      .fr-row .fr-item-col   { grid-column: 1 / 6; grid-row: 2; min-width: 0; }
+      .fr-row .fr-qty        { grid-column: 2 / 3; grid-row: 1; width: 3rem !important; }
+      .fr-row .fr-unit-price { grid-column: 3 / 4; grid-row: 1; width: 4rem !important; }
+      .fr-row .fr-price      { grid-column: 4 / 5; grid-row: 1; min-width: 0; }
+      .fr-row .fr-remove     { grid-column: 5 / 6; grid-row: 1; }
+    }
+
+
     /* ---- Thermal Receipt Print Styles (58mm / 80mm roll) ---- */
     #thermal-receipt-area { display: none; }
     @media print {
