@@ -229,6 +229,84 @@
     /* Edit preset chips */
     [data-theme="light"] .edit-preset-chip { background-color: #eef2fa !important; border-color: #c0cfe8 !important; color: var(--text-secondary) !important; }
 
+    /* ===================== LIGHT MODE — PER-TAB FIXES ===================== */
+
+    /* ---- Stations board cards ---- */
+    /* occupied card: border-[#ff6875]/40 bg-[#241419] */
+    [data-theme="light"] #stations-board article { border-color: #c0cfe8 !important; background-color: #f5f7fb !important; }
+    /* available card override (bg-[#15201a]) */
+    [data-theme="light"] #stations-board article:has(.status-active) { border-color: rgba(95,136,0,.35) !important; background-color: #f2f8ee !important; }
+    /* occupied override: target via JS-injected class via border-[#ff6875]/40 */
+    [data-theme="light"] #stations-board article:has(.status-cancelled) { border-color: rgba(176,35,53,.25) !important; background-color: #fdf2f3 !important; }
+
+    /* ---- Records tab: session card bg (bg-[#202838]) ---- */
+    [data-theme="light"] .session-card { background-color: #f5f7fb !important; border-color: var(--line) !important; }
+    [data-theme="light"] .session-card .record-actions { border-color: var(--line) !important; }
+    /* Action buttons: bg-slate-800/80 (+ Food, Edit, Print, Delete) */
+    [data-theme="light"] .open-add-food,
+    [data-theme="light"] .open-edit,
+    [data-theme="light"] .print-bill-btn,
+    [data-theme="light"] .delete-trigger { background-color: #eef2fa !important; border-color: #c0cfe8 !important; color: var(--text-secondary) !important; }
+    [data-theme="light"] .open-add-food:hover,
+    [data-theme="light"] .open-edit:hover { background-color: #dde5f0 !important; }
+    [data-theme="light"] .print-bill-btn:hover { border-color: rgba(95,136,0,.5) !important; color: #3d6600 !important; }
+    /* Extend + Min button */
+    [data-theme="light"] .extend-apply { background-color: rgba(95,136,0,.10) !important; border-color: rgba(95,136,0,.5) !important; color: #3d6600 !important; }
+    /* Delete confirm cancel button */
+    [data-theme="light"] .delete-no { background-color: #eef2fa !important; border-color: #c0cfe8 !important; color: var(--text-secondary) !important; }
+    /* Record meta text */
+    [data-theme="light"] .record-customer { color: var(--text-primary) !important; }
+    [data-theme="light"] .record-customer:hover { color: #3d6600 !important; }
+    [data-theme="light"] .record-amount { color: #3d6600 !important; }
+    /* Unpaid badge */
+    [data-theme="light"] .bg-rose-500\/20 { background-color: rgba(176,35,53,.09) !important; }
+    [data-theme="light"] .border-rose-500\/30 { border-color: rgba(176,35,53,.3) !important; }
+    [data-theme="light"] .text-rose-300 { color: #b02335 !important; }
+    /* manage list rows (stations/tables admin): bg-[#111722] already overridden */
+    [data-theme="light"] .mng-edit,
+    [data-theme="light"] .mng-toggle,
+    [data-theme="light"] .mng-cancel { background-color: #eef2fa !important; border-color: #c0cfe8 !important; color: var(--text-secondary) !important; }
+
+    /* ---- Expenses & Capital tab ---- */
+    /* Quick suggestion chips: bg-slate-900/60 */
+    [data-theme="light"] .expense-chip { background-color: #eef2fa !important; border-color: #c0cfe8 !important; color: var(--text-secondary) !important; }
+    [data-theme="light"] .expense-chip:hover { border-color: rgba(95,136,0,.5) !important; color: #3d6600 !important; }
+    /* Capital partner cards (JS-rendered bg-[#111722]): covered already */
+    /* bg-slate-800 Re-check button */
+    [data-theme="light"] #btn-recheck-capital { background-color: #eef2fa !important; color: var(--text-secondary) !important; }
+    /* Capital table hover rows */
+    [data-theme="light"] .hover\:bg-slate-800\/50:hover { background-color: rgba(200,214,235,.35) !important; }
+
+    /* ---- Menu & Pricing tab ---- */
+    /* Partner column cards: bg-[#101520] */
+    [data-theme="light"] .bg-\[\#101520\] { background-color: #f4f7fc !important; }
+    /* column divider border-slate-800 */
+    [data-theme="light"] .border-slate-800 { border-color: var(--line) !important; }
+    /* menu item card: bg-[#111722] already overridden → #f5f7fb */
+    /* menu item name + price */
+    [data-theme="light"] [class*="menu-col"] .font-bold,
+    [data-theme="light"] #menu-list .font-bold { color: var(--text-primary) !important; }
+    /* menu supplier badge: bg-slate-800 text-slate-300 */
+    [data-theme="light"] .bg-slate-800.text-slate-300 { background-color: #eef2fa !important; color: var(--text-secondary) !important; }
+    /* menu item category badge: bg-slate-800/80 text-slate-400 */
+    [data-theme="light"] .bg-slate-800\/80 { background-color: #eef2fa !important; color: var(--text-muted) !important; }
+    /* menu source tab buttons */
+    [data-theme="light"] .menu-source-tab { background-color: #eef2fa !important; border-color: #c0cfe8 !important; color: var(--text-secondary) !important; }
+    [data-theme="light"] .menu-source-tab.active,
+    [data-theme="light"] .menu-source-tab[aria-selected="true"] { border-color: rgba(95,136,0,.5) !important; color: #3d6600 !important; background-color: rgba(95,136,0,.08) !important; }
+    /* bg-[#161d2a] – partner Bro's/Bardali info cards in menu settings */
+    [data-theme="light"] .bg-\[\#161d2a\] { background-color: #f0f4fa !important; border-color: var(--line) !important; }
+    /* border-b border-slate-800 inside column header */
+    [data-theme="light"] #menu-columns-view .border-b { border-color: var(--line) !important; }
+
+    /* ---- Linkypot tab ---- */
+    /* Settings & Tools, Copy URL, Refresh icon buttons (bg-slate-800/80) */
+    [data-theme="light"] #btn-toggle-embed-settings,
+    [data-theme="light"] #btn-copy-linkypot,
+    [data-theme="light"] #btn-refresh-linkypot { background-color: #eef2fa !important; border-color: #c0cfe8 !important; color: var(--text-secondary) !important; }
+    [data-theme="light"] #btn-toggle-embed-settings:hover { border-color: rgba(95,136,0,.5) !important; color: #3d6600 !important; }
+    [data-theme="light"] #btn-copy-linkypot:hover,
+    [data-theme="light"] #btn-refresh-linkypot:hover { border-color: #a0b3d0 !important; color: var(--text-primary) !important; }
 
     /* ---- Thermal Receipt Print Styles (58mm / 80mm roll) ---- */
     #thermal-receipt-area { display: none; }
