@@ -291,7 +291,16 @@
       sessionStorage.removeItem("chillpill_staff");
       location.reload();
     });
+
+    // Overview quick-action buttons
+    const ovNs = document.getElementById("overview-new-session-btn");
+    if (ovNs) ovNs.addEventListener("click", () => switchPage("page-new-session"));
+    const ovLog = document.getElementById("overview-lounge-log-btn");
+    if (ovLog) ovLog.addEventListener("click", () => switchPage("page-records"));
   }
+
+  // Alias used by updateSummary unpaid-collect handler and other places
+  function navigateTo(pageId) { switchPage(pageId); }
 
   function applyRoleVisibility() {
     const isAdmin = currentStaff && currentStaff.role === "admin";
@@ -1330,6 +1339,40 @@
     document.getElementById("food-count").textContent = records.filter((r) => r.food_items && r.food_items.length && isToday(r.paid_at || r.start_time || r.created_at)).length;
     document.getElementById("today-revenue").textContent = inr(todayRevenue);
     document.getElementById("record-count").textContent = records.length;
+
+    // ---- Unpaid / Due panel ----
+    const unpaid = records.filter((r) => r.status === "Completed" && !r.paid);
+    const panel = document.getElementById("overview-unpaid-panel");
+    const countEl = document.getElementById("overview-unpaid-count");
+    const listEl = document.getElementById("overview-unpaid-list");
+    if (panel && listEl) {
+      panel.classList.toggle("hidden", unpaid.length === 0);
+      if (countEl) countEl.textContent = unpaid.length;
+      listEl.innerHTML = "";
+      unpaid.forEach((r) => {
+        const card = document.createElement("div");
+        card.className = "overview-unpaid-card rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 flex items-center justify-between gap-3";
+        card.innerHTML = `
+          <div class="min-w-0">
+            <p class="font-semibold text-sm truncate">${r.customer_name || "—"}</p>
+            <p class="text-xs text-slate-400 truncate mono">${r.station_name || "—"} · ${r.duration_minutes || 0} min</p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="mono font-bold text-[#ff6875] text-sm">${inr(r.amount)}</span>
+            <button type="button" class="unpaid-collect-btn rounded-lg px-2.5 py-1.5 text-xs font-bold cursor-pointer transition hover:brightness-110 whitespace-nowrap"
+              style="background:#ff6875;color:#10141e;" data-id="${r.id}">Collect</button>
+          </div>`;
+        card.querySelector(".unpaid-collect-btn").addEventListener("click", () => {
+          // Navigate to records tab and open checkout for this record
+          navigateTo("page-records");
+          setTimeout(() => {
+            const targetCard = document.querySelector(`[data-record-id="${r.id}"] .open-checkout`);
+            if (targetCard) targetCard.click();
+          }, 120);
+        });
+        listEl.appendChild(card);
+      });
+    }
   }
 
   function foodSummaryText(record) {

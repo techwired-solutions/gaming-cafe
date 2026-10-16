@@ -308,6 +308,13 @@
     [data-theme="light"] #btn-copy-linkypot:hover,
     [data-theme="light"] #btn-refresh-linkypot:hover { border-color: #a0b3d0 !important; color: var(--text-primary) !important; }
 
+    /* ---- Overview quick-action buttons ---- */
+    [data-theme="light"] #overview-lounge-log-btn { background-color: #eef2fa !important; border-color: #c0cfe8 !important; color: var(--text-secondary) !important; }
+    [data-theme="light"] #overview-lounge-log-btn:hover { border-color: rgba(95,136,0,.5) !important; color: #3d6600 !important; }
+    /* Unpaid panel in light mode */
+    [data-theme="light"] #overview-unpaid-panel { background-color: rgba(176,35,53,.04) !important; border-color: rgba(176,35,53,.2) !important; }
+    [data-theme="light"] .overview-unpaid-card { background-color: #fff !important; border-color: rgba(176,35,53,.2) !important; }
+
     /* ---- Count badges (bg-slate-700) ---- */
     [data-theme="light"] #waiting-count,
     [data-theme="light"] #record-count { background-color: #dde5f0 !important; color: var(--text-secondary) !important; }
@@ -460,7 +467,22 @@
       <main class="px-4 sm:px-6 py-6 max-w-6xl">
         <!-- ===================== OVERVIEW ===================== -->
         <section id="page-overview" class="page-view active">
-          <div class="dashboard-grid mb-6">
+
+          <!-- Quick actions bar -->
+          <div class="flex flex-wrap items-center gap-3 mb-5">
+            <button id="overview-new-session-btn" type="button"
+              class="flex items-center gap-2 rounded-xl px-5 py-2.5 font-bold text-sm shadow-lg transition hover:brightness-110 cursor-pointer"
+              style="background:#d8ff45;color:#10141e;">
+              <i data-lucide="plus-circle" width="17" height="17"></i> New Session
+            </button>
+            <button id="overview-lounge-log-btn" type="button"
+              class="flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800/60 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:border-[#d8ff45] hover:text-[#d8ff45] transition cursor-pointer">
+              <i data-lucide="scroll-text" width="16" height="16"></i> Lounge Log
+            </button>
+          </div>
+
+          <!-- KPI cards -->
+          <div class="dashboard-grid mb-5">
             <article class="panel rounded-2xl p-4"><i data-lucide="play-circle" class="text-[#d8ff45]" width="19" height="19"></i>
               <p id="active-count" class="mono text-2xl font-bold mt-5">0</p><p class="text-sm text-slate-400 mt-1">Active sessions</p>
             </article>
@@ -477,6 +499,23 @@
               <p id="today-revenue" class="mono text-2xl font-bold mt-5">रु 0</p><p class="text-sm text-slate-400 mt-1">Revenue today</p>
             </article>
           </div>
+
+          <!-- Unpaid / Due alert panel -->
+          <div id="overview-unpaid-panel" class="hidden panel rounded-2xl p-5 mb-5 border border-rose-500/25 bg-rose-500/5">
+            <div class="flex items-center justify-between gap-3 mb-3">
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-rose-500/20 text-[#ff6875]">
+                  <i data-lucide="alert-circle" width="15" height="15"></i>
+                </span>
+                <h2 class="font-bold text-base">Unpaid / Due</h2>
+                <span id="overview-unpaid-count" class="mono text-xs rounded-full bg-rose-500/20 text-[#ff6875] px-2.5 py-0.5 font-bold">0</span>
+              </div>
+              <span class="text-xs text-slate-500">Completed sessions awaiting payment</span>
+            </div>
+            <div id="overview-unpaid-list" class="grid sm:grid-cols-2 gap-2.5"></div>
+          </div>
+
+          <!-- Active sessions panel -->
           <div class="panel rounded-2xl p-5">
             <div class="flex items-center justify-between mb-4">
               <h2 class="font-bold text-lg">Active sessions</h2>
