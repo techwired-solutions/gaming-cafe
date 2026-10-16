@@ -51,19 +51,30 @@
     applyTheme(current === DARK ? LIGHT : DARK);
   }
 
-  function initTheme() {
-    applyTheme(getPreferred());
-    document.addEventListener('DOMContentLoaded', function () {
-      applyTheme(getPreferred());
-      var btns = document.querySelectorAll('[data-theme-toggle]');
-      for (var i = 0; i < btns.length; i++) {
+  function wireButtons() {
+    var btns = document.querySelectorAll('[data-theme-toggle]');
+    for (var i = 0; i < btns.length; i++) {
+      // Avoid double-binding
+      if (!btns[i].dataset.themeWired) {
+        btns[i].dataset.themeWired = '1';
         btns[i].addEventListener('click', toggleTheme);
       }
-    });
+    }
+    // Re-run updateButtons so icons/labels are correct for current theme
+    updateButtons(document.documentElement.getAttribute('data-theme') || DARK);
   }
 
-  window.ChillTheme = { init: initTheme, toggle: toggleTheme, apply: applyTheme };
+  window.ChillTheme = { toggle: toggleTheme, apply: applyTheme, wire: wireButtons };
 
-  // Apply immediately to avoid flash of wrong theme
+  // 1) Apply theme immediately (prevents flash of wrong colors)
   applyTheme(getPreferred());
+
+  // 2) Wire click handlers as soon as DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wireButtons);
+  } else {
+    // DOM already ready (e.g. script loaded at end of body)
+    wireButtons();
+  }
 })();
+
