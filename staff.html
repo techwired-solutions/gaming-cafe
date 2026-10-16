@@ -29,9 +29,9 @@
     [data-theme="light"] {
       --ink: #f0f4fa; --panel: #ffffff; --panel-soft: #e8edf6;
       --panel-bg: rgba(255,255,255,.96);
-      --line: #d1dae8; --acid: #8fb800; --acid-dim: rgba(143,184,0,.12); --muted: #6b7a96; --danger: #d93b4a;
+      --line: #d1dae8; --acid: #5f8800; --acid-dim: rgba(95,136,0,.12); --muted: #6b7a96; --danger: #c0303c;
       --text-primary: #10141e; --text-secondary: #2c3a52; --text-muted: #5a6880;
-      --nav-bg: rgba(240,244,250,.97); --sidebar-bg: #e4e9f3;
+      --nav-bg: rgba(240,244,250,.97); --sidebar-bg: #e8edf6;
       --input-bg: #ffffff; --input-text: #10141e;
       --btn-outline-border: #b0bdd0; --btn-outline-text: #10141e;
       --grid-line: rgba(0,0,0,.04);
@@ -67,6 +67,11 @@
     input[type="date"]::-webkit-calendar-picker-indicator,
     input[type="datetime-local"]::-webkit-calendar-picker-indicator {
       filter: invert(1); opacity: .95; cursor: pointer;
+    }
+    [data-theme="light"] input[type="time"]::-webkit-calendar-picker-indicator,
+    [data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator,
+    [data-theme="light"] input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+      filter: invert(0); opacity: .7;
     }
     input[type="time"], input[type="date"], input[type="datetime-local"] { cursor: pointer; }
     .session-card { border-left: 4px solid var(--acid); }
@@ -146,22 +151,48 @@
     }
     .theme-toggle-btn:hover { border-color: var(--acid); color: var(--acid); }
     .theme-icon-moon { display: none; }
-    /* Light overrides for hardcoded Tailwind classes */
-    [data-theme="light"] header, [data-theme="light"] .sidebar { border-color: var(--line) !important; }
-    [data-theme="light"] .text-slate-400, [data-theme="light"] .text-slate-500 { color: var(--text-muted) !important; }
-    [data-theme="light"] .text-slate-300, [data-theme="light"] .text-slate-200 { color: var(--text-secondary) !important; }
-    [data-theme="light"] .border-slate-700\/70, [data-theme="light"] .border-slate-700\/80, [data-theme="light"] .border-slate-700 { border-color: var(--line) !important; }
-    [data-theme="light"] .border-slate-600 { border-color: var(--btn-outline-border) !important; }
-    [data-theme="light"] .bg-\[\#202838\] { background-color: var(--panel-soft) !important; }
-    [data-theme="light"] .bg-\[\#111722\] { background-color: var(--input-bg) !important; }
-    [data-theme="light"] .bg-slate-900\/70 { background: rgba(240,244,250,.7) !important; }
+    /* ===== LIGHT MODE OVERRIDES ===== */
+    /* Header & sidebar backgrounds — overrides inline dark rgba styles */
+    [data-theme="light"] header { background: var(--nav-bg) !important; border-color: var(--line) !important; }
+    [data-theme="light"] .sidebar { background: var(--sidebar-bg) !important; border-color: var(--line) !important; }
+    /* Status badge colors — dark-on-light for readability */
+    [data-theme="light"] .status-active   { color: #3d6600 !important; background: rgba(95,136,0,.10) !important; }
+    [data-theme="light"] .status-booked   { color: #1a5fa6 !important; background: rgba(26,95,166,.10) !important; }
+    [data-theme="light"] .status-completed { color: #0b6e8a !important; background: rgba(11,110,138,.10) !important; }
+    [data-theme="light"] .status-cancelled { color: #b02335 !important; background: rgba(176,35,53,.10) !important; }
+    [data-theme="light"] .badge-cash   { color: #7a5200 !important; background: rgba(122,82,0,.10) !important; }
+    [data-theme="light"] .badge-online { color: #1a5fa6 !important; background: rgba(26,95,166,.10) !important; }
+    [data-theme="light"] .badge-split  { color: #3d6600 !important; background: rgba(95,136,0,.10) !important; border-color: rgba(95,136,0,.3) !important; }
+    [data-theme="light"] .session-card { border-left-color: #5f8800 !important; }
+    [data-theme="light"] .session-card.overdue { border-left-color: #b02335 !important; }
+    [data-theme="light"] .session-card.ending-soon { border-left-color: #a06000 !important; }
+    /* Tailwind text color overrides */
     [data-theme="light"] .text-white { color: var(--text-primary) !important; }
-    [data-theme="light"] .text-\[\#d8ff45\] { color: #5a7a00 !important; }
-    [data-theme="light"] .bg-\[\#d8ff45\]\/12, [data-theme="light"] .bg-\[\#d8ff45\]\/15, [data-theme="light"] .bg-\[\#d8ff45\]\/20 { background: rgba(143,184,0,.12) !important; }
-    [data-theme="light"] .border-\[\#d8ff45\]\/25, [data-theme="light"] .border-\[\#d8ff45\]\/30, [data-theme="light"] .border-\[\#d8ff45\]\/40 { border-color: rgba(143,184,0,.35) !important; }
-    [data-theme="light"] .bg-\[\#d8ff45\] { background-color: #8fb800 !important; }
-    [data-theme="light"] .text-\[\#ff6875\] { color: #c0303c !important; }
-    [data-theme="light"] .bg-slate-800 { background-color: #dde5f0 !important; }
+    [data-theme="light"] .text-slate-200, [data-theme="light"] .text-slate-300 { color: var(--text-secondary) !important; }
+    [data-theme="light"] .text-slate-400, [data-theme="light"] .text-slate-500 { color: var(--text-muted) !important; }
+    [data-theme="light"] .text-\[\#d8ff45\] { color: #3d6600 !important; }
+    [data-theme="light"] .text-\[\#ff6875\] { color: #b02335 !important; }
+    [data-theme="light"] .text-amber-300  { color: #92580a !important; }
+    [data-theme="light"] .text-sky-300    { color: #0e6b9a !important; }
+    [data-theme="light"] .text-sky-400    { color: #0a5a84 !important; }
+    [data-theme="light"] .text-orange-300 { color: #a84f00 !important; }
+    [data-theme="light"] .text-green-300  { color: #226600 !important; }
+    [data-theme="light"] .text-purple-300, [data-theme="light"] .text-violet-300 { color: #5b3098 !important; }
+    [data-theme="light"] .text-pink-300   { color: #8f1a5a !important; }
+    [data-theme="light"] .text-red-300    { color: #b02335 !important; }
+    [data-theme="light"] .text-cyan-300   { color: #0b6e8a !important; }
+    /* Tailwind border overrides */
+    [data-theme="light"] .border-slate-700, [data-theme="light"] .border-slate-700\/70, [data-theme="light"] .border-slate-700\/80 { border-color: var(--line) !important; }
+    [data-theme="light"] .border-slate-600 { border-color: var(--btn-outline-border) !important; }
+    [data-theme="light"] .border-\[\#d8ff45\]\/25, [data-theme="light"] .border-\[\#d8ff45\]\/30, [data-theme="light"] .border-\[\#d8ff45\]\/40 { border-color: rgba(95,136,0,.35) !important; }
+    /* Tailwind background overrides */
+    [data-theme="light"] .bg-\[\#202838\]     { background-color: var(--panel-soft) !important; }
+    [data-theme="light"] .bg-\[\#111722\]     { background-color: #f5f7fb !important; }
+    [data-theme="light"] .bg-\[\#10141e\]     { background-color: var(--ink) !important; }
+    [data-theme="light"] .bg-slate-800        { background-color: #dde5f0 !important; }
+    [data-theme="light"] .bg-slate-900\/70    { background: rgba(240,244,250,.7) !important; }
+    [data-theme="light"] .bg-\[\#d8ff45\]\/12, [data-theme="light"] .bg-\[\#d8ff45\]\/15, [data-theme="light"] .bg-\[\#d8ff45\]\/20 { background: rgba(95,136,0,.11) !important; }
+    [data-theme="light"] .bg-\[\#d8ff45\]     { background-color: #5f8800 !important; }
 
     /* ---- Thermal Receipt Print Styles (58mm / 80mm roll) ---- */
     #thermal-receipt-area { display: none; }

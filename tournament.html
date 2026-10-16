@@ -57,8 +57,8 @@
       --panel: #ffffff;
       --panel-bg: rgba(255,255,255,.96);
       --line: #d1dae8;
-      --acid: #8fb800;
-      --acid-dim: rgba(143,184,0,.12);
+      --acid: #5f8800;
+      --acid-dim: rgba(95,136,0,.12);
       --muted: #6b7a96;
       --text-primary: #10141e;
       --text-secondary: #2c3a52;
@@ -155,24 +155,31 @@
     }
     .theme-toggle-btn:hover { border-color: var(--acid); color: var(--acid); }
     .theme-icon-moon { display: none; }
-    /* Light theme overrides for slate Tailwind colors used inline */
-    [data-theme="light"] .text-slate-300, [data-theme="light"] .text-slate-400, [data-theme="light"] .text-slate-500 { color: var(--text-muted) !important; }
-    [data-theme="light"] .border-slate-700, [data-theme="light"] .border-slate-700\/70, [data-theme="light"] .border-slate-700\/80 { border-color: var(--line) !important; }
-    [data-theme="light"] .bg-\[\#10141e\]\/90, [data-theme="light"] .bg-\[\#10141e\]\/85 { background-color: var(--nav-bg) !important; }
+    /* Light theme overrides */
     [data-theme="light"] header { background: var(--nav-bg) !important; border-color: var(--line) !important; }
     [data-theme="light"] .text-white { color: var(--text-primary) !important; }
-    [data-theme="light"] .text-slate-200 { color: var(--text-secondary) !important; }
-    [data-theme="light"] .bg-slate-800, [data-theme="light"] .bg-slate-900 { background-color: #e8edf6 !important; }
+    [data-theme="light"] .text-slate-200, [data-theme="light"] .text-slate-300 { color: var(--text-secondary) !important; }
+    [data-theme="light"] .text-slate-400, [data-theme="light"] .text-slate-500 { color: var(--text-muted) !important; }
+    [data-theme="light"] .border-slate-700, [data-theme="light"] .border-slate-700\/70, [data-theme="light"] .border-slate-700\/80 { border-color: var(--line) !important; }
+    [data-theme="light"] .border-slate-600 { border-color: #b0bdd0 !important; }
+    [data-theme="light"] .bg-\[\#10141e\]\/90, [data-theme="light"] .bg-\[\#10141e\]\/85 { background-color: var(--nav-bg) !important; }
     [data-theme="light"] .bg-\[\#10141e\] { background-color: var(--ink) !important; }
-    [data-theme="light"] .bg-\[\#111722\] { background-color: #f0f4fa !important; }
+    [data-theme="light"] .bg-\[\#111722\] { background-color: #f5f7fb !important; }
     [data-theme="light"] .bg-\[\#0f1520\] { background-color: #e8edf6 !important; }
     [data-theme="light"] .bg-\[\#202838\] { background-color: #dde5f0 !important; }
-    [data-theme="light"] .border-slate-600 { border-color: #b0bdd0 !important; }
-    [data-theme="light"] .text-\[\#d8ff45\] { color: #6a8a00 !important; }
-    [data-theme="light"] .bg-\[\#d8ff45\]\/15, [data-theme="light"] .bg-\[\#d8ff45\]\/12 { background-color: rgba(143,184,0,.12) !important; }
-    [data-theme="light"] .border-\[\#d8ff45\]\/30, [data-theme="light"] .border-\[\#d8ff45\]\/40 { border-color: rgba(143,184,0,.35) !important; }
-    [data-theme="light"] .bg-\[\#d8ff45\] { background-color: #8fb800 !important; }
-    [data-theme="light"] .text-\[\#d8ff45\] { color: #5a7a00 !important; }
+    [data-theme="light"] .bg-slate-800, [data-theme="light"] .bg-slate-900 { background-color: #e8edf6 !important; }
+    [data-theme="light"] .text-\[\#d8ff45\]  { color: #3d6600 !important; }
+    [data-theme="light"] .text-\[\#ff6875\]  { color: #b02335 !important; }
+    [data-theme="light"] .text-sky-300, [data-theme="light"] .text-sky-400 { color: #0a5a84 !important; }
+    [data-theme="light"] .text-amber-300  { color: #92580a !important; }
+    [data-theme="light"] .text-orange-300 { color: #a84f00 !important; }
+    [data-theme="light"] .text-green-300, [data-theme="light"] .text-emerald-300 { color: #226600 !important; }
+    [data-theme="light"] .text-purple-300, [data-theme="light"] .text-violet-300 { color: #5b3098 !important; }
+    [data-theme="light"] .text-pink-300   { color: #8f1a5a !important; }
+    [data-theme="light"] .text-red-300    { color: #b02335 !important; }
+    [data-theme="light"] .bg-\[\#d8ff45\]\/15, [data-theme="light"] .bg-\[\#d8ff45\]\/12 { background-color: rgba(95,136,0,.11) !important; }
+    [data-theme="light"] .border-\[\#d8ff45\]\/30, [data-theme="light"] .border-\[\#d8ff45\]\/40 { border-color: rgba(95,136,0,.35) !important; }
+    [data-theme="light"] .bg-\[\#d8ff45\] { background-color: #5f8800 !important; }
   </style>
 </head>
 <body class="bg-app min-h-screen flex flex-col">
