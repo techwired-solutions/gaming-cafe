@@ -492,6 +492,25 @@
                   <div><label class="block text-sm font-medium mb-2" for="rate">Hourly rate (रु)</label><input id="rate" class="form-control" type="number" min="0" value="100"></div>
                 </div>
               </div>
+              <!-- ===== EXTRA STATIONS ===== -->
+              <div class="border-t border-slate-700/80 mt-6 pt-5" id="ns-extra-stations-section">
+                <div class="flex items-center justify-between mb-3">
+                  <h3 class="font-semibold text-base flex items-center gap-2">
+                    <i data-lucide="layers" width="16" height="16" class="text-sky-400"></i>
+                    Additional Stations
+                    <span class="mono text-[11px] text-slate-500 font-normal">(optional — different time per station)</span>
+                  </h3>
+                  <button type="button" id="ns-add-extra-station" class="text-xs font-bold text-sky-400 border border-sky-500/40 rounded-lg px-2.5 py-1.5 hover:bg-sky-500/10 flex items-center gap-1 cursor-pointer transition">
+                    <i data-lucide="plus" width="13" height="13"></i> Add Station
+                  </button>
+                </div>
+                <div id="ns-extra-stations-rows" class="space-y-2"></div>
+                <p id="ns-extra-stations-empty" class="text-xs text-slate-500 italic">No extra stations — only the primary station above will be billed.</p>
+                <div id="ns-extra-stations-subtotal" class="hidden mt-2 pt-2 border-t border-slate-700/50 flex justify-between text-xs text-slate-400">
+                  <span>Extra stations subtotal</span>
+                  <span id="ns-extra-subtotal-val" class="mono font-bold text-sky-300">रु 0</span>
+                </div>
+              </div>
               <div class="border-t border-slate-700/80 mt-6 pt-5">
                 <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
                   <h3 class="font-semibold text-lg flex items-center gap-2">
@@ -2387,6 +2406,28 @@
           <div><label class="block text-xs text-slate-400 mb-1" for="edit-end-time">End time</label><input id="edit-end-time" class="form-control" type="time"></div>
           <div><label class="block text-xs text-slate-400 mb-1" for="edit-duration">Duration (min)</label><input id="edit-duration" class="form-control" type="number" min="0"></div>
           <div><label class="block text-xs text-slate-400 mb-1" for="edit-rate">Rate (रु/hr)</label><input id="edit-rate" class="form-control" type="number" min="0"></div>
+        </div>
+      </div>
+
+      <!-- ===== EXTRA STATIONS (multi-station session) ===== -->
+      <div class="border-t border-slate-700 mt-4 pt-4" id="edit-extra-stations-section">
+        <div class="flex items-center justify-between mb-2">
+          <h4 class="font-semibold text-sm flex items-center gap-1.5">
+            <i data-lucide="layers" width="14" height="14" class="text-sky-400"></i>
+            Additional Stations
+            <span class="mono text-[11px] text-slate-500 font-normal">(different time for each)</span>
+          </h4>
+          <button type="button" id="edit-add-extra-station" class="text-xs font-bold text-sky-400 border border-sky-500/40 rounded-lg px-2.5 py-1 hover:bg-sky-500/10 flex items-center gap-1 cursor-pointer transition">
+            <i data-lucide="plus" width="13" height="13"></i> Add Station
+          </button>
+        </div>
+        <div id="edit-extra-stations-rows" class="space-y-2">
+          <!-- rows injected by JS -->
+        </div>
+        <p id="edit-extra-stations-empty" class="text-xs text-slate-500 italic">No extra stations — customer uses only the primary station above.</p>
+        <div id="edit-extra-stations-subtotal" class="hidden mt-2 pt-2 border-t border-slate-700/50 flex justify-between text-xs text-slate-400">
+          <span>Extra stations subtotal</span>
+          <span id="edit-extra-subtotal-val" class="mono font-bold text-sky-300">रु 0</span>
         </div>
       </div>
 

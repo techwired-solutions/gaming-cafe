@@ -744,9 +744,109 @@
     const rate = Math.max(0, Number(document.getElementById("rate").value) || 0);
     const foodTotal = frTotal("food-order-list");
     const timeCost = (duration / 60) * rate;
-    const total = Math.round(timeCost + foodTotal);
+    const extraCost = calcExtraStationsCost("ns");
+    const total = Math.round(timeCost + foodTotal + extraCost);
     document.getElementById("estimate-total").textContent = inr(total);
-    return { total, foodTotal, timeCost, duration, rate };
+    return { total, foodTotal, timeCost, duration, rate, extraCost };
+  }
+
+  // ---- Extra Stations helpers ----
+  // Build a single extra-station row (used by both New Session and Edit modal).
+  function buildExtraStationRow(prefix, stationName, durationMin, rate, stationsList) {
+    const row = document.createElement("div");
+    row.className = "extra-station-row grid grid-cols-[1fr_auto_auto_auto] gap-2 items-end bg-[#111722] border border-slate-700/60 rounded-xl p-2.5";
+    const stOpts = stationsList.map((s) => `<option value="${s.name}">`).join("");
+    const listId = `${prefix}-es-datalist-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    row.innerHTML = `
+      <div>
+        <label class="block text-[11px] text-slate-400 mb-1">Station</label>
+        <input class="form-control text-xs py-1.5" type="text" list="${listId}" placeholder="Station name" value="${stationName || ""}" data-role="es-station">
+        <datalist id="${listId}">${stOpts}</datalist>
+      </div>
+      <div>
+        <label class="block text-[11px] text-slate-400 mb-1">Duration (min)</label>
+        <input class="form-control text-xs py-1.5 w-20" type="number" min="0" value="${durationMin || 60}" data-role="es-duration">
+      </div>
+      <div>
+        <label class="block text-[11px] text-slate-400 mb-1">Rate (रु/hr)</label>
+        <input class="form-control text-xs py-1.5 w-20" type="number" min="0" value="${rate || 300}" data-role="es-rate">
+      </div>
+      <button type="button" class="es-remove-btn self-end mb-0.5 h-9 w-9 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 flex items-center justify-center cursor-pointer transition" title="Remove this station">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>`;
+    // Autofill rate when station name changes
+    const stInput = row.querySelector('[data-role="es-station"]');
+    const rateInput = row.querySelector('[data-role="es-rate"]');
+    const durInput = row.querySelector('[data-role="es-duration"]');
+    function autofillRate() {
+      const match = stations.find((s) => s.name.trim().toLowerCase() === stInput.value.trim().toLowerCase());
+      if (match && match.rate != null) rateInput.value = match.rate;
+    }
+    stInput.addEventListener("change", () => { autofillRate(); refreshExtraStations(prefix); });
+    rateInput.addEventListener("input", () => refreshExtraStations(prefix));
+    durInput.addEventListener("input", () => refreshExtraStations(prefix));
+    row.querySelector(".es-remove-btn").addEventListener("click", () => {
+      row.remove();
+      refreshExtraStations(prefix);
+    });
+    return row;
+  }
+
+  function calcExtraStationsCost(prefix) {
+    const container = document.getElementById(`${prefix}-extra-stations-rows`);
+    if (!container) return 0;
+    let sum = 0;
+    container.querySelectorAll(".extra-station-row").forEach((row) => {
+      const dur = Math.max(0, Number(row.querySelector('[data-role="es-duration"]').value) || 0);
+      const rt  = Math.max(0, Number(row.querySelector('[data-role="es-rate"]').value)     || 0);
+      sum += (dur / 60) * rt;
+    });
+    return Math.round(sum);
+  }
+
+  function refreshExtraStations(prefix) {
+    const container = document.getElementById(`${prefix}-extra-stations-rows`);
+    const emptyEl   = document.getElementById(`${prefix}-extra-stations-empty`);
+    const subtotal  = document.getElementById(`${prefix}-extra-stations-subtotal`);
+    const subtotalVal = document.getElementById(`${prefix}-extra-subtotal-val`);
+    if (!container) return;
+    const rows = container.querySelectorAll(".extra-station-row");
+    if (emptyEl) emptyEl.classList.toggle("hidden", rows.length > 0);
+    const cost = calcExtraStationsCost(prefix);
+    if (subtotal) subtotal.classList.toggle("hidden", rows.length === 0);
+    if (subtotalVal) subtotalVal.textContent = inr(cost);
+    // Trigger parent recalc
+    if (prefix === "ns") calculateAmount();
+    else if (prefix === "edit") recalcEditModal();
+  }
+
+  function collectExtraStations(prefix) {
+    const container = document.getElementById(`${prefix}-extra-stations-rows`);
+    if (!container) return [];
+    const result = [];
+    container.querySelectorAll(".extra-station-row").forEach((row) => {
+      const stn = (row.querySelector('[data-role="es-station"]').value || "").trim();
+      const dur = Math.max(0, Number(row.querySelector('[data-role="es-duration"]').value) || 0);
+      const rt  = Math.max(0, Number(row.querySelector('[data-role="es-rate"]').value)     || 0);
+      if (stn) result.push({ station: stn, duration_minutes: dur, rate: rt, amount: Math.round((dur / 60) * rt) });
+    });
+    return result;
+  }
+
+  function clearExtraStations(prefix) {
+    const container = document.getElementById(`${prefix}-extra-stations-rows`);
+    if (container) container.innerHTML = "";
+    refreshExtraStations(prefix);
+  }
+
+  function populateExtraStations(prefix, extraStations) {
+    const container = document.getElementById(`${prefix}-extra-stations-rows`);
+    if (!container) return;
+    container.innerHTML = "";
+    (extraStations || []).forEach((es) => {
+      container.appendChild(buildExtraStationRow(prefix, es.station, es.duration_minutes, es.rate, stations));
+    });
+    refreshExtraStations(prefix);
   }
 
   // Per-compartment pricing: PS5 stations bill रु300/hr, PS4 रु250/hr by
@@ -2614,17 +2714,36 @@
     if (staffEl) staffEl.textContent = currentStaff ? currentStaff.name : (record.staff_name || "Admin");
     if (custEl) custEl.textContent = record.customer_name || "Walk-in Guest";
     if (phoneEl) phoneEl.textContent = record.customer_phone || "—";
-    if (stEl) stEl.textContent = record.station_name || "Lounge";
+    if (stEl) {
+      // Show all station names on the receipt header
+      const extraStns = Array.isArray(record.extra_stations) ? record.extra_stations : [];
+      const allStationNames = [record.station_name, ...extraStns.map((e) => e.station)].filter(Boolean).join(" + ");
+      stEl.textContent = allStationNames || "Lounge";
+    }
 
     if (tbody) {
       let itemsHtml = "";
+      // Primary station line
+      const primaryLabel = record.station_name || "Station";
       itemsHtml += `
         <tr>
-          <td style="padding: 2px 0;">PlayStation (${record.duration_minutes || 60}m @ ${inr(record.rate)}/h)</td>
+          <td style="padding: 2px 0;">${primaryLabel} (${record.duration_minutes || 60}m @ ${inr(record.rate)}/h)</td>
           <td style="text-align: center; padding: 2px 0;">1</td>
           <td style="text-align: right; padding: 2px 0;">${inr(timeCost)}</td>
         </tr>
       `;
+      // Extra station lines
+      const extraStns = Array.isArray(record.extra_stations) ? record.extra_stations : [];
+      extraStns.forEach((es) => {
+        const esCost = Math.round((es.duration_minutes / 60) * es.rate);
+        itemsHtml += `
+          <tr>
+            <td style="padding: 2px 0;">${es.station} (${es.duration_minutes}m @ ${inr(es.rate)}/h)</td>
+            <td style="text-align: center; padding: 2px 0;">1</td>
+            <td style="text-align: right; padding: 2px 0;">${inr(esCost)}</td>
+          </tr>
+        `;
+      });
 
       if (overtime.amount > 0) {
         itemsHtml += `
@@ -2808,7 +2927,8 @@
     const duration = Math.max(0, Number(document.getElementById("edit-duration").value) || 0);
     const rate = Math.max(0, Number(document.getElementById("edit-rate").value) || 0);
     const foodTotal = frTotal("edit-food-rows");
-    const total = Math.round((duration / 60) * rate + foodTotal);
+    const extraCost = calcExtraStationsCost("edit");
+    const total = Math.round((duration / 60) * rate + foodTotal + extraCost);
     document.getElementById("edit-new-total").textContent = inr(total);
     const customBillInput = document.getElementById("edit-custom-bill");
     if (customBillInput && customBillInput.dataset.userEdited !== "true") {
@@ -2816,7 +2936,7 @@
     }
     updateEditSplitFields();
     updateEditSessionWhatsAppState();
-    return { total, foodTotal, duration, rate };
+    return { total, foodTotal, duration, rate, extraCost };
   }
 
   function updateEditInternalSaleState() {
@@ -2870,6 +2990,14 @@
       document.getElementById("edit-game").value = record.game || "";
       document.getElementById("edit-customer-name").value = record.customer_name || "";
       document.getElementById("edit-customer-phone").value = record.customer_phone || "";
+      // Populate extra stations
+      const rawExtra = record.extra_stations;
+      let parsedExtra = [];
+      if (Array.isArray(rawExtra)) parsedExtra = rawExtra;
+      else if (typeof rawExtra === "string") { try { parsedExtra = JSON.parse(rawExtra) || []; } catch { parsedExtra = []; } }
+      populateExtraStations("edit", parsedExtra);
+      // Re-init lucide icons inside newly built rows
+      if (window.lucide) lucide.createIcons();
 
       const isInternal = !!(record.customer_name && record.customer_name.toLowerCase().includes("internal")) ||
                          !!(record.notes && record.notes.includes("[Internal Sale]"));
@@ -3140,6 +3268,9 @@
 
       const btn = document.getElementById("edit-session-save");
       btn.disabled = true;
+      const extraStations = collectExtraStations("edit");
+      // Build combined station string for overlap checks (primary + extras)
+      const allStationNames = [station, ...extraStations.map((e) => e.station)].filter(Boolean).join(", ");
       const updatePayload = {
         station_name: station,
         game: document.getElementById("edit-game").value.trim(),
@@ -3157,7 +3288,8 @@
         cash_amount: cashAmount,
         online_amount: onlineAmount,
         notes: finalNotes,
-        notified_5min: false
+        notified_5min: false,
+        extra_stations: extraStations
       };
       if (isPaid) {
         updatePayload.paid_at = endIso || editTarget.paid_at || startIso || new Date().toISOString();
@@ -7056,6 +7188,7 @@ Here is the menu image:`;
       const startIso = startDate ? startDate.toISOString() : null;
       const endIso = startDate ? new Date(startDate.getTime() + duration * 60000).toISOString() : null;
 
+      const extraStations = collectExtraStations("ns");
       const { error } = await window.sb.from("sessions").insert({
         type: status === "Booked" ? "Booked" : "Walk-in",
         station_name: station,
@@ -7073,7 +7206,8 @@ Here is the menu image:`;
         notes: document.getElementById("notes").value.trim(),
         notified_5min: false,
         staff_id: currentStaff ? currentStaff.id : null,
-        staff_name: currentStaff ? currentStaff.name : null
+        staff_name: currentStaff ? currentStaff.name : null,
+        extra_stations: extraStations
       });
 
       button.disabled = false;
@@ -7093,6 +7227,7 @@ Here is the menu image:`;
         updateStationConflictUI();
         clearFrContainer("food-order-list");
         addFrRow("food-order-list");
+        clearExtraStations("ns");
         calculateAmount();
         showMessage("Session saved.", false);
         showToast("New session saved.");
@@ -7333,6 +7468,27 @@ Here is the menu image:`;
     registerFoodContainer("quick-food-rows", recalcQuickFood);
     addFrRow("food-order-list");
     addFrRow("waiting-food-rows");
+
+    // ---- Extra Stations: Add-button listeners ----
+    document.getElementById("ns-add-extra-station")?.addEventListener("click", () => {
+      const container = document.getElementById("ns-extra-stations-rows");
+      if (container) {
+        const defaultRate = Number(document.getElementById("rate")?.value) || 300;
+        container.appendChild(buildExtraStationRow("ns", "", 60, defaultRate, stations));
+        refreshExtraStations("ns");
+        if (window.lucide) lucide.createIcons();
+      }
+    });
+    document.getElementById("edit-add-extra-station")?.addEventListener("click", () => {
+      const container = document.getElementById("edit-extra-stations-rows");
+      if (container) {
+        const defaultRate = Number(document.getElementById("edit-rate")?.value) || 300;
+        container.appendChild(buildExtraStationRow("edit", "", 60, defaultRate, stations));
+        refreshExtraStations("edit");
+        if (window.lucide) lucide.createIcons();
+      }
+    });
+
     calculateAmount();
     updateClock();
     setInterval(updateClock, 1000);

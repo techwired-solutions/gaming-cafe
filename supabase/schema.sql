@@ -96,7 +96,10 @@ do $$ begin
 end $$;
 alter table public.sessions add column if not exists discount_value numeric not null default 0;
 
+alter table public.sessions add column if not exists extra_stations jsonb not null default '[]'::jsonb;
+
 create index if not exists sessions_status_idx on public.sessions (status);
+
 create index if not exists sessions_end_time_idx on public.sessions (end_time);
 create index if not exists sessions_staff_id_idx on public.sessions (staff_id);
 
