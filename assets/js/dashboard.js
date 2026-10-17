@@ -1572,17 +1572,36 @@
     const input = document.getElementById(inputId);
     if (!container || !input) return;
 
-    const currentNames = splitStationNames(input.value || "");
+    // Derive form prefix from containerId (e.g. "station-chips-container" → "ns", "mr-station-chips-container" → "mr")
+    const prefix = containerId.startsWith("mr-") ? "mr" : "ns";
+
+    // Collect all station names currently "claimed": primary input + all extra station rows
+    function getClaimedNames() {
+      const claimed = new Set();
+      const primaryVal = input.value.trim();
+      if (primaryVal) claimed.add(primaryVal.toLowerCase());
+      const extraRows = document.getElementById(`${prefix}-extra-stations-rows`);
+      if (extraRows) {
+        extraRows.querySelectorAll('[data-role="es-station"]').forEach((inp) => {
+          const v = inp.value.trim().toLowerCase();
+          if (v) claimed.add(v);
+        });
+      }
+      return claimed;
+    }
+
     const activeStations = (stations || []).filter((s) => s && s.active);
     if (!activeStations.length) {
       container.innerHTML = "";
       return;
     }
 
+    const claimedNames = getClaimedNames();
+
     container.innerHTML = activeStations
       .map((s) => {
         const sName = String(s.name || "");
-        const isSelected = currentNames.some((cn) => cn === sName.trim().toLowerCase());
+        const isSelected = claimedNames.has(sName.trim().toLowerCase());
         const cls = isSelected
           ? "station-chip active rounded-lg border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] px-2 py-0.5 text-xs font-bold transition cursor-pointer"
           : "station-chip rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-xs text-slate-300 hover:border-slate-500 hover:text-white transition cursor-pointer";
@@ -1593,23 +1612,65 @@
     container.querySelectorAll(".station-chip").forEach((btn) => {
       btn.addEventListener("click", () => {
         const stationName = btn.dataset.station || "";
-        let names = splitStationNames(input.value || "");
-        const idx = names.indexOf(stationName.trim().toLowerCase());
-        if (idx !== -1) {
-          names.splice(idx, 1);
+        const sNameLow = stationName.trim().toLowerCase();
+        const primaryLow = input.value.trim().toLowerCase();
+
+        if (btn.classList.contains("active")) {
+          // === DESELECT ===
+          if (primaryLow === sNameLow) {
+            // It's the primary station — clear the primary field
+            input.value = "";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+          } else {
+            // It's in an extra station row — remove that row
+            const extraRows = document.getElementById(`${prefix}-extra-stations-rows`);
+            if (extraRows) {
+              const rows = [...extraRows.querySelectorAll(".extra-station-row")];
+              for (const row of rows) {
+                const esInp = row.querySelector('[data-role="es-station"]');
+                if (esInp && esInp.value.trim().toLowerCase() === sNameLow) {
+                  row.remove();
+                  refreshExtraStations(prefix);
+                  break;
+                }
+              }
+            }
+          }
         } else {
-          names.push(stationName.trim().toLowerCase());
+          // === SELECT ===
+          if (!input.value.trim()) {
+            // Primary field is empty — fill it
+            input.value = stationName;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+            // Autofill primary rate
+            const match = stations.find((s) => (s.name || "").trim().toLowerCase() === sNameLow);
+            if (match && match.rate != null) {
+              const rateEl = document.getElementById(prefix === "mr" ? "mr-rate" : "rate");
+              if (rateEl) { rateEl.value = match.rate; }
+            }
+            if (prefix === "ns") calculateAmount();
+            else if (window.recalcMissingRecord) recalcMissingRecord();
+          } else {
+            // Primary already taken — add a new extra station row
+            const extraContainer = document.getElementById(`${prefix}-extra-stations-rows`);
+            if (extraContainer) {
+              // Autofill rate for this station
+              const match = stations.find((s) => (s.name || "").trim().toLowerCase() === sNameLow);
+              const defaultRate = match && match.rate != null ? match.rate : Number(document.getElementById(prefix === "mr" ? "mr-rate" : "rate")?.value || 300);
+              // Inherit primary station's start time so staff just tweaks duration
+              const primaryStart = document.getElementById(prefix === "mr" ? "mr-start-time" : "start-time")?.value || "";
+              const primaryDur   = Number(document.getElementById(prefix === "mr" ? "mr-duration" : "duration-minutes")?.value || 60);
+              const newRow = buildExtraStationRow(prefix, stationName, primaryDur, defaultRate, stations, primaryStart, "");
+              extraContainer.appendChild(newRow);
+              refreshExtraStations(prefix);
+              if (typeof window.lucide !== "undefined") lucide.createIcons();
+            }
+          }
         }
-        const formatted = names
-          .map((n) => {
-            const match = activeStations.find((as) => (as.name || "").trim().toLowerCase() === n);
-            return match ? match.name : n;
-          })
-          .join(", ");
-        input.value = formatted;
+
         renderStationChips(containerId, inputId);
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        input.dispatchEvent(new Event("change", { bubbles: true }));
       });
     });
 
@@ -1620,6 +1681,7 @@
       });
     }
   }
+
 
   // Grace period after end_time before overtime starts accruing. Once past
   // it, the charge covers every minute since end_time (not just the
@@ -3622,6 +3684,7 @@
 
   let mrDiscountMode = "percent";
 
+  window.recalcMissingRecord = (...a) => recalcMissingRecord(...a);
   function recalcMissingRecord() {
     const duration = Math.max(0, Number(document.getElementById("mr-duration").value) || 0);
     const rate = Math.max(0, Number(document.getElementById("mr-rate").value) || 0);
