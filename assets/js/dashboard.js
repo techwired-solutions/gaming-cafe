@@ -2871,10 +2871,17 @@
   // ---------- PAN THERMAL RECEIPT BILLING (Mini Billing Machine 58mm/80mm) ----------
   function printPanBill(record, overridePaymentMethod) {
     if (!record) return;
-    const timeCost = ((Number(record.duration_minutes) || 0) / 60) * (Number(record.rate) || 0);
-    const overtime = computeOvertimeCharge(record);
+    const timeCost = Math.round(((Number(record.duration_minutes) || 0) / 60) * (Number(record.rate) || 0));
+    // Extra stations cost
+    const extraStns = Array.isArray(record.extra_stations) ? record.extra_stations : [];
+    const extraCost = extraStns.reduce((sum, es) => sum + Math.round((es.duration_minutes / 60) * es.rate), 0);
     const discountAmount = Number(record.discount_amount) || 0;
-    const grandTotal = record.paid && record.amount != null ? Number(record.amount) : Math.max(0, Math.round(timeCost + (record.food_total || 0) + overtime.amount - discountAmount));
+    const foodTotal = Number(record.food_total) || 0;
+    // Overtime is intentionally excluded from the bill — if admin/staff forgot to end the
+    // session, the edited duration_minutes is the final agreed time. record.amount is authoritative.
+    const grandTotal = record.amount != null
+      ? Number(record.amount)
+      : Math.max(0, timeCost + foodTotal + extraCost - discountAmount);
 
     const billNo = "CP-" + (record.id ? record.id.slice(0, 8).toUpperCase() : Math.floor(1000 + Math.random() * 9000));
     const recDate = record.paid_at ? new Date(record.paid_at) : record.start_time ? new Date(record.start_time) : new Date();
@@ -2903,7 +2910,6 @@
     if (phoneEl) phoneEl.textContent = record.customer_phone || "—";
     if (stEl) {
       // Show all station names on the receipt header
-      const extraStns = Array.isArray(record.extra_stations) ? record.extra_stations : [];
       const allStationNames = [record.station_name, ...extraStns.map((e) => e.station)].filter(Boolean).join(" + ");
       stEl.textContent = allStationNames || "Lounge";
     }
@@ -2920,7 +2926,6 @@
         </tr>
       `;
       // Extra station lines
-      const extraStns = Array.isArray(record.extra_stations) ? record.extra_stations : [];
       extraStns.forEach((es) => {
         const esCost = Math.round((es.duration_minutes / 60) * es.rate);
         itemsHtml += `
@@ -2932,15 +2937,7 @@
         `;
       });
 
-      if (overtime.amount > 0) {
-        itemsHtml += `
-          <tr>
-            <td style="padding: 2px 0;">Overtime (${overtime.minutes}m)</td>
-            <td style="text-align: center; padding: 2px 0;">1</td>
-            <td style="text-align: right; padding: 2px 0;">${inr(overtime.amount)}</td>
-          </tr>
-        `;
-      }
+      // ⚠️ Overtime is NOT printed — edited duration is the final agreed time.
 
       (record.food_items || []).forEach((f) => {
         itemsHtml += `
@@ -2955,7 +2952,7 @@
       tbody.innerHTML = itemsHtml;
     }
 
-    const subtotal = Math.round(timeCost + (record.food_total || 0) + overtime.amount);
+    const subtotal = timeCost + extraCost + foodTotal;
     if (subtotalEl) subtotalEl.textContent = inr(subtotal);
 
     if (discRow && discEl) {
@@ -2967,7 +2964,33 @@
       }
     }
 
+    // Detect manual bill edit: compare calculated net vs actual grandTotal
+    const calculatedNet = Math.max(0, subtotal - discountAmount);
+    const adjustment = grandTotal - calculatedNet; // negative = staff gave extra discount; positive = surcharge/adjustment
+
+    const billDiscountRow = document.getElementById("receipt-bill-discount-row");
+    const billDiscountEl = document.getElementById("receipt-bill-discount");
+    const adjustmentRow = document.getElementById("receipt-adjustment-row");
+    const adjustmentEl = document.getElementById("receipt-adjustment");
+
+    if (adjustment < -1) {
+      // Final bill is lower than calculated → extra staff discount
+      if (billDiscountRow) billDiscountRow.style.display = "flex";
+      if (billDiscountEl) billDiscountEl.textContent = `− ${inr(Math.abs(adjustment))}`;
+      if (adjustmentRow) adjustmentRow.style.display = "none";
+    } else if (adjustment > 1) {
+      // Final bill is higher than calculated → bill adjustment / surcharge
+      if (adjustmentRow) adjustmentRow.style.display = "flex";
+      if (adjustmentEl) adjustmentEl.textContent = `+ ${inr(adjustment)}`;
+      if (billDiscountRow) billDiscountRow.style.display = "none";
+    } else {
+      // Amounts match (within रु 1 rounding) — hide both
+      if (billDiscountRow) billDiscountRow.style.display = "none";
+      if (adjustmentRow) adjustmentRow.style.display = "none";
+    }
+
     if (totalEl) totalEl.textContent = inr(grandTotal);
+
 
     const bd = getRecordPaymentBreakdown(record);
     let printedMethod = overridePaymentMethod || record.payment_method || (record.paid ? "Paid" : "Due");
@@ -2982,6 +3005,7 @@
   }
 
   // ---------- Partner Restaurant WhatsApp Ordering ----------
+
   function dispatchPartnerOrderWhatsApp(partnerKey, sessionInfo, containerId) {
     const rows = collectFrItems(containerId);
     const partnerItems = rows.filter((item) => {
