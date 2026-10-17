@@ -770,6 +770,19 @@
                       <p id="ns-primary-subtotal" class="mono text-sm font-bold text-[#d8ff45]">रु 0</p>
                     </div>
                   </div>
+                  <!-- Extra Controllers -->
+                  <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-700/40">
+                    <div>
+                      <label class="block text-[11px] text-slate-400">Extra controllers</label>
+                      <span class="text-[10px] text-slate-600">रु 50 each · 2 included free</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <button type="button" id="ns-ctrl-dec" class="h-7 w-7 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 flex items-center justify-center text-base font-bold cursor-pointer transition">−</button>
+                      <input id="ns-extra-controllers" type="number" min="0" value="0" class="form-control text-xs py-1 w-12 text-center mono font-bold" readonly>
+                      <button type="button" id="ns-ctrl-inc" class="h-7 w-7 rounded-lg border border-sky-500/50 text-sky-400 hover:bg-sky-500/10 flex items-center justify-center text-base font-bold cursor-pointer transition">+</button>
+                      <span id="ns-ctrl-cost" class="mono text-xs font-bold text-sky-300 w-14 text-right">रु 0</span>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Additional station rows (dynamically added) -->
@@ -2684,8 +2697,22 @@
           <div><label class="block text-xs text-slate-400 mb-1" for="edit-end-time">End time</label><input id="edit-end-time" class="form-control" type="time"></div>
           <div><label class="block text-xs text-slate-400 mb-1" for="edit-duration">Duration (min)</label><input id="edit-duration" class="form-control" type="number" min="0"></div>
           <div><label class="block text-xs text-slate-400 mb-1" for="edit-rate">Rate (रु/hr)</label><input id="edit-rate" class="form-control" type="number" min="0"></div>
+          <!-- Extra Controllers -->
+          <div class="sm:col-span-2 flex items-center justify-between gap-2 pt-2 border-t border-slate-700/40">
+            <div>
+              <label class="block text-xs text-slate-400">Extra controllers</label>
+              <span class="text-[10px] text-slate-600">रु 50 each · 2 included free</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <button type="button" id="edit-ctrl-dec" class="h-7 w-7 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 flex items-center justify-center text-base font-bold cursor-pointer transition">−</button>
+              <input id="edit-extra-controllers" type="number" min="0" value="0" class="form-control text-xs py-1 w-12 text-center mono font-bold" readonly>
+              <button type="button" id="edit-ctrl-inc" class="h-7 w-7 rounded-lg border border-sky-500/50 text-sky-400 hover:bg-sky-500/10 flex items-center justify-center text-base font-bold cursor-pointer transition">+</button>
+              <span id="edit-ctrl-cost" class="mono text-xs font-bold text-sky-300 w-14 text-right">रु 0</span>
+            </div>
+          </div>
         </div>
       </div>
+
 
       <!-- ===== EXTRA STATIONS (multi-station session) ===== -->
       <div class="border-t border-slate-700 mt-4 pt-4" id="edit-extra-stations-section">
@@ -2985,6 +3012,19 @@
               <div class="flex-1 text-right pt-4">
                 <span class="text-[11px] text-slate-500">Subtotal</span>
                 <p id="mr-primary-subtotal" class="mono text-sm font-bold text-[#d8ff45]">रु 0</p>
+              </div>
+            </div>
+            <!-- Extra Controllers -->
+            <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-700/40">
+              <div>
+                <label class="block text-[11px] text-slate-400">Extra controllers</label>
+                <span class="text-[10px] text-slate-600">रु 50 each · 2 included free</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button type="button" id="mr-ctrl-dec" class="h-7 w-7 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 flex items-center justify-center text-base font-bold cursor-pointer transition">−</button>
+                <input id="mr-extra-controllers" type="number" min="0" value="0" class="form-control text-xs py-1 w-12 text-center mono font-bold" readonly>
+                <button type="button" id="mr-ctrl-inc" class="h-7 w-7 rounded-lg border border-sky-500/50 text-sky-400 hover:bg-sky-500/10 flex items-center justify-center text-base font-bold cursor-pointer transition">+</button>
+                <span id="mr-ctrl-cost" class="mono text-xs font-bold text-sky-300 w-14 text-right">रु 0</span>
               </div>
             </div>
           </div>

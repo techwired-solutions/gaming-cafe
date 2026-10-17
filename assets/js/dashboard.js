@@ -821,18 +821,24 @@
     });
   }
 
+  const CTRL_RATE = 50; // रु per extra controller
+
   function calculateAmount() {
     const duration = Math.max(0, Number(document.getElementById("duration-minutes").value) || 0);
     const rate = Math.max(0, Number(document.getElementById("rate").value) || 0);
     const foodTotal = frTotal("food-order-list");
     const timeCost = Math.round((duration / 60) * rate);
     const extraCost = calcExtraStationsCost("ns");
-    const total = Math.round(timeCost + foodTotal + extraCost);
+    const ctrlCount = Math.max(0, Number(document.getElementById("ns-extra-controllers")?.value) || 0);
+    const ctrlCost = ctrlCount * CTRL_RATE;
+    const total = Math.round(timeCost + ctrlCost + foodTotal + extraCost);
     document.getElementById("estimate-total").textContent = inr(total);
-    // Update primary station subtotal display
+    // Update primary station subtotal display (time + controllers)
     const primarySub = document.getElementById("ns-primary-subtotal");
-    if (primarySub) primarySub.textContent = inr(timeCost);
-    return { total, foodTotal, timeCost, duration, rate, extraCost };
+    if (primarySub) primarySub.textContent = inr(timeCost + ctrlCost);
+    const ctrlCostEl = document.getElementById("ns-ctrl-cost");
+    if (ctrlCostEl) ctrlCostEl.textContent = ctrlCost > 0 ? `+${inr(ctrlCost)}` : inr(0);
+    return { total, foodTotal, timeCost, duration, rate, extraCost, ctrlCount, ctrlCost };
   }
 
   // ---- Extra Stations helpers (per-station independent time tracking) ----
@@ -3221,7 +3227,12 @@
     const tagEl = document.getElementById("edit-discount-summary-tag");
     if (tagEl) tagEl.textContent = discount.amount > 0 ? `−${inr(discount.amount)}` : "";
 
-    const total = Math.round(rawTimeCost - discount.amount + foodTotal + extraCost);
+    const ctrlCount = Math.max(0, Number(document.getElementById("edit-extra-controllers")?.value) || 0);
+    const ctrlCost = ctrlCount * CTRL_RATE;
+    const ctrlCostEl = document.getElementById("edit-ctrl-cost");
+    if (ctrlCostEl) ctrlCostEl.textContent = ctrlCost > 0 ? `+${inr(ctrlCost)}` : inr(0);
+
+    const total = Math.round(rawTimeCost - discount.amount + ctrlCost + foodTotal + extraCost);
     document.getElementById("edit-new-total").textContent = inr(total);
     const customBillInput = document.getElementById("edit-custom-bill");
     if (customBillInput && customBillInput.dataset.userEdited !== "true") {
@@ -3229,8 +3240,9 @@
     }
     updateEditSplitFields();
     updateEditSessionWhatsAppState();
-    return { total, foodTotal, duration, rate, extraCost, discount, rawTimeCost };
+    return { total, foodTotal, duration, rate, extraCost, discount, rawTimeCost, ctrlCount, ctrlCost };
   }
+
 
   function updateEditInternalSaleState() {
     const isInternal = !!document.getElementById("edit-is-internal-sale")?.checked;
@@ -3327,15 +3339,21 @@
 
       clearFrContainer("edit-food-rows");
       document.getElementById("edit-menu-empty").classList.toggle("hidden", (menuItems || []).length > 0);
+      // Pre-load extra controllers from saved food_items
+      const editCtrlInp = document.getElementById("edit-extra-controllers");
+      const ctrlItem = (record.food_items || []).find((it) => it && it.id === "_extra_ctrl");
+      if (editCtrlInp) editCtrlInp.value = ctrlItem ? (ctrlItem.qty || 0) : 0;
+      // Populate food rows, skipping the controller item (shown in station section)
       (record.food_items || []).forEach((item) => {
-        if (!item) return;
+        if (!item || item.id === "_extra_ctrl") return;
         if (typeof item === "string") {
           addFrRow("edit-food-rows", "_custom", 1, 0, "chillpill", item);
         } else {
           addFrRow("edit-food-rows", item.id, item.qty || 1, item.price, item.supplier || "chillpill", item.name || "");
         }
       });
-      if (!record.food_items || !record.food_items.length) addFrRow("edit-food-rows");
+      if (!record.food_items || !record.food_items.filter((i) => i && i.id !== "_extra_ctrl").length) addFrRow("edit-food-rows");
+
 
       updateEditInternalSaleState();
 
@@ -3542,8 +3560,13 @@
         if (yr && mo && da) editBaseDate = new Date(yr, mo - 1, da);
       }
 
-      const { total, foodTotal, duration, rate } = recalcEditModal();
-      const foodItems = collectFrItems("edit-food-rows");
+      const { total, foodTotal, duration, rate, ctrlCount } = recalcEditModal();
+      // Collect food rows, strip any old _extra_ctrl, re-inject with current count
+      const rawFoodItems = collectFrItems("edit-food-rows").filter((it) => it && it.id !== "_extra_ctrl");
+      const foodItems = ctrlCount > 0
+        ? [{ id: "_extra_ctrl", name: "Extra Controller", price: CTRL_RATE, qty: ctrlCount }, ...rawFoodItems]
+        : rawFoodItems;
+
       const startTimeStr = document.getElementById("edit-start-time").value || (isInternal ? "12:00" : "");
       const startDate = startTimeStr ? combineDateAndTime(editBaseDate, startTimeStr) : null;
       const startIso = startDate ? startDate.toISOString() : editTarget.start_time || null;
@@ -3768,10 +3791,15 @@
     const timeCost = Math.max(0, rawTimeCost - discount.amount);
     const foodTotal = frTotal("mr-food-rows");
     const extraStationsCost = calcExtraStationsCost("mr");
-    const total = timeCost + foodTotal + extraStationsCost;
-    // Update primary station subtotal display
+    const ctrlCount = Math.max(0, Number(document.getElementById("mr-extra-controllers")?.value) || 0);
+    const ctrlCost = ctrlCount * CTRL_RATE;
+    const total = timeCost + ctrlCost + foodTotal + extraStationsCost;
+
+    // Update primary station subtotal display (time + controllers)
     const mrPrimarySub = document.getElementById("mr-primary-subtotal");
-    if (mrPrimarySub) mrPrimarySub.textContent = inr(Math.max(0, rawTimeCost - discount.amount));
+    if (mrPrimarySub) mrPrimarySub.textContent = inr(Math.max(0, rawTimeCost - discount.amount) + ctrlCost);
+    const ctrlCostEl = document.getElementById("mr-ctrl-cost");
+    if (ctrlCostEl) ctrlCostEl.textContent = ctrlCost > 0 ? `+${inr(ctrlCost)}` : inr(0);
 
     const breakdownEl = document.getElementById("mr-calc-breakdown");
     const totalEl = document.getElementById("mr-total-display");
@@ -3789,7 +3817,8 @@
       } else {
         const discPart = discount.amount > 0 ? ` (−${inr(discount.amount)})` : "";
         const extraPart = extraStationsCost > 0 ? ` · Extra stations: ${inr(extraStationsCost)}` : "";
-        breakdownEl.textContent = `Play time (${duration}m @ रु ${rate}/h): रु ${timeCost}${discPart} · Food: रु ${foodTotal}${extraPart}`;
+        const ctrlPart = ctrlCost > 0 ? ` · Controllers: ${inr(ctrlCost)}` : "";
+        breakdownEl.textContent = `Play time (${duration}m @ रु ${rate}/h): रु ${timeCost}${discPart} · Food: रु ${foodTotal}${extraPart}${ctrlPart}`;
       }
     }
     if (totalEl) {
@@ -3799,7 +3828,7 @@
     if (payMethod === "Split") {
       updateMrSplitFields();
     }
-    return { total, foodTotal, duration, rate, timeCost, discount, rawTimeCost, extraStationsCost };
+    return { total, foodTotal, duration, rate, timeCost, discount, rawTimeCost, extraStationsCost, ctrlCount, ctrlCost };
   }
 
   function updateMrSplitFields() {
@@ -4036,6 +4065,9 @@
 
     // Food rows
     clearFrContainer("mr-food-rows");
+    const mrCtrlInp = document.getElementById("mr-extra-controllers");
+    if (mrCtrlInp) mrCtrlInp.value = 0;
+
     const menuEmpty = document.getElementById("mr-menu-empty");
     if (menuEmpty) menuEmpty.classList.toggle("hidden", menuItems.length > 0);
 
@@ -4297,8 +4329,12 @@
       msgEl.className = "text-sm min-h-5 mb-3 text-slate-300";
 
       try {
-        const { total, foodTotal, duration, rate, discount } = recalcMissingRecord();
-        const foodItems = collectFrItems("mr-food-rows");
+        const { total, foodTotal, duration, rate, discount, ctrlCount } = recalcMissingRecord();
+        const rawFoodItems = collectFrItems("mr-food-rows");
+        // Inject extra controllers as special food item for persistence
+        const foodItems = ctrlCount > 0
+          ? [{ id: "_extra_ctrl", name: "Extra Controller", price: CTRL_RATE, qty: ctrlCount }, ...rawFoodItems]
+          : rawFoodItems;
 
         const [yr, mo, da] = dateVal.split("-").map(Number);
         const baseDate = new Date(yr, mo - 1, da);
@@ -7556,8 +7592,10 @@ Here is the menu image:`;
       button.classList.add("opacity-60");
 
       const startTimeStr = document.getElementById("start-time").value;
-      const { total, foodTotal, duration, rate } = calculateAmount();
+      const { total, foodTotal, duration, rate, ctrlCount } = calculateAmount();
       const foodItems = collectFrItems("food-order-list");
+      // Inject extra controllers as special food item for persistence
+      if (ctrlCount > 0) foodItems.unshift({ id: "_extra_ctrl", name: "Extra Controller", price: CTRL_RATE, qty: ctrlCount });
       const baseDate = window._getSessionBaseDate ? window._getSessionBaseDate() : new Date();
       const startDate = startTimeStr ? combineDateAndTime(baseDate, startTimeStr) : status !== "Booked" ? new Date() : null;
       const startIso = startDate ? startDate.toISOString() : null;
@@ -7603,6 +7641,8 @@ Here is the menu image:`;
         clearFrContainer("food-order-list");
         addFrRow("food-order-list");
         clearExtraStations("ns");
+        const nsCtrlInp = document.getElementById("ns-extra-controllers");
+        if (nsCtrlInp) { nsCtrlInp.value = 0; }
         calculateAmount();
         showMessage("Session saved.", false);
         showToast("✅ Session started!");
@@ -7890,7 +7930,27 @@ Here is the menu image:`;
       }
     });
 
+    // ---- Extra Controllers: +/− stepper listeners ----
+    function wireCtrlStepper(decId, incId, inputId, recalcFn) {
+      const dec = document.getElementById(decId);
+      const inc = document.getElementById(incId);
+      const inp = document.getElementById(inputId);
+      if (!dec || !inc || !inp) return;
+      dec.addEventListener("click", () => {
+        inp.value = Math.max(0, (Number(inp.value) || 0) - 1);
+        recalcFn();
+      });
+      inc.addEventListener("click", () => {
+        inp.value = (Number(inp.value) || 0) + 1;
+        recalcFn();
+      });
+    }
+    wireCtrlStepper("ns-ctrl-dec", "ns-ctrl-inc", "ns-extra-controllers", calculateAmount);
+    wireCtrlStepper("mr-ctrl-dec", "mr-ctrl-inc", "mr-extra-controllers", () => window.recalcMissingRecord?.());
+    wireCtrlStepper("edit-ctrl-dec", "edit-ctrl-inc", "edit-extra-controllers", recalcEditModal);
+
     calculateAmount();
+
     updateClock();
     setInterval(updateClock, 1000);
     setInterval(checkTimeAlerts, 5000);
