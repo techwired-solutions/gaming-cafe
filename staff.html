@@ -371,10 +371,10 @@
     /* Typeahead dropdown for food item search */
     .fr-typeahead-wrap { position: relative; }
     .fr-suggestions {
-      position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: 50;
+      position: fixed; z-index: 9999;
       background: var(--panel-bg); border: 1px solid var(--line); border-radius: 0.5rem;
-      box-shadow: 0 8px 24px rgba(0,0,0,.35); max-height: 180px; overflow-y: auto;
-      display: none;
+      box-shadow: 0 8px 24px rgba(0,0,0,.35); max-height: 200px; overflow-y: auto;
+      display: none; list-style: none; padding: 0; margin: 0;
     }
     .fr-suggestions.open { display: block; }
     .fr-suggestions li {

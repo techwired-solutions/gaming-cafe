@@ -591,6 +591,18 @@
     if (customUnitPrice !== null) unitPriceInput.dataset.userEdited = "true";
 
     // ---- Typeahead logic ----
+    // Move the suggestions list to <body> so it escapes any overflow:auto modal container
+    document.body.appendChild(suggestionsList);
+
+    function positionSuggestions() {
+      const rect = searchInput.getBoundingClientRect();
+      suggestionsList.style.position = "fixed";
+      suggestionsList.style.left = rect.left + "px";
+      suggestionsList.style.width = rect.width + "px";
+      suggestionsList.style.top = (rect.bottom + 2) + "px";
+      suggestionsList.style.zIndex = "9999";
+    }
+
     function getFilteredItems(query, supplier) {
       const q = query.trim().toLowerCase();
       return (menuItems || []).filter((m) => {
@@ -634,6 +646,7 @@
       });
       suggestionsList.appendChild(liCustom);
 
+      positionSuggestions();
       suggestionsList.classList.add("open");
     }
 
@@ -652,9 +665,10 @@
       suggestionsList.classList.remove("open");
     }
 
-    searchInput.addEventListener("focus", () => renderSuggestions(searchInput.value));
+    // Reposition on scroll/resize so it stays anchored
+    searchInput.addEventListener("focus", () => { renderSuggestions(searchInput.value); });
     searchInput.addEventListener("input", () => {
-      row.dataset.isCustom = "false"; // reset; may become custom via suggestion click
+      row.dataset.isCustom = "false";
       renderSuggestions(searchInput.value);
       updateFrRow(row);
       notify();
