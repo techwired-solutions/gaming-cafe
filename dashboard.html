@@ -339,8 +339,25 @@
       .fr-row .fr-unit-price { grid-column: 3 / 4; grid-row: 1; width: 4rem !important; }
       .fr-row .fr-price      { grid-column: 4 / 5; grid-row: 1; min-width: 0; }
       .fr-row .fr-remove     { grid-column: 5 / 6; grid-row: 1; }
+      /* On mobile hide the "Menu item" span from the header grid — it has its own inline label */
+      .fr-col-header .fr-col-item { display: none; }
     }
-
+    /* Typeahead dropdown for food item search */
+    .fr-typeahead-wrap { position: relative; }
+    .fr-suggestions {
+      position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: 50;
+      background: var(--panel-bg); border: 1px solid var(--line); border-radius: 0.5rem;
+      box-shadow: 0 8px 24px rgba(0,0,0,.35); max-height: 180px; overflow-y: auto;
+      display: none;
+    }
+    .fr-suggestions.open { display: block; }
+    .fr-suggestions li {
+      padding: 0.45rem 0.75rem; font-size: 0.78rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+    }
+    .fr-suggestions li:hover, .fr-suggestions li.active { background: var(--acid-dim); color: var(--text-primary); }
+    .fr-suggestions li .sug-price { font-family: 'Space Mono', monospace; color: var(--acid); font-size: 0.72rem; font-weight: 700; }
+    .fr-suggestions li .sug-src { font-size: 0.68rem; color: var(--text-muted); }
 
     /* ---- Thermal Receipt Print Styles (58mm / 80mm roll) ---- */
     #thermal-receipt-area { display: none; }
@@ -605,9 +622,9 @@
                     🍽️ Bardali
                   </button>
                 </div>
-                <div class="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-2 text-xs text-slate-500 mb-2 font-medium">
+                <div class="fr-col-header grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-2 text-xs text-slate-500 mb-2 font-medium">
                   <span class="w-24 sm:w-28">Source</span>
-                  <span>Menu item</span>
+                  <span class="fr-col-item">Menu item</span>
                   <span class="w-14 text-center">Qty</span>
                   <span class="w-20 text-right">Price (रु)</span>
                   <span class="min-w-14 text-right">Total</span>
@@ -741,9 +758,9 @@
                     </button>
                   </div>
                 </div>
-                <div class="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-2 text-xs text-slate-500 mb-2 font-medium">
+                <div class="fr-col-header grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-2 text-xs text-slate-500 mb-2 font-medium">
                   <span class="w-24 sm:w-28">Source</span>
-                  <span>Menu item</span>
+                  <span class="fr-col-item">Menu item</span>
                   <span class="w-14 text-center">Qty</span>
                   <span class="w-20 text-right">Price (रु)</span>
                   <span class="min-w-14 text-right">Total</span>
@@ -2434,9 +2451,9 @@
       <h3 id="quick-food-heading" class="font-bold text-xl mt-1 mb-1">—</h3>
       <p id="quick-food-station" class="text-sm text-slate-400 mb-4"></p>
 
-      <div class="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-2 text-xs text-slate-500 mb-2 font-medium">
+      <div class="fr-col-header grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-2 text-xs text-slate-500 mb-2 font-medium">
         <span class="w-24 sm:w-28">Source</span>
-        <span>Menu item</span>
+        <span class="fr-col-item">Menu item</span>
         <span class="w-14 text-center">Qty</span>
         <span class="w-20 text-right">Price (रु)</span>
         <span class="min-w-14 text-right">Total</span>
@@ -2662,9 +2679,9 @@
             </button>
           </div>
         </div>
-        <div id="edit-food-header" class="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-2 text-xs text-slate-500 mb-2 font-medium">
+        <div id="edit-food-header" class="fr-col-header grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-2 text-xs text-slate-500 mb-2 font-medium">
           <span class="w-24 sm:w-28">Source</span>
-          <span>Menu item</span>
+          <span class="fr-col-item">Menu item</span>
           <span class="w-14 text-center">Qty</span>
           <span class="w-20 text-right">Price (रु)</span>
           <span class="min-w-14 text-right">Total</span>
@@ -2928,9 +2945,9 @@
               </button>
             </div>
           </div>
-          <div id="mr-food-header" class="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-2 text-xs text-slate-500 mb-2 font-medium">
+          <div id="mr-food-header" class="fr-col-header grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-2 text-xs text-slate-500 mb-2 font-medium">
             <span class="w-24 sm:w-28">Source</span>
-            <span>Menu item</span>
+            <span class="fr-col-item">Menu item</span>
             <span class="w-14 text-center">Qty</span>
             <span class="w-20 text-right" id="mr-price-col-title">Price (रु)</span>
             <span class="min-w-14 text-right">Total</span>

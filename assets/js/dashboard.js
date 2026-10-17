@@ -527,21 +527,30 @@
 
   function addFrRow(containerId, selectedId = "", qty = 1, customUnitPrice = null, preselectedSupplier = "all", customItemName = "") {
     let initialSupplier = preselectedSupplier || "all";
-    let isCustom = selectedId === "_custom" || (Boolean(selectedId) && !(menuItems || []).some((m) => String(m.id) === String(selectedId)));
+    let isCustom = selectedId === "_custom" || (Boolean(selectedId) && !String(selectedId).startsWith("custom_") === false) ||
+                   (Boolean(selectedId) && !(menuItems || []).some((m) => String(m.id) === String(selectedId)));
     let initialName = customItemName || "";
 
-    if (selectedId && !isCustom) {
-      const match = (menuItems || []).find((m) => String(m.id) === String(selectedId));
-      if (match) initialSupplier = match.supplier || "chillpill";
+    // Resolve matched menu item
+    let matchedItem = null;
+    if (selectedId && selectedId !== "_custom") {
+      matchedItem = (menuItems || []).find((m) => String(m.id) === String(selectedId));
+      if (matchedItem) {
+        initialSupplier = matchedItem.supplier || "chillpill";
+        initialName = matchedItem.name;
+        isCustom = false;
+      }
     }
+    if (selectedId && String(selectedId).startsWith("custom_")) isCustom = true;
 
     let initialPrice = 0;
     if (customUnitPrice !== null && customUnitPrice !== undefined) {
       initialPrice = Number(customUnitPrice) || 0;
-    } else if (selectedId && !isCustom) {
-      const match = (menuItems || []).find((m) => String(m.id) === String(selectedId));
-      if (match) initialPrice = match.price || 0;
+    } else if (matchedItem) {
+      initialPrice = matchedItem.price || 0;
     }
+
+    const sourceLabels = { chillpill: "🍟 ChillPill", bros_burger: "🍔 Bro's", bardali: "🍽️ Bardali", all: "🌐 All", custom: "✏️ Custom" };
 
     const row = document.createElement("div");
     row.className = "fr-row grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-2 items-center";
@@ -555,13 +564,14 @@
         <option value="bros_burger" ${initialSupplier === "bros_burger" ? "selected" : ""}>🍔 Bro's</option>
         <option value="bardali" ${initialSupplier === "bardali" ? "selected" : ""}>🍽️ Bardali</option>
       </select>
-      <div class="fr-item-col min-w-0 flex flex-col gap-1">
-        <select aria-label="Food or drink item" class="form-control fr-select text-xs py-2 min-w-0 ${isCustom ? 'hidden' : ''}">
-          ${menuOptions(isCustom ? "_custom" : selectedId, initialSupplier)}
-        </select>
-        <div class="fr-custom-wrap flex items-center gap-1 ${isCustom ? '' : 'hidden'}">
-          <input aria-label="Custom item name" type="text" class="form-control fr-custom-name text-xs py-2 min-w-0 font-medium" placeholder="Custom item name..." value="${(initialName || '').replace(/"/g, '&quot;')}">
-          <button type="button" class="fr-toggle-select text-[10px] text-slate-400 hover:text-white px-1.5 py-1 rounded border border-slate-700 whitespace-nowrap" title="Switch back to menu list">📋 List</button>
+      <div class="fr-item-col min-w-0">
+        <span class="fr-item-mobile-label text-[10px] text-slate-500 font-medium sm:hidden block mb-0.5">Menu item</span>
+        <div class="fr-typeahead-wrap relative">
+          <input aria-label="Search menu item" type="text" autocomplete="off"
+            class="form-control fr-search text-xs py-2 w-full min-w-0"
+            placeholder="Type to search menu item…"
+            value="${(isCustom ? initialName : (matchedItem ? matchedItem.name : initialName)).replace(/"/g, '&quot;')}">
+          <ul class="fr-suggestions" role="listbox"></ul>
         </div>
       </div>
       <input aria-label="Quantity" type="number" min="1" value="${qty}" class="form-control fr-qty w-14 text-center text-xs py-2">
@@ -572,102 +582,133 @@
     const notify = () => { const cb = frChangeHandlers[containerId]; if (cb) cb(); };
     const unitPriceInput = row.querySelector(".fr-unit-price");
     const sourceSelect = row.querySelector(".fr-source");
-    const itemSelect = row.querySelector(".fr-select");
-    const customWrap = row.querySelector(".fr-custom-wrap");
-    const customNameInput = row.querySelector(".fr-custom-name");
-    const toggleSelectBtn = row.querySelector(".fr-toggle-select");
+    const searchInput = row.querySelector(".fr-search");
+    const suggestionsList = row.querySelector(".fr-suggestions");
 
-    if (customUnitPrice !== null) {
-      unitPriceInput.dataset.userEdited = "true";
+    // Seed initial state
+    if (isCustom) { row.dataset.isCustom = "true"; }
+    if (matchedItem) { row.dataset.isCustom = "false"; }
+    if (customUnitPrice !== null) unitPriceInput.dataset.userEdited = "true";
+
+    // ---- Typeahead logic ----
+    function getFilteredItems(query, supplier) {
+      const q = query.trim().toLowerCase();
+      return (menuItems || []).filter((m) => {
+        const srcMatch = supplier === "all" || m.supplier === supplier;
+        const nameMatch = !q || m.name.toLowerCase().includes(q);
+        return srcMatch && nameMatch;
+      });
     }
+
+    function renderSuggestions(query) {
+      const supplier = sourceSelect.value;
+      const matches = getFilteredItems(query, supplier);
+      suggestionsList.innerHTML = "";
+
+      matches.slice(0, 12).forEach((m) => {
+        const li = document.createElement("li");
+        li.setAttribute("role", "option");
+        li.dataset.id = m.id;
+        li.innerHTML = `<span>${m.name}</span><span><span class="sug-src">${sourceLabels[m.supplier] || m.supplier}</span>&nbsp;<span class="sug-price">रु${m.price}</span></span>`;
+        li.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          selectItem(m);
+        });
+        suggestionsList.appendChild(li);
+      });
+
+      // Always offer "Custom item" at bottom
+      const liCustom = document.createElement("li");
+      liCustom.setAttribute("role", "option");
+      liCustom.dataset.id = "_custom";
+      liCustom.innerHTML = `<span class="text-slate-400">✏️ Custom: "<em>${query || "type name"}</em>"</span>`;
+      liCustom.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        row.dataset.isCustom = "true";
+        row.dataset.itemId = row.dataset.customId || ("custom_" + Date.now());
+        if (!row.dataset.customId) row.dataset.customId = row.dataset.itemId;
+        unitPriceInput.dataset.userEdited = "true";
+        closeSuggestions();
+        updateFrRow(row);
+        notify();
+      });
+      suggestionsList.appendChild(liCustom);
+
+      suggestionsList.classList.add("open");
+    }
+
+    function selectItem(m) {
+      searchInput.value = m.name;
+      row.dataset.isCustom = "false";
+      row.dataset.itemId = m.id;
+      if (m.supplier && sourceSelect.value === "all") sourceSelect.value = m.supplier;
+      unitPriceInput.dataset.userEdited = "false";
+      closeSuggestions();
+      updateFrRow(row);
+      notify();
+    }
+
+    function closeSuggestions() {
+      suggestionsList.classList.remove("open");
+    }
+
+    searchInput.addEventListener("focus", () => renderSuggestions(searchInput.value));
+    searchInput.addEventListener("input", () => {
+      row.dataset.isCustom = "false"; // reset; may become custom via suggestion click
+      renderSuggestions(searchInput.value);
+      updateFrRow(row);
+      notify();
+    });
+    searchInput.addEventListener("blur", () => setTimeout(closeSuggestions, 150));
 
     sourceSelect.addEventListener("change", () => {
-      const chosenSource = sourceSelect.value;
-      const currentVal = itemSelect.value;
-      itemSelect.innerHTML = menuOptions(currentVal, chosenSource);
+      renderSuggestions(searchInput.value);
       updateFrRow(row);
       notify();
     });
 
-    itemSelect.addEventListener("change", () => {
-      if (itemSelect.value === "_custom") {
-        row.dataset.isCustom = "true";
-        itemSelect.classList.add("hidden");
-        customWrap.classList.remove("hidden");
-        customNameInput.focus();
-        unitPriceInput.dataset.userEdited = "true";
-      } else {
-        row.dataset.isCustom = "false";
-        unitPriceInput.dataset.userEdited = "false";
-        const item = menuItems.find((entry) => entry.id === itemSelect.value);
-        if (item && item.supplier && sourceSelect.value === "all") {
-          sourceSelect.value = item.supplier;
-        }
-      }
+    row.querySelector(".fr-qty").addEventListener("input", () => { updateFrRow(row); notify(); });
+    unitPriceInput.addEventListener("input", () => {
+      unitPriceInput.dataset.userEdited = "true";
       updateFrRow(row);
       notify();
     });
-
-    if (toggleSelectBtn) {
-      toggleSelectBtn.addEventListener("click", () => {
-        row.dataset.isCustom = "false";
-        customWrap.classList.add("hidden");
-        itemSelect.classList.remove("hidden");
-        itemSelect.value = "";
-        unitPriceInput.dataset.userEdited = "false";
-        updateFrRow(row);
-        notify();
-      });
-    }
-
-    if (customNameInput) {
-      customNameInput.addEventListener("input", () => {
-        updateFrRow(row);
-        notify();
-      });
-    }
-
-    row.querySelector(".fr-qty").addEventListener("input", () => {
-      updateFrRow(row);
-      notify();
-    });
-
-    if (unitPriceInput) {
-      unitPriceInput.addEventListener("input", () => {
-        unitPriceInput.dataset.userEdited = "true";
-        updateFrRow(row);
-        notify();
-      });
-    }
-
     row.querySelector(".fr-remove").addEventListener("click", () => { row.remove(); notify(); });
+
     const container = document.getElementById(containerId);
     if (container) container.appendChild(row);
-
     updateFrRow(row);
   }
 
   function updateFrRow(row) {
-    const select = row.querySelector(".fr-select");
+    const searchInput = row.querySelector(".fr-search");
     const sourceSelect = row.querySelector(".fr-source");
-    const customNameInput = row.querySelector(".fr-custom-name");
-    const isCustom = row.dataset.isCustom === "true" || (select && select.value === "_custom");
+    const isCustom = row.dataset.isCustom === "true";
     const quantity = Math.max(1, Number(row.querySelector(".fr-qty").value) || 1);
     const unitPriceInput = row.querySelector(".fr-unit-price");
+    const typedName = searchInput ? searchInput.value.trim() : "";
 
     let unitPrice = 0;
     let itemId = "";
     let itemName = "";
 
     if (isCustom) {
-      itemName = (customNameInput && customNameInput.value.trim()) || "Custom Item";
+      // Custom item — use whatever is typed, price is manual
+      itemName = typedName || "Custom Item";
       if (!row.dataset.customId) {
         row.dataset.customId = "custom_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
       }
       itemId = row.dataset.customId;
       unitPrice = Math.max(0, Number(unitPriceInput.value) || 0);
     } else {
-      const item = menuItems.find((entry) => entry.id === select.value);
+      // Try to match by stored itemId first, then by typed name
+      let item = null;
+      if (row.dataset.itemId) {
+        item = (menuItems || []).find((m) => m.id === row.dataset.itemId);
+      }
+      if (!item && typedName) {
+        item = (menuItems || []).find((m) => m.name.toLowerCase() === typedName.toLowerCase());
+      }
       if (item) {
         itemId = item.id;
         itemName = item.name;
@@ -678,6 +719,12 @@
           unitPriceInput.value = unitPrice;
         }
       } else {
+        // Unmatched text — treat as custom
+        itemName = typedName || "Item";
+        if (!row.dataset.customId) {
+          row.dataset.customId = "custom_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+        }
+        itemId = row.dataset.customId;
         unitPrice = Math.max(0, Number(unitPriceInput.value) || 0);
       }
     }
@@ -689,9 +736,8 @@
     row.dataset.itemName = itemName;
     row.dataset.unitPrice = unitPrice;
 
-    const chosenSupplier = isCustom
-      ? (sourceSelect && sourceSelect.value !== "all" ? sourceSelect.value : "chillpill")
-      : (menuItems.find((m) => m.id === itemId)?.supplier || (sourceSelect && sourceSelect.value !== "all" ? sourceSelect.value : "chillpill"));
+    const chosenSupplier = (menuItems || []).find((m) => m.id === itemId)?.supplier
+      || (sourceSelect && sourceSelect.value !== "all" ? sourceSelect.value : "chillpill");
     row.dataset.supplier = chosenSupplier;
 
     const priceEl = row.querySelector(".fr-price");
@@ -732,14 +778,8 @@
   }
 
   function refreshFoodMenus() {
+    // With typeahead, there's no select innerHTML to rebuild — just re-evaluate each row's price
     document.querySelectorAll(".fr-row").forEach((row) => {
-      if (row.dataset.isCustom === "true") return; // preserve custom items untouched
-      const select = row.querySelector(".fr-select");
-      const sourceSelect = row.querySelector(".fr-source");
-      if (!select) return;
-      const current = select.value;
-      const curSource = sourceSelect ? sourceSelect.value : "all";
-      select.innerHTML = menuOptions(current, curSource);
       updateFrRow(row);
     });
     const emptyNote = document.getElementById("menu-empty-note");
