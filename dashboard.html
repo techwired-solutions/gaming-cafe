@@ -230,8 +230,34 @@
     [data-theme="light"] .border-purple-500\/40 { border-color: rgba(91,48,152,.4) !important; }
     /* Extra station row bg */
     [data-theme="light"] .extra-station-row { background-color: #f4f7fc !important; border-color: var(--line) !important; }
-    /* Edit preset chips */
-    [data-theme="light"] .edit-preset-chip { background-color: #eef2fa !important; border-color: #c0cfe8 !important; color: var(--text-secondary) !important; }
+    /* Edit/MR/Expense preset chips — light mode */
+    [data-theme="light"] .edit-preset-chip,
+    [data-theme="light"] .mr-preset-chip,
+    [data-theme="light"] .expense-chip {
+      background-color: #eef2fa !important;
+      border-color: #c0cfe8 !important;
+      color: var(--text-secondary) !important;
+    }
+    [data-theme="light"] .edit-preset-chip:hover,
+    [data-theme="light"] .mr-preset-chip:hover,
+    [data-theme="light"] .expense-chip:hover {
+      border-color: #5f8800 !important;
+      color: #5f8800 !important;
+      background-color: rgba(95,136,0,.08) !important;
+    }
+    /* Add missing record modal card panels (bg-[#161d2a]) */
+    [data-theme="light"] #missing-record-modal .bg-\[\#161d2a\] {
+      background-color: #f4f7fc !important;
+      border-color: #c8d6ec !important;
+    }
+    [data-theme="light"] #missing-record-modal .border-slate-700\/80 {
+      border-color: #c8d6ec !important;
+    }
+    [data-theme="light"] #missing-record-modal .border-slate-700\/60 {
+      border-color: #d5e0f0 !important;
+    }
+    /* Quick-add source chips in food rows */
+    [data-theme="light"] .quick-add-source-chip { background-color: #eef2fa !important; border-color: #c0cfe8 !important; color: var(--text-secondary) !important; }
 
     /* ===================== LIGHT MODE — PER-TAB FIXES ===================== */
 

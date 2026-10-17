@@ -3747,6 +3747,7 @@
     const timeSection = document.getElementById("mr-time-section");
     const discountSection = document.getElementById("mr-discount-section");
     const stationInput = document.getElementById("mr-station");
+    const stationLabel = document.querySelector("label[for='mr-station']");
     const durationInput = document.getElementById("mr-duration");
     const rateInput = document.getElementById("mr-rate");
     const foodOnlyBadge = document.getElementById("mr-food-only-badge");
@@ -3758,11 +3759,23 @@
     if (foodOnlyBadge) foodOnlyBadge.classList.toggle("hidden", !isFoodOnly);
 
     if (isFoodOnly) {
-      if (stationInput && !stationInput.value) stationInput.value = "Counter / Cafe";
+      // Station is optional for food-only — clear it if it had auto-filled default
+      if (stationInput) {
+        stationInput.removeAttribute("required");
+        stationInput.placeholder = "Counter / Café (optional)";
+        if (!stationInput.value) stationInput.value = "";
+      }
       if (durationInput) durationInput.value = "0";
       if (rateInput) rateInput.value = "0";
     } else {
-      if (stationInput && stationInput.value === "Counter / Cafe" && !isInternal) stationInput.value = "";
+      if (stationInput) {
+        stationInput.placeholder = isInternal
+          ? "Optional (e.g. Counter, Lounge, or leave blank)"
+          : "e.g. PS5 - Station 1, Cabin 1";
+        // Restore auto-filled counter value only if it wasn't manually changed
+        if (stationInput.value === "") { /* leave as is */ }
+        if (stationInput.value === "Counter / Cafe" && !isInternal) stationInput.value = "";
+      }
       if (durationInput && durationInput.value === "0") durationInput.value = "60";
       if (rateInput && rateInput.value === "0") {
         const defaultRate = Number(document.getElementById("admin-rate")?.value) || 100;
