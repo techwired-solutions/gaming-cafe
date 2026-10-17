@@ -7462,14 +7462,38 @@ Here is the menu image:`;
       if (!name) return;
       if (!sdkReady) return showToast("Supabase isn't connected yet.");
       const { error } = await window.sb.from("stations").insert({ name, type, rate, active: true });
-      if (error) showToast(error.message.includes("duplicate") ? "A station with that name already exists." : "Could not add station.");
-      else {
+      if (error) {
+        if (error.message.includes("duplicate") || error.code === "23505") {
+          // Check if the conflict is an inactive (hidden) record
+          const { data: existing } = await window.sb.from("stations").select("*").eq("name", name).maybeSingle();
+          if (existing && !existing.active) {
+            // Ghost inactive station — ask user if they want to reactivate it
+            if (confirm(`"${name}" already exists but is deactivated. Reactivate it with the new type/rate?`)) {
+              const { error: reErr } = await window.sb.from("stations").update({ type, rate, active: true }).eq("id", existing.id);
+              if (reErr) showToast("Could not reactivate station.");
+              else {
+                event.target.reset();
+                document.getElementById("station-form-type").value = "PS5";
+                document.getElementById("station-form-rate").value = 300;
+                showToast(`"${name}" reactivated.`);
+              }
+            }
+          } else if (existing && existing.active) {
+            showToast(`"${name}" is already an active station.`);
+          } else {
+            showToast("A station with that name already exists.");
+          }
+        } else {
+          showToast("Could not add station: " + error.message);
+        }
+      } else {
         event.target.reset();
         document.getElementById("station-form-type").value = "PS5";
         document.getElementById("station-form-rate").value = 300;
         showToast("Station added.");
       }
     });
+
 
     document.getElementById("table-form").addEventListener("submit", async (event) => {
       event.preventDefault();
