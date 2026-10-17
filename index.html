@@ -486,16 +486,22 @@
     [data-theme="light"] .to-\[\#10141e\] { --tw-gradient-to: #e0e8f4; }
     [data-theme="light"] #spotlight-title { color: var(--text-primary) !important; }
     [data-theme="light"] #spotlight-desc { color: var(--text-secondary) !important; }
-    /* Food & drinks section text */
-    [data-theme="light"] #menu-grid .text-slate-300,
-    [data-theme="light"] #menu-grid .text-slate-200 { color: var(--text-secondary) !important; }
+    /* Tournament feature bullets */
+    [data-theme="light"] #tournaments .text-slate-300 { color: var(--text-secondary) !important; }
+    /* Food & drinks section - catch all text classes including dynamically rendered */
+    [data-theme="light"] #menu-grid .text-slate-100,
+    [data-theme="light"] #menu-grid .text-slate-200,
+    [data-theme="light"] #menu-grid .text-slate-300 { color: var(--text-primary) !important; }
     [data-theme="light"] #menu-grid .text-slate-400,
     [data-theme="light"] #menu-grid .text-slate-500 { color: var(--text-muted) !important; }
-    [data-theme="light"] #menu-grid [class*="bg-\["] { background-color: var(--panel-bg) !important; }
+    [data-theme="light"] #menu-grid .bg-slate-700\/60 { background-color: rgba(0,0,0,.08) !important; }
     /* Mobile menu hamburger button */
     [data-theme="light"] #mobile-menu-button { border-color: var(--line) !important; color: var(--text-secondary) !important; }
     /* Banner text */
     [data-theme="light"] #banner-text { color: var(--text-secondary) !important; }
+    /* bg-slate-700 used in tournament status badge */
+    [data-theme="light"] .bg-slate-700 { background-color: #dde5f0 !important; }
+    [data-theme="light"] .bg-slate-700 .text-slate-300 { color: var(--text-secondary) !important; }
   </style>
 </head>
 <body class="bg-app">
@@ -701,7 +707,7 @@
     <p class="mono text-xs font-bold tracking-[.2em] text-[#d8ff45] mb-2">ESPORTS &amp; TOURNAMENTS</p>
 
     <!-- Tournament Showcase Banner -->
-    <div class="panel rounded-3xl p-6 sm:p-10 border border-slate-700/60 relative overflow-hidden shadow-2xl bg-gradient-to-br from-[#181e2b] via-[#131b27] to-[#10141e]">
+    <div class="panel rounded-3xl p-6 sm:p-10 relative overflow-hidden shadow-lg">
       <div class="absolute -right-20 -top-20 w-80 h-80 bg-[#d8ff45]/10 rounded-full blur-3xl pointer-events-none"></div>
 
       <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">

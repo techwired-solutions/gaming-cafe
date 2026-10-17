@@ -192,14 +192,25 @@
     function unlock(staff) {
       currentStaff = staff;
       sessionStorage.setItem("chillpill_staff", JSON.stringify(staff));
-      lockScreen.remove();
+      // Hide lock screen and resume overlay
+      const ls = document.getElementById("lock-screen");
+      const ro = document.getElementById("resume-overlay");
+      if (ls) ls.remove();
+      if (ro) ro.classList.add("hidden");
       appRoot.classList.remove("hidden");
       bootstrap();
     }
 
     async function tryResumeSession() {
       const raw = sessionStorage.getItem("chillpill_staff");
-      if (!raw || !window.SUPABASE_CONFIGURED) return;
+      if (!raw || !window.SUPABASE_CONFIGURED) {
+        // No token — make sure overlay is hidden and lock screen is visible
+        const ro = document.getElementById("resume-overlay");
+        if (ro) ro.classList.add("hidden");
+        const ls = document.getElementById("lock-screen");
+        if (ls) ls.classList.remove("resuming");
+        return;
+      }
       try {
         const staff = JSON.parse(raw);
         const { data, error: err } = await window.sb.from("staff").select("*").eq("id", staff.id).maybeSingle();
@@ -207,9 +218,17 @@
           unlock({ id: data.id, name: data.name, username: data.username, role: data.role });
         } else {
           sessionStorage.removeItem("chillpill_staff");
+          const ro = document.getElementById("resume-overlay");
+          if (ro) ro.classList.add("hidden");
+          const ls = document.getElementById("lock-screen");
+          if (ls) ls.classList.remove("resuming");
         }
       } catch (e) {
         sessionStorage.removeItem("chillpill_staff");
+        const ro = document.getElementById("resume-overlay");
+        if (ro) ro.classList.add("hidden");
+        const ls = document.getElementById("lock-screen");
+        if (ls) ls.classList.remove("resuming");
       }
     }
 
@@ -7342,7 +7361,9 @@ Here is the menu image:`;
         clearExtraStations("ns");
         calculateAmount();
         showMessage("Session saved.", false);
-        showToast("New session saved.");
+        showToast("✅ Session started!");
+        // Immediately refresh data so overview & records update without waiting for realtime
+        fetchSessions();
       } else {
         showMessage("Could not save this record: " + error.message, true);
       }

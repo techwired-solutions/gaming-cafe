@@ -277,7 +277,7 @@
       html += `
         <div class="menu-category-group">
           <div class="flex items-center gap-3 mb-3">
-            <h3 class="text-lg font-bold text-slate-200">${catName}</h3>
+            <h3 class="text-lg font-bold">${catName}</h3>
             <div class="h-px flex-1 bg-slate-700/60"></div>
             <span class="mono text-xs text-[#d8ff45] font-semibold">${catItems.length} items</span>
           </div>
@@ -286,7 +286,7 @@
               .map(
                 (item) => `
               <div class="panel rounded-xl p-4 flex items-center justify-between gap-3 hover:border-slate-500 transition">
-                <span class="font-medium text-slate-100">${item.name}</span>
+                <span class="font-medium">${item.name}</span>
                 <span class="mono text-[#d8ff45] font-bold shrink-0">${inr(item.price)}</span>
               </div>`
               )
