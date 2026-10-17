@@ -2812,6 +2812,32 @@
           </div>
           <span id="edit-new-total" class="mono text-lg text-slate-300 font-bold">रु 0</span>
         </div>
+
+        <!-- Discount on play time -->
+        <div class="pt-2 border-t border-slate-800">
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <i data-lucide="tag" width="13" height="13" class="text-orange-400"></i> Discount on play time
+            </label>
+            <span id="edit-discount-summary-tag" class="text-[11px] font-bold text-orange-400"></span>
+          </div>
+          <div class="flex gap-1.5 mb-1.5">
+            <button type="button" class="edit-discount-mode-btn active rounded-lg border border-[#d8ff45] bg-[#d8ff45] text-[#10141e] px-2 py-1 text-xs font-bold flex items-center gap-1 cursor-pointer transition" data-mode="percent">
+              <i data-lucide="percent" width="12" height="12"></i>Percent
+            </button>
+            <button type="button" class="edit-discount-mode-btn rounded-lg border border-slate-600 bg-slate-800/80 px-2 py-1 text-xs font-bold text-slate-300 flex items-center gap-1 cursor-pointer transition" data-mode="amount">
+              <i data-lucide="banknote" width="12" height="12"></i>Amount
+            </button>
+            <button type="button" class="edit-discount-mode-btn rounded-lg border border-slate-600 bg-slate-800/80 px-2 py-1 text-xs font-bold text-slate-300 flex items-center gap-1 cursor-pointer transition" data-mode="minutes">
+              <i data-lucide="timer" width="12" height="12"></i>Minutes
+            </button>
+          </div>
+          <div class="flex items-center gap-2">
+            <input id="edit-discount-value" type="number" min="0" value="0" class="form-control text-xs py-1.5 w-28 mono font-semibold" placeholder="0">
+            <p id="edit-discount-cap" class="text-[11px] text-slate-500"></p>
+          </div>
+        </div>
+
         <div class="pt-2 border-t border-slate-800 flex items-center justify-between gap-3">
           <div>
             <label for="edit-custom-bill" class="text-xs uppercase tracking-wider text-[#d8ff45] font-bold block">Final Bill Total (रु)</label>
@@ -2820,6 +2846,7 @@
           <input id="edit-custom-bill" type="number" min="0" step="1" class="form-control w-32 text-right mono text-lg font-bold text-[#d8ff45] py-1.5 border-[#d8ff45]/50 bg-slate-900" placeholder="0">
         </div>
       </div>
+
       <p id="edit-session-message" class="text-sm min-h-5 mt-2"></p>
 
       <div class="grid grid-cols-2 gap-3 mt-2">

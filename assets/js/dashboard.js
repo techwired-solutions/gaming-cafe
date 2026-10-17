@@ -3199,12 +3199,29 @@
     }
   }
 
+  let editDiscountMode = "percent";
+
   function recalcEditModal() {
     const duration = Math.max(0, Number(document.getElementById("edit-duration").value) || 0);
     const rate = Math.max(0, Number(document.getElementById("edit-rate").value) || 0);
     const foodTotal = frTotal("edit-food-rows");
     const extraCost = calcExtraStationsCost("edit");
-    const total = Math.round((duration / 60) * rate + foodTotal + extraCost);
+    const rawTimeCost = Math.round((duration / 60) * rate);
+
+    // Apply discount (on play time only, same as checkout)
+    const discountValInput = document.getElementById("edit-discount-value");
+    const rawDiscountVal = discountValInput ? discountValInput.value : 0;
+    const discount = computeDiscount({ duration_minutes: duration, rate }, editDiscountMode, rawDiscountVal);
+    if (discountValInput && String(discount.value) !== String(rawDiscountVal)) discountValInput.value = discount.value;
+
+    const discountCapEl = document.getElementById("edit-discount-cap");
+    const timeCost = Math.round((duration / 60) * rate);
+    if (discountCapEl) discountCapEl.textContent = discountCapLabel(editDiscountMode, timeCost, duration);
+
+    const tagEl = document.getElementById("edit-discount-summary-tag");
+    if (tagEl) tagEl.textContent = discount.amount > 0 ? `−${inr(discount.amount)}` : "";
+
+    const total = Math.round(rawTimeCost - discount.amount + foodTotal + extraCost);
     document.getElementById("edit-new-total").textContent = inr(total);
     const customBillInput = document.getElementById("edit-custom-bill");
     if (customBillInput && customBillInput.dataset.userEdited !== "true") {
@@ -3212,7 +3229,7 @@
     }
     updateEditSplitFields();
     updateEditSessionWhatsAppState();
-    return { total, foodTotal, duration, rate, extraCost };
+    return { total, foodTotal, duration, rate, extraCost, discount, rawTimeCost };
   }
 
   function updateEditInternalSaleState() {
@@ -3352,8 +3369,21 @@
         delete customBillInput.dataset.userEdited;
       }
 
+      // Pre-load discount state
+      editDiscountMode = (record.discount_type && ["percent","amount","minutes"].includes(record.discount_type))
+        ? record.discount_type : "percent";
+      document.querySelectorAll(".edit-discount-mode-btn").forEach((b) => {
+        const active = b.dataset.mode === editDiscountMode;
+        b.className = `edit-discount-mode-btn rounded-lg border px-2 py-1 text-xs font-bold flex items-center gap-1 cursor-pointer transition ${
+          active ? "border-[#d8ff45] bg-[#d8ff45] text-[#10141e]" : "border-slate-600 bg-slate-800/80 text-slate-300"
+        }`;
+      });
+      const editDiscValInput = document.getElementById("edit-discount-value");
+      if (editDiscValInput) editDiscValInput.value = record.discount_value || 0;
+
       renderStationChips("edit-station-chips-container", "edit-station");
       recalcEditModal();
+
       updateEditSplitFields();
       wireClickableTimeInputs();
       document.getElementById("edit-session-modal").classList.add("show");
@@ -3403,19 +3433,26 @@
     const cashInput = document.getElementById("edit-cash-amount");
     const onlineInput = document.getElementById("edit-online-amount");
     if (cashInput && onlineInput) {
+      let _editSplitUpdating = false; // guard against circular input events
       cashInput.addEventListener("input", () => {
+        if (_editSplitUpdating) return;
+        _editSplitUpdating = true;
         cashInput.dataset.userEdited = "true";
         const total = Number(document.getElementById("edit-custom-bill")?.value) || 0;
         const cash = Math.max(0, Number(cashInput.value) || 0);
         onlineInput.value = Math.max(0, total - cash);
         updateEditSplitFields();
+        _editSplitUpdating = false;
       });
       onlineInput.addEventListener("input", () => {
+        if (_editSplitUpdating) return;
+        _editSplitUpdating = true;
         onlineInput.dataset.userEdited = "true";
         const total = Number(document.getElementById("edit-custom-bill")?.value) || 0;
         const online = Math.max(0, Number(onlineInput.value) || 0);
         cashInput.value = Math.max(0, total - online);
         updateEditSplitFields();
+        _editSplitUpdating = false;
       });
     }
 
@@ -3457,6 +3494,23 @@
         updateEditSplitFields();
       });
     }
+
+    // Discount mode buttons
+    document.querySelectorAll(".edit-discount-mode-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        editDiscountMode = btn.dataset.mode;
+        document.querySelectorAll(".edit-discount-mode-btn").forEach((b) => {
+          const active = b.dataset.mode === editDiscountMode;
+          b.className = `edit-discount-mode-btn rounded-lg border px-2 py-1 text-xs font-bold flex items-center gap-1 cursor-pointer transition ${
+            active ? "border-[#d8ff45] bg-[#d8ff45] text-[#10141e]" : "border-slate-600 bg-slate-800/80 text-slate-300"
+          }`;
+        });
+        document.getElementById("edit-discount-value").value = 0;
+        recalcEditModal();
+      });
+    });
+    const editDiscountInput = document.getElementById("edit-discount-value");
+    if (editDiscountInput) editDiscountInput.addEventListener("input", recalcEditModal);
 
     document.getElementById("edit-session-save").addEventListener("click", async () => {
       if (!editTarget) return;
@@ -3516,12 +3570,16 @@
 
       let cashAmount = 0;
       let onlineAmount = 0;
+      // DB check constraint only allows Cash/Online/null — Split is stored in notes
+      let dbPaymentMethod = paymentMethod;
       if (paymentMethod === "Split") {
         cashAmount = Math.max(0, Number(document.getElementById("edit-cash-amount")?.value) || 0);
         onlineAmount = Math.max(0, Number(document.getElementById("edit-online-amount")?.value) || 0);
         if (cashAmount + onlineAmount !== finalAmount && finalAmount > 0) {
           onlineAmount = Math.max(0, finalAmount - cashAmount);
         }
+        // Store as "Cash" in DB (the constraint won't accept "Split")
+        dbPaymentMethod = "Cash";
       } else if (paymentMethod === "Cash") {
         cashAmount = finalAmount;
         onlineAmount = 0;
@@ -3531,15 +3589,14 @@
       }
 
       const rawNotes = document.getElementById("edit-notes").value.trim();
-      let finalNotes = rawNotes;
-      if (isInternal && !rawNotes.includes("[Internal Sale]")) {
-        finalNotes = rawNotes ? `[Internal Sale] ${rawNotes}` : "[Internal Sale]";
+      // Strip any old split tags before re-writing
+      let finalNotes = rawNotes.replace(/\[Payment:\s*Split[^\]]*\]/g, "").trim();
+      if (isInternal && !finalNotes.includes("[Internal Sale]")) {
+        finalNotes = finalNotes ? `[Internal Sale] ${finalNotes}` : "[Internal Sale]";
       }
       if (paymentMethod === "Split") {
         const splitTag = `[Payment: Split | Cash: ${cashAmount} | Online: ${onlineAmount}]`;
-        if (!finalNotes.includes("[Payment: Split")) {
-          finalNotes = [finalNotes, splitTag].filter(Boolean).join(" ");
-        }
+        finalNotes = [finalNotes, splitTag].filter(Boolean).join(" ");
       }
 
       const btn = document.getElementById("edit-session-save");
@@ -3547,6 +3604,10 @@
       const extraStations = collectExtraStations("edit");
       // Build combined station string for overlap checks (primary + extras)
       const allStationNames = [station, ...extraStations.map((e) => e.station)].filter(Boolean).join(", ");
+
+      // Get discount from recalc
+      const { discount } = recalcEditModal();
+
       const updatePayload = {
         station_name: station,
 
@@ -3560,13 +3621,17 @@
         food_total: foodTotal,
         amount: finalAmount,
         paid: isPaid,
-        payment_method: paymentMethod,
+        payment_method: dbPaymentMethod,
         cash_amount: cashAmount,
         online_amount: onlineAmount,
         notes: finalNotes,
         notified_5min: false,
-        extra_stations: extraStations
+        extra_stations: extraStations,
+        discount_amount: discount ? discount.amount : 0,
+        discount_type: (discount && discount.amount > 0) ? discount.mode : null,
+        discount_value: (discount && discount.amount > 0) ? discount.value : 0
       };
+
       if (isPaid) {
         updatePayload.paid_at = endIso || editTarget.paid_at || startIso || new Date().toISOString();
       } else {
