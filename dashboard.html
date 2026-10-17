@@ -2919,6 +2919,26 @@
           </div>
         </div>
 
+        <!-- Additional Stations (multi-station session) -->
+        <div class="border-t border-slate-700/80 mt-4 pt-4" id="mr-extra-stations-section">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="font-semibold text-sm flex items-center gap-2">
+              <i data-lucide="layers" width="15" height="15" class="text-sky-400"></i>
+              Additional Stations
+              <span class="mono text-[11px] text-slate-500 font-normal">(optional — different time per station)</span>
+            </h4>
+            <button type="button" id="mr-add-extra-station" class="text-xs font-bold text-sky-400 border border-sky-500/40 rounded-lg px-2.5 py-1.5 hover:bg-sky-500/10 flex items-center gap-1 cursor-pointer transition">
+              <i data-lucide="plus" width="13" height="13"></i> Add Station
+            </button>
+          </div>
+          <div id="mr-extra-stations-rows" class="space-y-2"></div>
+          <p id="mr-extra-stations-empty" class="text-xs text-slate-500 italic">No extra stations — only the primary station above will be billed.</p>
+          <div id="mr-extra-stations-subtotal" class="hidden mt-2 pt-2 border-t border-slate-700/50 flex justify-between text-xs text-slate-400">
+            <span>Extra stations subtotal</span>
+            <span id="mr-extra-subtotal-val" class="mono font-bold text-sky-300">रु 0</span>
+          </div>
+        </div>
+
         <!-- Discount on Play Time (Parity with Active Session Checkout) -->
         <div id="mr-discount-section" class="border-t border-slate-700/80 pt-3.5 mb-4">
           <div class="flex items-center justify-between mb-1">

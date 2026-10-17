@@ -953,6 +953,7 @@
     if (subtotalVal) subtotalVal.textContent = inr(cost);
     if (prefix === "ns") calculateAmount();
     else if (prefix === "edit") recalcEditModal();
+    else if (prefix === "mr") recalcMissingRecord();
   }
 
   function collectExtraStations(prefix) {
@@ -3597,7 +3598,8 @@
 
     const timeCost = Math.max(0, rawTimeCost - discount.amount);
     const foodTotal = frTotal("mr-food-rows");
-    const total = timeCost + foodTotal;
+    const extraStationsCost = calcExtraStationsCost("mr");
+    const total = timeCost + foodTotal + extraStationsCost;
 
     const breakdownEl = document.getElementById("mr-calc-breakdown");
     const totalEl = document.getElementById("mr-total-display");
@@ -3608,13 +3610,14 @@
     }
 
     if (breakdownEl) {
-      if (rawTimeCost === 0 && foodTotal > 0) {
+      if (rawTimeCost === 0 && foodTotal > 0 && extraStationsCost === 0) {
         breakdownEl.textContent = `Food order: रु ${foodTotal} · Station time: रु 0`;
-      } else if (rawTimeCost === 0 && foodTotal === 0) {
+      } else if (rawTimeCost === 0 && foodTotal === 0 && extraStationsCost === 0) {
         breakdownEl.textContent = `No charges selected (रु 0)`;
       } else {
         const discPart = discount.amount > 0 ? ` (−${inr(discount.amount)})` : "";
-        breakdownEl.textContent = `Play time (${duration}m @ रु ${rate}/h): रु ${timeCost}${discPart} · Food: रु ${foodTotal}`;
+        const extraPart = extraStationsCost > 0 ? ` · Extra stations: ${inr(extraStationsCost)}` : "";
+        breakdownEl.textContent = `Play time (${duration}m @ रु ${rate}/h): रु ${timeCost}${discPart} · Food: रु ${foodTotal}${extraPart}`;
       }
     }
     if (totalEl) {
@@ -3624,7 +3627,7 @@
     if (payMethod === "Split") {
       updateMrSplitFields();
     }
-    return { total, foodTotal, duration, rate, timeCost, discount, rawTimeCost };
+    return { total, foodTotal, duration, rate, timeCost, discount, rawTimeCost, extraStationsCost };
   }
 
   function updateMrSplitFields() {
@@ -3757,6 +3760,8 @@
     if (timeSection) timeSection.classList.toggle("hidden", isFoodOnly);
     if (discountSection) discountSection.classList.toggle("hidden", isFoodOnly);
     if (foodOnlyBadge) foodOnlyBadge.classList.toggle("hidden", !isFoodOnly);
+    const extraStationsSection = document.getElementById("mr-extra-stations-section");
+    if (extraStationsSection) extraStationsSection.classList.toggle("hidden", isFoodOnly);
 
     if (isFoodOnly) {
       // Station is optional for food-only — clear it if it had auto-filled default
@@ -3881,6 +3886,8 @@
       msgEl.className = "text-sm min-h-5 mb-3";
     }
 
+    // Clear extra stations from previous use
+    clearExtraStations("mr");
     recalcMissingRecord();
     if (window.lucide) window.lucide.createIcons();
     modal.classList.add("show");
@@ -4055,6 +4062,19 @@
       addFoodBtn.addEventListener("click", () => addFrRow("mr-food-rows"));
     }
 
+    // Extra stations — Add Station button
+    const addExtraStationBtn = document.getElementById("mr-add-extra-station");
+    if (addExtraStationBtn) {
+      addExtraStationBtn.addEventListener("click", () => {
+        const container = document.getElementById("mr-extra-stations-rows");
+        if (container) {
+          container.appendChild(buildExtraStationRow("mr", "", 0, 300, stations, "", ""));
+          refreshExtraStations("mr");
+          if (window.lucide) window.lucide.createIcons();
+        }
+      });
+    }
+
     // Form submission helper
     async function submitMissingRecord(printBill = false) {
       if (isSubmittingMissingRecord) return;
@@ -4169,6 +4189,7 @@
           rate,
           food_items: foodItems,
           food_total: foodTotal,
+          extra_stations: collectExtraStations("mr"),
           amount: total,
           cash_amount: cashAmount,
           online_amount: onlineAmount,
