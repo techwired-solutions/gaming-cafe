@@ -825,10 +825,13 @@
     const duration = Math.max(0, Number(document.getElementById("duration-minutes").value) || 0);
     const rate = Math.max(0, Number(document.getElementById("rate").value) || 0);
     const foodTotal = frTotal("food-order-list");
-    const timeCost = (duration / 60) * rate;
+    const timeCost = Math.round((duration / 60) * rate);
     const extraCost = calcExtraStationsCost("ns");
     const total = Math.round(timeCost + foodTotal + extraCost);
     document.getElementById("estimate-total").textContent = inr(total);
+    // Update primary station subtotal display
+    const primarySub = document.getElementById("ns-primary-subtotal");
+    if (primarySub) primarySub.textContent = inr(timeCost);
     return { total, foodTotal, timeCost, duration, rate, extraCost };
   }
 
@@ -3638,6 +3641,9 @@
     const foodTotal = frTotal("mr-food-rows");
     const extraStationsCost = calcExtraStationsCost("mr");
     const total = timeCost + foodTotal + extraStationsCost;
+    // Update primary station subtotal display
+    const mrPrimarySub = document.getElementById("mr-primary-subtotal");
+    if (mrPrimarySub) mrPrimarySub.textContent = inr(Math.max(0, rawTimeCost - discount.amount));
 
     const breakdownEl = document.getElementById("mr-calc-breakdown");
     const totalEl = document.getElementById("mr-total-display");
@@ -3798,8 +3804,6 @@
     if (timeSection) timeSection.classList.toggle("hidden", isFoodOnly);
     if (discountSection) discountSection.classList.toggle("hidden", isFoodOnly);
     if (foodOnlyBadge) foodOnlyBadge.classList.toggle("hidden", !isFoodOnly);
-    const extraStationsSection = document.getElementById("mr-extra-stations-section");
-    if (extraStationsSection) extraStationsSection.classList.toggle("hidden", isFoodOnly);
 
     if (isFoodOnly) {
       // Station is optional for food-only — clear it if it had auto-filled default

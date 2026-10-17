@@ -700,13 +700,7 @@
               <div class="rounded-xl bg-[#d8ff45]/10 text-[#d8ff45] p-2.5"><i data-lucide="plus" width="20" height="20"></i></div>
             </div>
             <form id="session-form" novalidate>
-              <div class="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label class="block text-sm font-medium mb-2" for="station-name">Station / table</label>
-                  <input id="station-name" class="form-control" type="text" list="station-list" placeholder="PS5 - Station 1 (or select multiple)" required>
-                  <div id="station-chips-container" class="flex flex-wrap gap-1.5 mt-2"></div>
-                </div>
-
+              <div class="grid sm:grid-cols-3 gap-4">
                 <div><label class="block text-sm font-medium mb-2" for="customer-name">Customer or group</label><input id="customer-name" class="form-control" type="text" required></div>
                 <div><label class="block text-sm font-medium mb-2" for="customer-phone">Customer phone</label><input id="customer-phone" class="form-control" type="tel" required></div>
                 <div><label class="block text-sm font-medium mb-2" for="session-status">Current status</label>
@@ -717,49 +711,84 @@
                 </div>
               </div>
               <p id="station-conflict-warning" class="hidden text-xs text-amber-300 mt-3"></p>
-              <div class="border-t border-slate-700/80 mt-6 pt-5">
-                <div class="flex items-center justify-between mb-4">
-                  <h3 class="font-semibold text-lg">Time tracking</h3>
-                  <span id="session-today-label" class="mono text-xs text-slate-500"></span>
-                </div>
-                <!-- Session date: Today / Tomorrow toggle -->
-                <div class="flex items-center gap-2 mb-4">
-                  <span class="text-xs text-slate-400 font-medium mr-1">Date:</span>
-                  <button type="button" id="session-date-today" data-offset="0"
-                    class="session-date-pill rounded-lg px-3 py-1.5 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45] transition">
-                    Today
-                  </button>
-                  <button type="button" id="session-date-tomorrow" data-offset="1"
-                    class="session-date-pill rounded-lg px-3 py-1.5 text-xs font-bold border border-slate-600 bg-transparent text-slate-400 hover:border-slate-400 hover:text-slate-200 transition">
-                    Tomorrow
-                  </button>
-                </div>
-                <div class="grid sm:grid-cols-2 gap-4">
-                  <div><label class="block text-sm font-medium mb-2" for="start-time">Start time</label><input id="start-time" class="form-control" type="time"></div>
-                  <div><label class="block text-sm font-medium mb-2" for="end-time">End time</label><input id="end-time" class="form-control" type="time"></div>
-                  <div><label class="block text-sm font-medium mb-2" for="duration-minutes">Duration (minutes)</label><input id="duration-minutes" class="form-control" type="number" min="0" value="60"></div>
-                  <div><label class="block text-sm font-medium mb-2" for="rate">Hourly rate (रु)</label><input id="rate" class="form-control" type="number" min="0" value="100"></div>
-                </div>
-              </div>
-              <!-- ===== EXTRA STATIONS ===== -->
-              <div class="border-t border-slate-700/80 mt-6 pt-5" id="ns-extra-stations-section">
+
+              <!-- ===== STATIONS SECTION (primary + additional, unified) ===== -->
+              <div class="border-t border-slate-700/80 mt-6 pt-5" id="ns-stations-section">
                 <div class="flex items-center justify-between mb-3">
-                  <h3 class="font-semibold text-base flex items-center gap-2">
-                    <i data-lucide="layers" width="16" height="16" class="text-sky-400"></i>
-                    Additional Stations
-                    <span class="mono text-[11px] text-slate-500 font-normal">(optional — different time per station)</span>
+                  <h3 class="font-semibold text-lg flex items-center gap-2">
+                    <i data-lucide="monitor" width="17" height="17" class="text-sky-400"></i>
+                    Stations &amp; Time
+                    <span class="mono text-[11px] text-slate-500 font-normal">(session date: <span id="session-today-label"></span>)</span>
                   </h3>
-                  <button type="button" id="ns-add-extra-station" class="text-xs font-bold text-sky-400 border border-sky-500/40 rounded-lg px-2.5 py-1.5 hover:bg-sky-500/10 flex items-center gap-1 cursor-pointer transition">
-                    <i data-lucide="plus" width="13" height="13"></i> Add Station
-                  </button>
+                  <div class="flex items-center gap-2">
+                    <!-- Session date: Today / Tomorrow toggle -->
+                    <button type="button" id="session-date-today" data-offset="0"
+                      class="session-date-pill rounded-lg px-3 py-1.5 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45] transition">
+                      Today
+                    </button>
+                    <button type="button" id="session-date-tomorrow" data-offset="1"
+                      class="session-date-pill rounded-lg px-3 py-1.5 text-xs font-bold border border-slate-600 bg-transparent text-slate-400 hover:border-slate-400 hover:text-slate-200 transition">
+                      Tomorrow
+                    </button>
+                  </div>
                 </div>
+
+                <!-- Primary station row (not removable) -->
+                <div class="ns-primary-station-row border border-slate-700/60 rounded-xl p-3 space-y-2 bg-[#111722] mb-2">
+                  <div class="flex items-center justify-between gap-2">
+                    <div class="flex-1 min-w-0">
+                      <label class="block text-[11px] text-slate-400 mb-1">Station name <span class="text-rose-400">*</span></label>
+                      <input id="station-name" class="form-control text-xs py-1.5" type="text" list="station-list" placeholder="e.g. PS5 - Station 1" required>
+                      <div id="station-chips-container" class="flex flex-wrap gap-1.5 mt-1.5"></div>
+                    </div>
+                    <div class="flex-shrink-0 mt-5 h-8 w-8 rounded-xl border border-slate-700/40 text-slate-600 flex items-center justify-center" title="Primary station">
+                      <i data-lucide="star" width="12" height="12"></i>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-[1fr_1fr_auto_1fr] gap-2 items-end">
+                    <div>
+                      <label class="block text-[11px] text-slate-400 mb-1">Start time</label>
+                      <input id="start-time" class="form-control text-xs py-1.5" type="time">
+                    </div>
+                    <div>
+                      <label class="block text-[11px] text-slate-400 mb-1">End time</label>
+                      <input id="end-time" class="form-control text-xs py-1.5" type="time">
+                    </div>
+                    <div class="pb-1 text-slate-400 text-xs self-end text-center">or</div>
+                    <div>
+                      <label class="block text-[11px] text-slate-400 mb-1">Duration (min)</label>
+                      <input id="duration-minutes" class="form-control text-xs py-1.5" type="number" min="0" value="60">
+                    </div>
+                  </div>
+                  <div class="flex items-center justify-between gap-2">
+                    <div class="flex-1">
+                      <label class="block text-[11px] text-slate-400 mb-1">Rate (रु/hr)</label>
+                      <input id="rate" class="form-control text-xs py-1.5" type="number" min="0" value="100">
+                    </div>
+                    <div class="flex-1 text-right pt-4">
+                      <span class="text-[11px] text-slate-500">Subtotal</span>
+                      <p id="ns-primary-subtotal" class="mono text-sm font-bold text-[#d8ff45]">रु 0</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Additional station rows (dynamically added) -->
                 <div id="ns-extra-stations-rows" class="space-y-2"></div>
-                <p id="ns-extra-stations-empty" class="text-xs text-slate-500 italic">No extra stations — only the primary station above will be billed.</p>
+
+                <!-- Subtotal bar for extra stations -->
                 <div id="ns-extra-stations-subtotal" class="hidden mt-2 pt-2 border-t border-slate-700/50 flex justify-between text-xs text-slate-400">
                   <span>Extra stations subtotal</span>
                   <span id="ns-extra-subtotal-val" class="mono font-bold text-sky-300">रु 0</span>
                 </div>
+
+                <!-- Add Station button always at bottom -->
+                <button type="button" id="ns-add-extra-station" class="mt-3 w-full text-xs font-bold text-sky-400 border border-sky-500/40 rounded-xl px-2.5 py-2 hover:bg-sky-500/10 flex items-center justify-center gap-1.5 cursor-pointer transition">
+                  <i data-lucide="plus" width="13" height="13"></i> Add Another Station
+                </button>
+                <!-- Hidden compat element so old empty-hint CSS doesn't break anything -->
+                <p id="ns-extra-stations-empty" class="hidden"></p>
               </div>
+
               <div class="border-t border-slate-700/80 mt-6 pt-5">
                 <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
                   <h3 class="font-semibold text-lg flex items-center gap-2">
@@ -2876,14 +2905,8 @@
           </div>
         </div>
 
-        <!-- Customer & Station Details -->
+        <!-- Customer Details -->
         <div class="grid sm:grid-cols-2 gap-3 mb-4">
-          <div>
-            <label class="block text-xs text-slate-400 mb-1" for="mr-station">Station / Console <span id="mr-station-req" class="text-rose-400">*</span></label>
-            <input id="mr-station" class="form-control" type="text" list="station-list" placeholder="e.g. PS5 - Station 1, Cabin 1">
-            <div id="mr-station-chips-container" class="flex flex-wrap gap-1.5 mt-1.5"></div>
-          </div>
-
           <div>
             <label class="block text-xs text-slate-400 mb-1" for="mr-customer-name">Customer or Group <span class="text-rose-400">*</span></label>
             <input id="mr-customer-name" class="form-control" type="text" list="records-customer-datalist" placeholder="e.g. Bibek Subedi" required>
@@ -2894,49 +2917,67 @@
           </div>
         </div>
 
-        <!-- Time Tracking -->
+        <!-- Stations & Time (unified section — primary + additional) -->
         <div id="mr-time-section" class="border-t border-slate-700/80 pt-4 mb-4">
-          <h4 class="font-semibold text-sm mb-2 flex items-center gap-1.5">
-            <i data-lucide="clock" width="14" height="14" class="text-[#d8ff45]"></i> Time Tracking
+          <h4 class="font-semibold text-sm mb-3 flex items-center gap-1.5">
+            <i data-lucide="monitor" width="14" height="14" class="text-sky-400"></i> Stations &amp; Time
           </h4>
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            <div>
-              <label class="block text-xs text-slate-400 mb-1" for="mr-start-time">Start time <span id="mr-start-time-req" class="text-rose-400">*</span></label>
-              <input id="mr-start-time" class="form-control" type="time">
-            </div>
-            <div>
-              <label class="block text-xs text-slate-400 mb-1" for="mr-end-time">End time</label>
-              <input id="mr-end-time" class="form-control" type="time">
-            </div>
-            <div>
-              <label class="block text-xs text-slate-400 mb-1" for="mr-duration">Duration (min)</label>
-              <input id="mr-duration" class="form-control" type="number" min="0" value="60">
-            </div>
-            <div>
-              <label class="block text-xs text-slate-400 mb-1" for="mr-rate">Rate (रु/hr)</label>
-              <input id="mr-rate" class="form-control" type="number" min="0" value="100">
-            </div>
-          </div>
-        </div>
 
-        <!-- Additional Stations (multi-station session) -->
-        <div class="border-t border-slate-700/80 mt-4 pt-4" id="mr-extra-stations-section">
-          <div class="flex items-center justify-between mb-3">
-            <h4 class="font-semibold text-sm flex items-center gap-2">
-              <i data-lucide="layers" width="15" height="15" class="text-sky-400"></i>
-              Additional Stations
-              <span class="mono text-[11px] text-slate-500 font-normal">(optional — different time per station)</span>
-            </h4>
-            <button type="button" id="mr-add-extra-station" class="text-xs font-bold text-sky-400 border border-sky-500/40 rounded-lg px-2.5 py-1.5 hover:bg-sky-500/10 flex items-center gap-1 cursor-pointer transition">
-              <i data-lucide="plus" width="13" height="13"></i> Add Station
-            </button>
+          <!-- Primary station row (not removable) -->
+          <div class="border border-slate-700/60 rounded-xl p-3 space-y-2 bg-[#111722] mb-2">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex-1 min-w-0">
+                <label class="block text-[11px] text-slate-400 mb-1">Station / Console <span id="mr-station-req" class="text-rose-400">*</span></label>
+                <input id="mr-station" class="form-control text-xs py-1.5" type="text" list="station-list" placeholder="e.g. PS5 - Station 1, Cabin 1">
+                <div id="mr-station-chips-container" class="flex flex-wrap gap-1.5 mt-1.5"></div>
+              </div>
+              <div class="flex-shrink-0 mt-5 h-8 w-8 rounded-xl border border-slate-700/40 text-slate-600 flex items-center justify-center" title="Primary station">
+                <i data-lucide="star" width="12" height="12"></i>
+              </div>
+            </div>
+            <div class="grid grid-cols-[1fr_1fr_auto_1fr] gap-2 items-end">
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">Start time <span id="mr-start-time-req" class="text-rose-400">*</span></label>
+                <input id="mr-start-time" class="form-control text-xs py-1.5" type="time">
+              </div>
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">End time</label>
+                <input id="mr-end-time" class="form-control text-xs py-1.5" type="time">
+              </div>
+              <div class="pb-1 text-slate-400 text-xs self-end text-center">or</div>
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">Duration (min)</label>
+                <input id="mr-duration" class="form-control text-xs py-1.5" type="number" min="0" value="60">
+              </div>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex-1">
+                <label class="block text-[11px] text-slate-400 mb-1">Rate (रु/hr)</label>
+                <input id="mr-rate" class="form-control text-xs py-1.5" type="number" min="0" value="100">
+              </div>
+              <div class="flex-1 text-right pt-4">
+                <span class="text-[11px] text-slate-500">Subtotal</span>
+                <p id="mr-primary-subtotal" class="mono text-sm font-bold text-[#d8ff45]">रु 0</p>
+              </div>
+            </div>
           </div>
+
+          <!-- Additional station rows -->
           <div id="mr-extra-stations-rows" class="space-y-2"></div>
-          <p id="mr-extra-stations-empty" class="text-xs text-slate-500 italic">No extra stations — only the primary station above will be billed.</p>
+
+          <!-- Extra subtotal -->
           <div id="mr-extra-stations-subtotal" class="hidden mt-2 pt-2 border-t border-slate-700/50 flex justify-between text-xs text-slate-400">
             <span>Extra stations subtotal</span>
             <span id="mr-extra-subtotal-val" class="mono font-bold text-sky-300">रु 0</span>
           </div>
+
+          <!-- Add Station button always at bottom -->
+          <button type="button" id="mr-add-extra-station" class="mt-3 w-full text-xs font-bold text-sky-400 border border-sky-500/40 rounded-xl px-2.5 py-2 hover:bg-sky-500/10 flex items-center justify-center gap-1.5 cursor-pointer transition">
+            <i data-lucide="plus" width="13" height="13"></i> Add Another Station
+          </button>
+          <p id="mr-extra-stations-empty" class="hidden"></p>
+          <!-- Hidden compat — mr-extra-stations-section ID kept for food-only toggle JS -->
+          <span id="mr-extra-stations-section" class="hidden"></span>
         </div>
 
         <!-- Discount on Play Time (Parity with Active Session Checkout) -->
