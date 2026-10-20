@@ -1414,7 +1414,13 @@
     const activeSessions = records.filter((r) => r.status === "Active");
     const endingSoon = activeSessions.filter((r) => r.end_time && new Date(r.end_time) - new Date() > 0 && new Date(r.end_time) - new Date() <= ALERT_MS);
     const completedToday = records.filter((r) => r.status === "Completed" && isToday(r.paid_at || r.created_at));
-    const todayRevenue = records.filter((r) => r.paid && isToday(r.paid_at)).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const todayRevenue = records.reduce((sum, r) => {
+      const bd = getRecordPaymentBreakdown(r);
+      if ((r.paid || bd.paidAmount > 0) && isToday(r.paid_at || r.start_time || r.created_at)) {
+        return sum + (bd.paidAmount > 0 ? bd.paidAmount : (Number(r.amount) || 0));
+      }
+      return sum;
+    }, 0);
 
     document.getElementById("active-count").textContent = activeSessions.length;
     document.getElementById("ending-soon-count").textContent = endingSoon.length;
@@ -1424,7 +1430,11 @@
     document.getElementById("record-count").textContent = records.length;
 
     // ---- Unpaid / Due panel ----
-    const unpaid = records.filter((r) => r.status === "Completed" && !r.paid);
+    const unpaid = records.filter((r) => {
+      if (r.status !== "Completed") return false;
+      const bd = getRecordPaymentBreakdown(r);
+      return !r.paid || bd.isPartial || bd.dueAmount > 0;
+    });
     const panel = document.getElementById("overview-unpaid-panel");
     const countEl = document.getElementById("overview-unpaid-count");
     const listEl = document.getElementById("overview-unpaid-list");
@@ -1433,15 +1443,19 @@
       if (countEl) countEl.textContent = unpaid.length;
       listEl.innerHTML = "";
       unpaid.forEach((r) => {
+        const bd = getRecordPaymentBreakdown(r);
         const card = document.createElement("div");
         card.className = "overview-unpaid-card rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 flex items-center justify-between gap-3";
+        const dueText = bd.isPartial
+          ? `<div class="text-right"><span class="mono font-bold text-amber-300 text-sm">Due: ${inr(bd.dueAmount)}</span><p class="text-[10px] text-slate-400">Paid: ${inr(bd.paidAmount)} / ${inr(bd.total)}</p></div>`
+          : `<span class="mono font-bold text-[#ff6875] text-sm">${inr(r.amount)}</span>`;
         card.innerHTML = `
           <div class="min-w-0">
             <p class="font-semibold text-sm truncate">${r.customer_name || "—"}</p>
             <p class="text-xs text-slate-400 truncate mono">${r.station_name || "—"} · ${r.duration_minutes || 0} min</p>
           </div>
           <div class="flex items-center gap-2 shrink-0">
-            <span class="mono font-bold text-[#ff6875] text-sm">${inr(r.amount)}</span>
+            ${dueText}
             <button type="button" class="unpaid-collect-btn rounded-lg px-2.5 py-1.5 text-xs font-bold cursor-pointer transition hover:brightness-110 whitespace-nowrap"
               style="background:#ff6875;color:#10141e;" data-id="${r.id}">Collect</button>
           </div>`;
@@ -1518,35 +1532,58 @@
   }
 
   function getRecordPaymentBreakdown(r) {
-    if (!r) return { method: "Unpaid", cash: 0, online: 0, total: 0 };
+    if (!r) return { method: "Unpaid", cash: 0, online: 0, total: 0, paidAmount: 0, dueAmount: 0, isPartial: false, isUnpaid: true };
     const total = Number(r.amount) || 0;
     let method = r.payment_method || (r.paid ? "Cash" : "Unpaid");
     let cash = Number(r.cash_amount) || 0;
     let online = Number(r.online_amount) || 0;
+    let paidAmount = r.paid_amount != null ? Number(r.paid_amount) : (r.paid ? total : (cash + online));
+    let dueAmount = r.due_amount != null ? Number(r.due_amount) : (r.paid ? 0 : Math.max(0, total - paidAmount));
 
-    // Check if encoded in notes: [Payment: Split | Cash: 200 | Online: 300]
-    if ((method === "Split" || (cash === 0 && online === 0)) && r.notes) {
-      const match = String(r.notes).match(/\[Payment:\s*Split\s*\|\s*Cash:\s*(\d+(?:\.\d+)?)\s*\|\s*Online:\s*(\d+(?:\.\d+)?)\]/i);
-      if (match) {
+    // Check if encoded in notes:
+    // [Payment: Split | Cash: 200 | Online: 300]
+    // [Payment: Partial | Paid: 200 | Due: 300 | Method: Cash | Cash: 200 | Online: 0]
+    // [Payment: Unpaid | Due: 300]
+    if (r.notes) {
+      const splitMatch = String(r.notes).match(/\[Payment:\s*Split\s*\|\s*Cash:\s*(\d+(?:\.\d+)?)\s*\|\s*Online:\s*(\d+(?:\.\d+)?)\]/i);
+      if (splitMatch) {
         method = "Split";
-        cash = Number(match[1]) || 0;
-        online = Number(match[2]) || 0;
+        cash = Number(splitMatch[1]) || 0;
+        online = Number(splitMatch[2]) || 0;
+      }
+      const partialMatch = String(r.notes).match(/\[Payment:\s*Partial\s*\|\s*Paid:\s*(\d+(?:\.\d+)?)\s*\|\s*Due:\s*(\d+(?:\.\d+)?)(?:\s*\|\s*Method:\s*([^\|\]]+))?(?:\s*\|\s*Cash:\s*(\d+(?:\.\d+)?))?(?:\s*\|\s*Online:\s*(\d+(?:\.\d+)?))?\]/i);
+      if (partialMatch) {
+        paidAmount = Number(partialMatch[1]) || 0;
+        dueAmount = Number(partialMatch[2]) || 0;
+        if (partialMatch[3]) method = partialMatch[3].trim();
+        if (partialMatch[4]) cash = Number(partialMatch[4]) || 0;
+        if (partialMatch[5]) online = Number(partialMatch[5]) || 0;
+      }
+      const unpaidMatch = String(r.notes).match(/\[Payment:\s*Unpaid\s*\|\s*Due:\s*(\d+(?:\.\d+)?)\]/i);
+      if (unpaidMatch) {
+        paidAmount = 0;
+        dueAmount = Number(unpaidMatch[1]) || total;
+        method = "Unpaid";
       }
     }
 
+    const isPartial = (dueAmount > 0 && paidAmount > 0);
+    const isUnpaid = !r.paid && (paidAmount === 0 || dueAmount >= total);
+
     if (method === "Split") {
-      if (cash === 0 && online === 0 && total > 0) {
-        cash = Math.round(total / 2);
-        online = total - cash;
+      const splitTarget = isPartial ? paidAmount : total;
+      if (cash === 0 && online === 0 && splitTarget > 0) {
+        cash = Math.round(splitTarget / 2);
+        online = splitTarget - cash;
       }
     } else if (method === "Cash") {
-      cash = total;
+      cash = isPartial ? paidAmount : (r.paid ? total : 0);
       online = 0;
     } else if (method === "Online") {
       cash = 0;
-      online = total;
+      online = isPartial ? paidAmount : (r.paid ? total : 0);
     }
-    return { method, cash, online, total };
+    return { method, cash, online, total, paidAmount, dueAmount, isPartial, isUnpaid };
   }
 
   function wireClickableTimeInputs() {
@@ -1745,19 +1782,23 @@
     else staffEl.classList.add("hidden");
 
     const paymentEl = card.querySelector(".record-payment");
-    if (record.paid && record.payment_method) {
-      if (record.payment_method === "Split") {
-        const bd = getRecordPaymentBreakdown(record);
+    const bd = getRecordPaymentBreakdown(record);
+    if (bd.isPartial) {
+      paymentEl.textContent = `Partial (Paid: ${inr(bd.paidAmount)} · Due: ${inr(bd.dueAmount)})`;
+      paymentEl.className = "record-payment rounded-full px-2 py-0.5 font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px]";
+      paymentEl.classList.remove("hidden");
+    } else if (record.paid && (record.payment_method || bd.method === "Split")) {
+      if (record.payment_method === "Split" || bd.method === "Split") {
         paymentEl.textContent = `Split (C: ${inr(bd.cash)} · QR: ${inr(bd.online)})`;
         paymentEl.className = "record-payment rounded-full px-2 py-0.5 font-bold badge-split text-[11px]";
       } else {
-        paymentEl.textContent = record.payment_method;
-        paymentEl.className = "record-payment rounded-full px-2 py-0.5 font-bold " + (record.payment_method === "Cash" ? "badge-cash" : "badge-online");
+        paymentEl.textContent = bd.method || record.payment_method;
+        paymentEl.className = "record-payment rounded-full px-2 py-0.5 font-bold " + ((bd.method || record.payment_method) === "Cash" ? "badge-cash" : "badge-online");
       }
       paymentEl.classList.remove("hidden");
-    } else if (record.status === "Completed" && !record.paid) {
+    } else if (record.status === "Completed" && (!record.paid || bd.dueAmount > 0)) {
       paymentEl.textContent = "Unpaid / Due";
-      paymentEl.className = "record-payment rounded-full px-2 py-0.5 font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30";
+      paymentEl.className = "record-payment rounded-full px-2 py-0.5 font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px]";
       paymentEl.classList.remove("hidden");
     } else paymentEl.classList.add("hidden");
 
@@ -1922,11 +1963,15 @@
         if (recordsFilterStatus !== "all" && r.status !== recordsFilterStatus) return false;
 
         if (recordsFilterPay !== "all") {
+          const bd = getRecordPaymentBreakdown(r);
           if (recordsFilterPay === "unpaid") {
-            // Show only records that are not marked paid (due/credit)
-            if (r.paid) return false;
+            // Show records that have an outstanding balance
+            if (r.paid && !bd.isPartial && bd.dueAmount <= 0) return false;
+            if (!bd.isPartial && !bd.isUnpaid && bd.dueAmount <= 0) return false;
+          } else if (recordsFilterPay === "partial") {
+            if (!bd.isPartial) return false;
           } else {
-            const m = (r.payment_method || "").trim().toLowerCase();
+            const m = (bd.method || r.payment_method || "").trim().toLowerCase();
             if (recordsFilterPay.toLowerCase() !== m) return false;
           }
         }
@@ -2374,7 +2419,8 @@
     const grandTotal = Math.max(0, subtotal - discount.amount);
     document.getElementById("checkout-amount").textContent = inr(grandTotal);
 
-    if (window._syncCheckoutSplit) window._syncCheckoutSplit(grandTotal);
+    if (window._syncCheckoutPayment) window._syncCheckoutPayment(grandTotal);
+    else if (window._syncCheckoutSplit) window._syncCheckoutSplit(grandTotal);
 
     return { overtime, discount, grandTotal };
   }
@@ -2591,7 +2637,7 @@
     modal.dataset.linkypotRedeemed = "false";
     document.getElementById("checkout-customer").textContent = record.customer_name || "—";
     document.getElementById("checkout-station").textContent = `${record.station_name || ""} · ${record.duration_minutes || 0} min`;
-    if (window._resetCheckoutMethod) window._resetCheckoutMethod();
+    if (window._resetCheckoutMethod) window._resetCheckoutMethod(record);
     setCheckoutDiscountMode("amount");
     renderCheckoutBreakdown(record);
 
@@ -2652,6 +2698,50 @@
   function initCheckoutModal() {
     const modal = document.getElementById("checkout-modal");
     let selectedPaymentMethod = "Cash";
+    let selectedPaymentStatus = "Paid"; // "Paid", "Partial", "Unpaid"
+
+    function updatePaymentStatusUI(status) {
+      selectedPaymentStatus = status;
+      const paidBtn = document.getElementById("checkout-status-btn-paid");
+      const partialBtn = document.getElementById("checkout-status-btn-partial");
+      const unpaidBtn = document.getElementById("checkout-status-btn-unpaid");
+      const partialFields = document.getElementById("checkout-partial-fields");
+      const methodHeading = document.getElementById("checkout-method-heading");
+      const methodBtns = modal.querySelectorAll(".checkout-method-btn");
+      const splitFields = document.getElementById("checkout-split-fields");
+
+      if (paidBtn) {
+        paidBtn.className = status === "Paid"
+          ? "checkout-status-btn active rounded-lg border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition"
+          : "checkout-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition";
+      }
+      if (partialBtn) {
+        partialBtn.className = status === "Partial"
+          ? "checkout-status-btn active rounded-lg border border-amber-400 bg-amber-400/20 text-amber-300 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition"
+          : "checkout-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition";
+      }
+      if (unpaidBtn) {
+        unpaidBtn.className = status === "Unpaid"
+          ? "checkout-status-btn active rounded-lg border border-rose-500 bg-rose-500/20 text-rose-300 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition"
+          : "checkout-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition";
+      }
+
+      if (partialFields) partialFields.classList.toggle("hidden", status !== "Partial");
+
+      const isUnpaid = status === "Unpaid";
+      methodBtns.forEach((b) => {
+        b.disabled = isUnpaid;
+        b.classList.toggle("opacity-40", isUnpaid);
+        b.classList.toggle("pointer-events-none", isUnpaid);
+      });
+      if (methodHeading) methodHeading.classList.toggle("opacity-40", isUnpaid);
+      if (splitFields && isUnpaid) splitFields.classList.add("hidden");
+
+      const record = records.find((r) => r.id === modal.dataset.recordId);
+      if (record) {
+        renderCheckoutBreakdown(record);
+      }
+    }
 
     function updatePaymentMethodUI(method) {
       selectedPaymentMethod = method;
@@ -2678,7 +2768,7 @@
       }
 
       if (splitFields) {
-        splitFields.classList.toggle("hidden", method !== "Split");
+        splitFields.classList.toggle("hidden", method !== "Split" || selectedPaymentStatus === "Unpaid");
       }
 
       const record = records.find((r) => r.id === modal.dataset.recordId);
@@ -2689,47 +2779,93 @@
       }
     }
 
-    window._syncCheckoutSplit = (grandTotal) => {
+    window._syncCheckoutPayment = (grandTotal) => {
       const splitFields = document.getElementById("checkout-split-fields");
       const cashInput = document.getElementById("checkout-cash-amount");
       const onlineInput = document.getElementById("checkout-online-amount");
       const remainderEl = document.getElementById("checkout-split-remainder");
       const label = document.getElementById("checkout-selected-method-label");
+      const paidIn = document.getElementById("checkout-paid-amount");
+      const dueEl = document.getElementById("checkout-due-amount");
+      const confirmPayBtn = document.getElementById("checkout-confirm-pay");
 
-      if (selectedPaymentMethod !== "Split") {
-        if (label) label.textContent = selectedPaymentMethod;
-        return;
-      }
+      let paidAmount = grandTotal;
+      let dueAmount = 0;
 
-      if (splitFields) splitFields.classList.remove("hidden");
-
-      let cash = Number(cashInput?.value) || 0;
-      let online = Number(onlineInput?.value) || 0;
-
-      if (!cashInput?.dataset.userEdited && !onlineInput?.dataset.userEdited) {
-        cash = Math.round(grandTotal / 2);
-        online = grandTotal - cash;
-        if (cashInput) cashInput.value = cash;
-        if (onlineInput) onlineInput.value = online;
-      }
-
-      const diff = grandTotal - (cash + online);
-      if (remainderEl) {
-        if (diff === 0) {
-          remainderEl.textContent = `Balanced: रु ${grandTotal}`;
-          remainderEl.className = "mono text-[#d8ff45] font-semibold";
-        } else if (diff > 0) {
-          remainderEl.textContent = `Under by रु ${diff}`;
-          remainderEl.className = "mono text-amber-300 font-semibold";
-        } else {
-          remainderEl.textContent = `Over by रु ${Math.abs(diff)}`;
-          remainderEl.className = "mono text-rose-400 font-semibold";
+      if (selectedPaymentStatus === "Partial") {
+        if (!paidIn.dataset.userEdited && (!paidIn.value || Number(paidIn.value) === 0)) {
+          paidIn.value = Math.round(grandTotal / 2);
         }
+        paidAmount = Math.max(0, Math.min(grandTotal, Number(paidIn.value) || 0));
+        dueAmount = Math.max(0, grandTotal - paidAmount);
+        if (dueEl) dueEl.textContent = inr(dueAmount);
+      } else if (selectedPaymentStatus === "Unpaid") {
+        paidAmount = 0;
+        dueAmount = grandTotal;
+        if (dueEl) dueEl.textContent = inr(dueAmount);
+      } else {
+        paidAmount = grandTotal;
+        dueAmount = 0;
+        if (dueEl) dueEl.textContent = inr(0);
+      }
+
+      const targetSplit = selectedPaymentStatus === "Partial" ? paidAmount : grandTotal;
+
+      if (selectedPaymentMethod === "Split" && selectedPaymentStatus !== "Unpaid") {
+        if (splitFields) splitFields.classList.remove("hidden");
+        let cash = Number(cashInput?.value) || 0;
+        let online = Number(onlineInput?.value) || 0;
+
+        if (!cashInput?.dataset.userEdited && !onlineInput?.dataset.userEdited) {
+          cash = Math.round(targetSplit / 2);
+          online = targetSplit - cash;
+          if (cashInput) cashInput.value = cash;
+          if (onlineInput) onlineInput.value = online;
+        }
+
+        const diff = targetSplit - (cash + online);
+        if (remainderEl) {
+          if (diff === 0) {
+            remainderEl.textContent = `Balanced: रु ${targetSplit}`;
+            remainderEl.className = "mono text-[#d8ff45] font-semibold";
+          } else if (diff > 0) {
+            remainderEl.textContent = `Under by रु ${diff}`;
+            remainderEl.className = "mono text-amber-300 font-semibold";
+          } else {
+            remainderEl.textContent = `Over by रु ${Math.abs(diff)}`;
+            remainderEl.className = "mono text-rose-400 font-semibold";
+          }
+        }
+      } else if (splitFields) {
+        splitFields.classList.add("hidden");
       }
 
       if (label) {
-        label.textContent = `Split (Cash ${inr(cash)} + QR ${inr(online)})`;
+        if (selectedPaymentStatus === "Unpaid") {
+          label.textContent = "Unpaid / Due";
+        } else if (selectedPaymentMethod === "Split") {
+          const c = Number(cashInput?.value) || 0;
+          const o = Number(onlineInput?.value) || 0;
+          label.textContent = `Split (Cash ${inr(c)} + QR ${inr(o)})`;
+        } else {
+          label.textContent = selectedPaymentMethod;
+        }
       }
+
+      if (confirmPayBtn) {
+        if (selectedPaymentStatus === "Partial") {
+          confirmPayBtn.innerHTML = `<i data-lucide="check-circle" width="18" height="18"></i> Complete Session (${inr(paidAmount)} Paid · ${inr(dueAmount)} Due)`;
+        } else if (selectedPaymentStatus === "Unpaid") {
+          confirmPayBtn.innerHTML = `<i data-lucide="clock" width="18" height="18"></i> Save as Unpaid / Due (${inr(grandTotal)})`;
+        } else {
+          confirmPayBtn.innerHTML = `<i data-lucide="check-circle" width="18" height="18"></i> Complete &amp; Pay (<span id="checkout-selected-method-label">${selectedPaymentMethod}</span>)`;
+        }
+        if (window.lucide) window.lucide.createIcons();
+      }
+    };
+
+    window._syncCheckoutSplit = (grandTotal) => {
+      window._syncCheckoutPayment(grandTotal);
     };
 
     const cashInput = document.getElementById("checkout-cash-amount");
@@ -2740,10 +2876,13 @@
         const record = records.find((r) => r.id === modal.dataset.recordId);
         if (record) {
           const { grandTotal } = renderCheckoutBreakdown(record);
+          const targetSplit = selectedPaymentStatus === "Partial"
+            ? Math.max(0, Math.min(grandTotal, Number(document.getElementById("checkout-paid-amount")?.value) || 0))
+            : grandTotal;
           const cash = Math.max(0, Number(cashInput.value) || 0);
-          const autoOnline = Math.max(0, grandTotal - cash);
+          const autoOnline = Math.max(0, targetSplit - cash);
           onlineInput.value = autoOnline;
-          window._syncCheckoutSplit(grandTotal);
+          window._syncCheckoutPayment(grandTotal);
         }
       });
 
@@ -2752,11 +2891,23 @@
         const record = records.find((r) => r.id === modal.dataset.recordId);
         if (record) {
           const { grandTotal } = renderCheckoutBreakdown(record);
+          const targetSplit = selectedPaymentStatus === "Partial"
+            ? Math.max(0, Math.min(grandTotal, Number(document.getElementById("checkout-paid-amount")?.value) || 0))
+            : grandTotal;
           const online = Math.max(0, Number(onlineInput.value) || 0);
-          const autoCash = Math.max(0, grandTotal - online);
+          const autoCash = Math.max(0, targetSplit - online);
           cashInput.value = autoCash;
-          window._syncCheckoutSplit(grandTotal);
+          window._syncCheckoutPayment(grandTotal);
         }
+      });
+    }
+
+    const checkoutPaidInput = document.getElementById("checkout-paid-amount");
+    if (checkoutPaidInput) {
+      checkoutPaidInput.addEventListener("input", () => {
+        checkoutPaidInput.dataset.userEdited = "true";
+        const record = records.find((r) => r.id === modal.dataset.recordId);
+        if (record) renderCheckoutBreakdown(record);
       });
     }
 
@@ -2782,6 +2933,13 @@
       if (record) renderCheckoutBreakdown(record);
     });
 
+    // Settlement status buttons (Paid in Full, Partial, Leave as Due)
+    modal.querySelectorAll(".checkout-status-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        updatePaymentStatusUI(btn.dataset.status || "Paid");
+      });
+    });
+
     // Method selection buttons (Cash, Online, or Split)
     modal.querySelectorAll(".checkout-method-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -2789,14 +2947,24 @@
       });
     });
 
-    window._resetCheckoutMethod = () => {
+    window._resetCheckoutMethod = (record) => {
       const cashIn = document.getElementById("checkout-cash-amount");
       const onlineIn = document.getElementById("checkout-online-amount");
+      const paidIn = document.getElementById("checkout-paid-amount");
       const waiveBox = document.getElementById("checkout-waive-overtime");
       if (cashIn) { delete cashIn.dataset.userEdited; cashIn.value = ""; }
       if (onlineIn) { delete onlineIn.dataset.userEdited; onlineIn.value = ""; }
+      if (paidIn) { delete paidIn.dataset.userEdited; paidIn.value = ""; }
       if (waiveBox) waiveBox.checked = false;
-      updatePaymentMethodUI("Cash");
+
+      const bd = record ? getRecordPaymentBreakdown(record) : null;
+      if (bd && bd.isPartial) {
+        if (paidIn) { paidIn.value = bd.paidAmount; paidIn.dataset.userEdited = "true"; }
+        updatePaymentStatusUI("Partial");
+      } else {
+        updatePaymentStatusUI("Paid");
+      }
+      updatePaymentMethodUI((bd && bd.method && bd.method !== "Unpaid") ? bd.method : "Cash");
     };
 
     // Helper for saving checkout payment
@@ -2806,41 +2974,77 @@
       if (!record) return;
       const { overtime, discount, grandTotal } = renderCheckoutBreakdown(record);
 
-      let cashAmount = 0;
-      let onlineAmount = 0;
-      if (selectedPaymentMethod === "Split") {
-        cashAmount = Math.max(0, Number(document.getElementById("checkout-cash-amount")?.value) || 0);
-        onlineAmount = Math.max(0, Number(document.getElementById("checkout-online-amount")?.value) || 0);
-        if (cashAmount + onlineAmount !== grandTotal && grandTotal > 0) {
-          onlineAmount = Math.max(0, grandTotal - cashAmount);
-        }
-      } else if (selectedPaymentMethod === "Cash") {
-        cashAmount = grandTotal;
-        onlineAmount = 0;
-      } else if (selectedPaymentMethod === "Online") {
-        cashAmount = 0;
-        onlineAmount = grandTotal;
+      const isPaid = selectedPaymentStatus === "Paid";
+      const isPartial = selectedPaymentStatus === "Partial";
+      const isUnpaid = selectedPaymentStatus === "Unpaid";
+
+      let paidAmount = 0;
+      let dueAmount = 0;
+      if (isPaid) {
+        paidAmount = grandTotal;
+        dueAmount = 0;
+      } else if (isPartial) {
+        const paidIn = document.getElementById("checkout-paid-amount");
+        paidAmount = Math.max(0, Math.min(grandTotal, Number(paidIn?.value) || 0));
+        dueAmount = Math.max(0, grandTotal - paidAmount);
+      } else {
+        paidAmount = 0;
+        dueAmount = grandTotal;
       }
 
-      const methodDisplay = selectedPaymentMethod === "Split"
-        ? `Split (Cash: ${inr(cashAmount)} + Online: ${inr(onlineAmount)})`
-        : selectedPaymentMethod;
+      let cashAmount = 0;
+      let onlineAmount = 0;
+      let dbPaymentMethod = isUnpaid ? null : selectedPaymentMethod;
+      const targetPayAmount = isPartial ? paidAmount : grandTotal;
+
+      if (!isUnpaid) {
+        if (selectedPaymentMethod === "Split") {
+          cashAmount = Math.max(0, Number(document.getElementById("checkout-cash-amount")?.value) || 0);
+          onlineAmount = Math.max(0, Number(document.getElementById("checkout-online-amount")?.value) || 0);
+          if (cashAmount + onlineAmount !== targetPayAmount && targetPayAmount > 0) {
+            onlineAmount = Math.max(0, targetPayAmount - cashAmount);
+          }
+          dbPaymentMethod = "Cash"; // Satisfy DB check constraint
+        } else if (selectedPaymentMethod === "Cash") {
+          cashAmount = targetPayAmount;
+          onlineAmount = 0;
+        } else if (selectedPaymentMethod === "Online") {
+          cashAmount = 0;
+          onlineAmount = targetPayAmount;
+        }
+      }
+
+      let methodDisplay = isUnpaid ? "Unpaid / Due" : selectedPaymentMethod;
+      if (selectedPaymentMethod === "Split" && !isUnpaid) {
+        methodDisplay = `Split (Cash: ${inr(cashAmount)} + Online: ${inr(onlineAmount)})`;
+      }
+      if (isPartial) {
+        methodDisplay = `Partial (${inr(paidAmount)} Paid via ${selectedPaymentMethod} · ${inr(dueAmount)} Due)`;
+      }
 
       const confirmPrompt = printBill
-        ? `Confirm payment & print PAN bill for ${record.customer_name || "Customer"}?\n• Amount: ${inr(grandTotal)}\n• Method: ${methodDisplay}`
-        : `Complete checkout for ${record.customer_name || "Customer"}?\n• Amount: ${inr(grandTotal)}\n• Method: ${methodDisplay}`;
+        ? `Confirm payment & print PAN bill for ${record.customer_name || "Customer"}?\n• Total: ${inr(grandTotal)}\n• Settlement: ${methodDisplay}`
+        : `Complete checkout for ${record.customer_name || "Customer"}?\n• Total: ${inr(grandTotal)}\n• Settlement: ${methodDisplay}`;
 
       if (!confirm(confirmPrompt)) return;
 
       const btn = printBill ? document.getElementById("checkout-pay-print") : document.getElementById("checkout-confirm-pay");
       if (btn) btn.disabled = true;
 
-      const splitTag = selectedPaymentMethod === "Split"
-        ? `[Payment: Split | Cash: ${cashAmount} | Online: ${onlineAmount}]`
-        : "";
       let finalNotes = record.notes || "";
-      if (splitTag && !finalNotes.includes("[Payment: Split")) {
-        finalNotes = [finalNotes, splitTag].filter(Boolean).join(" ");
+      // Strip old payment tags
+      finalNotes = finalNotes.replace(/\[Payment:\s*(?:Split|Partial|Unpaid)[^\]]*\]/gi, "").trim();
+
+      let paymentTag = "";
+      if (isPartial) {
+        paymentTag = `[Payment: Partial | Paid: ${paidAmount} | Due: ${dueAmount} | Method: ${selectedPaymentMethod}${selectedPaymentMethod === "Split" ? ` | Cash: ${cashAmount} | Online: ${onlineAmount}` : ""}]`;
+      } else if (selectedPaymentMethod === "Split" && !isUnpaid) {
+        paymentTag = `[Payment: Split | Cash: ${cashAmount} | Online: ${onlineAmount}]`;
+      } else if (isUnpaid) {
+        paymentTag = `[Payment: Unpaid | Due: ${dueAmount}]`;
+      }
+      if (paymentTag) {
+        finalNotes = [finalNotes, paymentTag].filter(Boolean).join(" ");
       }
       if (overtime.waived && !finalNotes.includes("[Overtime Waived]")) {
         finalNotes = [finalNotes, "[Overtime Waived]"].filter(Boolean).join(" ");
@@ -2848,11 +3052,13 @@
 
       const updatePayload = {
         status: "Completed",
-        paid: true,
-        payment_method: selectedPaymentMethod,
+        paid: (dueAmount <= 0 && paidAmount > 0),
+        payment_method: dbPaymentMethod,
         cash_amount: cashAmount,
         online_amount: onlineAmount,
-        paid_at: new Date().toISOString(),
+        paid_amount: paidAmount,
+        due_amount: dueAmount,
+        paid_at: (paidAmount > 0 ? new Date().toISOString() : null),
         amount: grandTotal,
         overtime_amount: overtime.amount,
         discount_amount: discount.amount,
@@ -2866,10 +3072,12 @@
         .update(updatePayload)
         .eq("id", recordId);
 
-      // Resilient fallback if cash_amount / online_amount not present in PostgREST schema cache
-      if (error && (error.message.includes("cash_amount") || error.message.includes("online_amount") || error.code === "PGRST204")) {
+      // Resilient fallback if cash_amount / online_amount / paid_amount / due_amount not present in PostgREST schema cache
+      if (error && (error.message.includes("cash_amount") || error.message.includes("online_amount") || error.message.includes("paid_amount") || error.message.includes("due_amount") || error.code === "PGRST204")) {
         delete updatePayload.cash_amount;
         delete updatePayload.online_amount;
+        delete updatePayload.paid_amount;
+        delete updatePayload.due_amount;
         const retry = await window.sb.from("sessions").update(updatePayload).eq("id", recordId);
         error = retry.error;
       }
@@ -2884,7 +3092,9 @@
           ...record,
           ...updatePayload,
           cash_amount: cashAmount,
-          online_amount: onlineAmount
+          online_amount: onlineAmount,
+          paid_amount: paidAmount,
+          due_amount: dueAmount
         };
 
         // Instant local update & re-render
@@ -2905,11 +3115,11 @@
 
         if (printBill) {
           showToast(`Payment recorded — ${methodDisplay}. Printing PAN bill...`);
-          printPanBill(updatedRecord, selectedPaymentMethod);
+          printPanBill(updatedRecord, isUnpaid ? "Due" : isPartial ? "Partial" : selectedPaymentMethod);
         } else {
           showToast(`Payment recorded — ${methodDisplay}${extras ? ` (${extras})` : ""}.`);
         }
-        logVisitToLinkyPot(record.customer_phone, record.customer_name, grandTotal, redeemed);
+        logVisitToLinkyPot(record.customer_phone, record.customer_name, paidAmount > 0 ? paidAmount : grandTotal, redeemed);
       }
     }
 
@@ -3067,8 +3277,31 @@
     let printedMethod = overridePaymentMethod || record.payment_method || (record.paid ? "Paid" : "Due");
     if (record.payment_method === "Split" || overridePaymentMethod === "Split" || bd.method === "Split") {
       printedMethod = `Split (Cash: ${inr(bd.cash)} + QR: ${inr(bd.online)})`;
+    } else if (overridePaymentMethod === "Partial" || bd.isPartial) {
+      printedMethod = `Partial (${inr(bd.paidAmount)} Paid · ${inr(bd.dueAmount)} Due)`;
+    } else if (overridePaymentMethod === "Due" || bd.isUnpaid) {
+      printedMethod = `Unpaid / Due (${inr(grandTotal)})`;
     }
     if (payMethodEl) payMethodEl.textContent = printedMethod;
+
+    const receiptPaidRow = document.getElementById("receipt-paid-row");
+    const receiptPaidAmountEl = document.getElementById("receipt-paid-amount");
+    const receiptDueRow = document.getElementById("receipt-due-row");
+    const receiptDueAmountEl = document.getElementById("receipt-due-amount");
+
+    if (bd.isPartial || bd.dueAmount > 0) {
+      if (receiptPaidRow && receiptPaidAmountEl) {
+        receiptPaidRow.style.display = "flex";
+        receiptPaidAmountEl.textContent = inr(bd.paidAmount);
+      }
+      if (receiptDueRow && receiptDueAmountEl) {
+        receiptDueRow.style.display = "flex";
+        receiptDueAmountEl.textContent = inr(bd.dueAmount);
+      }
+    } else {
+      if (receiptPaidRow) receiptPaidRow.style.display = "none";
+      if (receiptDueRow) receiptDueRow.style.display = "none";
+    }
 
     setTimeout(() => {
       window.print();
@@ -3174,26 +3407,34 @@
     const onlineInput = document.getElementById("edit-online-amount");
     const remainderEl = document.getElementById("edit-split-remainder");
     const customBillInput = document.getElementById("edit-custom-bill");
+    const payStatusSelect = document.getElementById("edit-payment-status");
 
     const isSplit = payMethodSelect && payMethodSelect.value === "Split";
-    if (splitFields) splitFields.classList.toggle("hidden", !isSplit);
-    if (!isSplit) return;
+    const isUnpaid = payStatusSelect && payStatusSelect.value === "Unpaid";
+    if (splitFields) splitFields.classList.toggle("hidden", !isSplit || isUnpaid);
+    if (!isSplit || isUnpaid) return;
 
     const total = Number(customBillInput?.value) || 0;
+    let targetAmount = total;
+    if (payStatusSelect && payStatusSelect.value === "Partial") {
+      const paidIn = document.getElementById("edit-paid-amount");
+      targetAmount = Math.max(0, Number(paidIn?.value) || 0);
+    }
+
     let cash = Number(cashInput?.value) || 0;
     let online = Number(onlineInput?.value) || 0;
 
     if (!cashInput?.dataset.userEdited && !onlineInput?.dataset.userEdited) {
-      cash = Math.round(total / 2);
-      online = total - cash;
+      cash = Math.round(targetAmount / 2);
+      online = targetAmount - cash;
       if (cashInput) cashInput.value = cash;
       if (onlineInput) onlineInput.value = online;
     }
 
-    const diff = total - (cash + online);
+    const diff = targetAmount - (cash + online);
     if (remainderEl) {
       if (diff === 0) {
-        remainderEl.textContent = `Balanced: रु ${total}`;
+        remainderEl.textContent = `Balanced: रु ${targetAmount}`;
         remainderEl.className = "mono text-[#d8ff45] font-semibold";
       } else if (diff > 0) {
         remainderEl.textContent = `Under by रु ${diff}`;
@@ -3238,9 +3479,22 @@
     if (customBillInput && customBillInput.dataset.userEdited !== "true") {
       customBillInput.value = total;
     }
+
+    const payStatus = document.getElementById("edit-payment-status")?.value;
+    const partialFields = document.getElementById("edit-partial-fields");
+    if (partialFields) partialFields.classList.toggle("hidden", payStatus !== "Partial");
+    const editPaidIn = document.getElementById("edit-paid-amount");
+    const editDueEl = document.getElementById("edit-due-amount");
+    const effectiveTotal = customBillInput ? (Number(customBillInput.value) || total) : total;
+    if (payStatus === "Partial") {
+      const paid = Math.max(0, Number(editPaidIn?.value) || 0);
+      const due = Math.max(0, effectiveTotal - paid);
+      if (editDueEl) editDueEl.textContent = inr(due);
+    }
+
     updateEditSplitFields();
     updateEditSessionWhatsAppState();
-    return { total, foodTotal, duration, rate, extraCost, discount, rawTimeCost, ctrlCount, ctrlCost };
+    return { total: effectiveTotal, foodTotal, duration, rate, extraCost, discount, rawTimeCost, ctrlCount, ctrlCost };
   }
 
 
@@ -3361,23 +3615,28 @@
       const payMethodEl = document.getElementById("edit-payment-method");
       const bd = getRecordPaymentBreakdown(record);
       if (payStatusEl) {
-        payStatusEl.value = record.paid ? "Paid" : "Unpaid";
+        payStatusEl.value = bd.isPartial ? "Partial" : (record.paid ? "Paid" : "Unpaid");
       }
       if (payMethodEl) {
-        payMethodEl.value = record.payment_method === "Split" ? "Split" : record.payment_method === "Online" ? "Online" : "Cash";
-        payMethodEl.disabled = !record.paid;
+        payMethodEl.value = (record.payment_method === "Split" || bd.isSplit) ? "Split" : (record.payment_method === "Online" || bd.isOnline) ? "Online" : "Cash";
+        payMethodEl.disabled = (!record.paid && !bd.isPartial);
+      }
+
+      const editPaidInput = document.getElementById("edit-paid-amount");
+      if (editPaidInput) {
+        editPaidInput.value = bd.paidAmount || 0;
       }
 
       const cashInput = document.getElementById("edit-cash-amount");
       const onlineInput = document.getElementById("edit-online-amount");
       if (cashInput) {
         cashInput.value = bd.cash;
-        if (record.payment_method === "Split") cashInput.dataset.userEdited = "true";
+        if (record.payment_method === "Split" || bd.isSplit) cashInput.dataset.userEdited = "true";
         else delete cashInput.dataset.userEdited;
       }
       if (onlineInput) {
         onlineInput.value = bd.online;
-        if (record.payment_method === "Split") onlineInput.dataset.userEdited = "true";
+        if (record.payment_method === "Split" || bd.isSplit) onlineInput.dataset.userEdited = "true";
         else delete onlineInput.dataset.userEdited;
       }
 
@@ -3456,9 +3715,11 @@
         if (_editSplitUpdating) return;
         _editSplitUpdating = true;
         cashInput.dataset.userEdited = "true";
+        const payStatus = document.getElementById("edit-payment-status")?.value;
         const total = Number(document.getElementById("edit-custom-bill")?.value) || 0;
+        const target = payStatus === "Partial" ? Math.max(0, Number(document.getElementById("edit-paid-amount")?.value) || 0) : total;
         const cash = Math.max(0, Number(cashInput.value) || 0);
-        onlineInput.value = Math.max(0, total - cash);
+        onlineInput.value = Math.max(0, target - cash);
         updateEditSplitFields();
         _editSplitUpdating = false;
       });
@@ -3466,11 +3727,20 @@
         if (_editSplitUpdating) return;
         _editSplitUpdating = true;
         onlineInput.dataset.userEdited = "true";
+        const payStatus = document.getElementById("edit-payment-status")?.value;
         const total = Number(document.getElementById("edit-custom-bill")?.value) || 0;
+        const target = payStatus === "Partial" ? Math.max(0, Number(document.getElementById("edit-paid-amount")?.value) || 0) : total;
         const online = Math.max(0, Number(onlineInput.value) || 0);
-        cashInput.value = Math.max(0, total - online);
+        cashInput.value = Math.max(0, target - online);
         updateEditSplitFields();
         _editSplitUpdating = false;
+      });
+    }
+
+    const editPaidInput = document.getElementById("edit-paid-amount");
+    if (editPaidInput) {
+      editPaidInput.addEventListener("input", () => {
+        recalcEditModal();
       });
     }
 
@@ -3506,7 +3776,7 @@
     if (editPayStatus && editPayMethod) {
       editPayStatus.addEventListener("change", () => {
         editPayMethod.disabled = editPayStatus.value === "Unpaid";
-        updateEditSplitFields();
+        recalcEditModal();
       });
       editPayMethod.addEventListener("change", () => {
         updateEditSplitFields();
@@ -3584,42 +3854,65 @@
         }
       }
 
-      const isPaid = editPayStatus ? editPayStatus.value === "Paid" : !!editTarget.paid;
-      const paymentMethod = isPaid ? (editPayMethod ? editPayMethod.value : editTarget.payment_method || "Cash") : null;
+      const payStatusVal = editPayStatus ? editPayStatus.value : (editTarget.paid ? "Paid" : "Unpaid");
+      const isPartial = payStatusVal === "Partial";
+      const isPaid = payStatusVal === "Paid";
+      const isUnpaid = payStatusVal === "Unpaid";
+      const paymentMethod = isUnpaid ? null : (editPayMethod ? editPayMethod.value : "Cash");
 
       // Check if user specified a manual bill override (e.g. waived overtime, custom charge)
       const customBillVal = document.getElementById("edit-custom-bill")?.value;
       const finalAmount = customBillVal !== "" && !isNaN(Number(customBillVal)) ? Math.max(0, Number(customBillVal)) : total;
 
+      let paidAmount = 0;
+      let dueAmount = 0;
+      if (isPaid) {
+        paidAmount = finalAmount;
+        dueAmount = 0;
+      } else if (isPartial) {
+        paidAmount = Math.max(0, Number(document.getElementById("edit-paid-amount")?.value) || 0);
+        dueAmount = Math.max(0, finalAmount - paidAmount);
+      } else {
+        paidAmount = 0;
+        dueAmount = finalAmount;
+      }
+
       let cashAmount = 0;
       let onlineAmount = 0;
       // DB check constraint only allows Cash/Online/null — Split is stored in notes
       let dbPaymentMethod = paymentMethod;
+      const splitTarget = isPartial ? paidAmount : finalAmount;
       if (paymentMethod === "Split") {
         cashAmount = Math.max(0, Number(document.getElementById("edit-cash-amount")?.value) || 0);
         onlineAmount = Math.max(0, Number(document.getElementById("edit-online-amount")?.value) || 0);
-        if (cashAmount + onlineAmount !== finalAmount && finalAmount > 0) {
-          onlineAmount = Math.max(0, finalAmount - cashAmount);
+        if (cashAmount + onlineAmount !== splitTarget && splitTarget > 0) {
+          onlineAmount = Math.max(0, splitTarget - cashAmount);
         }
         // Store as "Cash" in DB (the constraint won't accept "Split")
         dbPaymentMethod = "Cash";
       } else if (paymentMethod === "Cash") {
-        cashAmount = finalAmount;
+        cashAmount = splitTarget;
         onlineAmount = 0;
       } else if (paymentMethod === "Online") {
         cashAmount = 0;
-        onlineAmount = finalAmount;
+        onlineAmount = splitTarget;
       }
 
       const rawNotes = document.getElementById("edit-notes").value.trim();
-      // Strip any old split tags before re-writing
-      let finalNotes = rawNotes.replace(/\[Payment:\s*Split[^\]]*\]/g, "").trim();
+      // Strip any old payment tags before re-writing
+      let finalNotes = rawNotes.replace(/\[Payment:\s*(?:Split|Partial|Unpaid)[^\]]*\]/gi, "").trim();
       if (isInternal && !finalNotes.includes("[Internal Sale]")) {
         finalNotes = finalNotes ? `[Internal Sale] ${finalNotes}` : "[Internal Sale]";
       }
-      if (paymentMethod === "Split") {
+      if (isPartial) {
+        const partialTag = `[Payment: Partial | Paid: ${paidAmount} | Due: ${dueAmount} | Method: ${paymentMethod}${paymentMethod === "Split" ? ` | Cash: ${cashAmount} | Online: ${onlineAmount}` : ""}]`;
+        finalNotes = [finalNotes, partialTag].filter(Boolean).join(" ");
+      } else if (paymentMethod === "Split") {
         const splitTag = `[Payment: Split | Cash: ${cashAmount} | Online: ${onlineAmount}]`;
         finalNotes = [finalNotes, splitTag].filter(Boolean).join(" ");
+      } else if (isUnpaid) {
+        const unpaidTag = `[Payment: Unpaid | Due: ${finalAmount}]`;
+        finalNotes = [finalNotes, unpaidTag].filter(Boolean).join(" ");
       }
 
       const btn = document.getElementById("edit-session-save");
@@ -3644,6 +3937,8 @@
         food_total: foodTotal,
         amount: finalAmount,
         paid: isPaid,
+        paid_amount: paidAmount,
+        due_amount: dueAmount,
         payment_method: dbPaymentMethod,
         cash_amount: cashAmount,
         online_amount: onlineAmount,
@@ -3655,7 +3950,7 @@
         discount_value: (discount && discount.amount > 0) ? discount.value : 0
       };
 
-      if (isPaid) {
+      if (isPaid || (isPartial && paidAmount > 0)) {
         updatePayload.paid_at = endIso || editTarget.paid_at || startIso || new Date().toISOString();
       } else {
         updatePayload.paid_at = null;
@@ -3669,8 +3964,10 @@
         .update(updatePayload)
         .eq("id", editTarget.id);
 
-      // Resilient fallback if cash_amount / online_amount not present in PostgREST schema cache
-      if (error && (error.message.includes("cash_amount") || error.message.includes("online_amount") || error.code === "PGRST204")) {
+      // Resilient fallback if paid_amount / due_amount / cash_amount / online_amount not present in PostgREST schema cache
+      if (error && (error.message.includes("paid_amount") || error.message.includes("due_amount") || error.message.includes("cash_amount") || error.message.includes("online_amount") || error.code === "PGRST204")) {
+        delete updatePayload.paid_amount;
+        delete updatePayload.due_amount;
         delete updatePayload.cash_amount;
         delete updatePayload.online_amount;
         const retry = await window.sb.from("sessions").update(updatePayload).eq("id", editTarget.id);
@@ -3686,6 +3983,8 @@
         const updated = {
           ...editTarget,
           ...updatePayload,
+          paid_amount: paidAmount,
+          due_amount: dueAmount,
           cash_amount: cashAmount,
           online_amount: onlineAmount
         };
@@ -3772,6 +4071,8 @@
 
   let mrDiscountMode = "percent";
 
+  let _mrSplitUpdating = false;
+
   window.recalcMissingRecord = (...a) => recalcMissingRecord(...a);
   function recalcMissingRecord() {
     const duration = Math.max(0, Number(document.getElementById("mr-duration").value) || 0);
@@ -3824,49 +4125,74 @@
     if (totalEl) {
       totalEl.textContent = inr(total);
     }
+
+    const payStatus = document.getElementById("mr-payment-status")?.value;
+    const partialFields = document.getElementById("mr-partial-fields");
+    if (partialFields) partialFields.classList.toggle("hidden", payStatus !== "Partial");
+    const mrPaidIn = document.getElementById("mr-paid-amount");
+    const mrDueEl = document.getElementById("mr-due-amount");
+    if (payStatus === "Partial") {
+      const paid = Math.max(0, Number(mrPaidIn?.value) || 0);
+      const due = Math.max(0, total - paid);
+      if (mrDueEl) mrDueEl.textContent = inr(due);
+    }
+
     const payMethod = document.getElementById("mr-payment-method")?.value;
     if (payMethod === "Split") {
-      updateMrSplitFields();
+      updateMrSplitFields(total);
     }
     return { total, foodTotal, duration, rate, timeCost, discount, rawTimeCost, extraStationsCost, ctrlCount, ctrlCost };
   }
 
-  function updateMrSplitFields() {
-    const payMethod = document.getElementById("mr-payment-method")?.value;
-    const splitContainer = document.getElementById("mr-split-fields");
-    if (!splitContainer) return;
+  function updateMrSplitFields(knownTotal) {
+    if (_mrSplitUpdating) return;
+    _mrSplitUpdating = true;
+    try {
+      const payMethod = document.getElementById("mr-payment-method")?.value;
+      const splitContainer = document.getElementById("mr-split-fields");
+      const payStatus = document.getElementById("mr-payment-status")?.value;
+      const isUnpaid = payStatus === "Unpaid";
 
-    const isSplit = payMethod === "Split";
-    splitContainer.classList.toggle("hidden", !isSplit);
-    if (!isSplit) return;
+      const isSplit = payMethod === "Split";
+      if (splitContainer) splitContainer.classList.toggle("hidden", !isSplit || isUnpaid);
+      if (!isSplit || isUnpaid) return;
 
-    const { total } = recalcMissingRecord();
-    const cashInput = document.getElementById("mr-cash-amount");
-    const onlineInput = document.getElementById("mr-online-amount");
-    const remainderEl = document.getElementById("mr-split-balance");
-
-    let cash = Number(cashInput?.value) || 0;
-    let online = Number(onlineInput?.value) || 0;
-
-    if (!cashInput?.dataset.userEdited && !onlineInput?.dataset.userEdited) {
-      cash = Math.round(total / 2);
-      online = total - cash;
-      if (cashInput) cashInput.value = cash;
-      if (onlineInput) onlineInput.value = online;
-    }
-
-    const diff = total - (cash + online);
-    if (remainderEl) {
-      if (diff === 0) {
-        remainderEl.textContent = `Balanced: रु ${total}`;
-        remainderEl.className = "mono text-[#d8ff45] font-semibold";
-      } else if (diff > 0) {
-        remainderEl.textContent = `Under by रु ${diff}`;
-        remainderEl.className = "mono text-amber-300 font-semibold";
-      } else {
-        remainderEl.textContent = `Over by रु ${Math.abs(diff)}`;
-        remainderEl.className = "mono text-rose-400 font-semibold";
+      const total = typeof knownTotal === "number" ? knownTotal : (Number(document.getElementById("mr-total-display")?.textContent?.replace(/[^\d.-]/g, "")) || 0);
+      let targetAmount = total;
+      if (payStatus === "Partial") {
+        const paidIn = document.getElementById("mr-paid-amount");
+        targetAmount = Math.max(0, Number(paidIn?.value) || 0);
       }
+
+      const cashInput = document.getElementById("mr-cash-amount");
+      const onlineInput = document.getElementById("mr-online-amount");
+      const remainderEl = document.getElementById("mr-split-remainder") || document.getElementById("mr-split-balance");
+
+      let cash = Number(cashInput?.value) || 0;
+      let online = Number(onlineInput?.value) || 0;
+
+      if (!cashInput?.dataset.userEdited && !onlineInput?.dataset.userEdited) {
+        cash = Math.round(targetAmount / 2);
+        online = targetAmount - cash;
+        if (cashInput) cashInput.value = cash;
+        if (onlineInput) onlineInput.value = online;
+      }
+
+      const diff = targetAmount - (cash + online);
+      if (remainderEl) {
+        if (diff === 0) {
+          remainderEl.textContent = `Balanced: रु ${targetAmount}`;
+          remainderEl.className = "mono text-[#d8ff45] font-semibold";
+        } else if (diff > 0) {
+          remainderEl.textContent = `Under by रु ${diff}`;
+          remainderEl.className = "mono text-amber-300 font-semibold";
+        } else {
+          remainderEl.textContent = `Over by रु ${Math.abs(diff)}`;
+          remainderEl.className = "mono text-rose-400 font-semibold";
+        }
+      }
+    } finally {
+      _mrSplitUpdating = false;
     }
   }
 
@@ -4049,8 +4375,18 @@
     updateMrInternalSaleState();
 
     // Payment defaults
-    document.getElementById("mr-payment-status").value = "Paid";
-    document.getElementById("mr-payment-method").value = "Cash";
+    const mrPayStatus = document.getElementById("mr-payment-status");
+    if (mrPayStatus) mrPayStatus.value = "Paid";
+    const mrPayMethod = document.getElementById("mr-payment-method");
+    if (mrPayMethod) {
+      mrPayMethod.value = "Cash";
+      mrPayMethod.disabled = false;
+    }
+    const mrPaidIn = document.getElementById("mr-paid-amount");
+    if (mrPaidIn) mrPaidIn.value = 0;
+    const mrPartialFields = document.getElementById("mr-partial-fields");
+    if (mrPartialFields) mrPartialFields.classList.add("hidden");
+
     const mrCashIn = document.getElementById("mr-cash-amount");
     const mrOnlineIn = document.getElementById("mr-online-amount");
     if (mrCashIn) { mrCashIn.value = 0; delete mrCashIn.dataset.userEdited; }
@@ -4193,8 +4529,15 @@
       });
     }
 
-    // Split payment controls
+    // Payment status & method controls
+    const mrPayStatus = document.getElementById("mr-payment-status");
     const mrPayMethod = document.getElementById("mr-payment-method");
+    if (mrPayStatus) {
+      mrPayStatus.addEventListener("change", () => {
+        if (mrPayMethod) mrPayMethod.disabled = mrPayStatus.value === "Unpaid";
+        recalcMissingRecord();
+      });
+    }
     if (mrPayMethod) {
       mrPayMethod.addEventListener("change", () => {
         const cashIn = document.getElementById("mr-cash-amount");
@@ -4205,22 +4548,39 @@
       });
     }
 
+    const mrPaidInput = document.getElementById("mr-paid-amount");
+    if (mrPaidInput) {
+      mrPaidInput.addEventListener("input", () => {
+        recalcMissingRecord();
+      });
+    }
+
     const mrCashInput = document.getElementById("mr-cash-amount");
     const mrOnlineInput = document.getElementById("mr-online-amount");
     if (mrCashInput && mrOnlineInput) {
       mrCashInput.addEventListener("input", () => {
+        if (_mrSplitUpdating) return;
+        _mrSplitUpdating = true;
         mrCashInput.dataset.userEdited = "true";
-        const { total } = recalcMissingRecord();
+        const payStatus = document.getElementById("mr-payment-status")?.value;
+        const total = Number(document.getElementById("mr-total-display")?.textContent?.replace(/[^\d.-]/g, "")) || 0;
+        const target = payStatus === "Partial" ? Math.max(0, Number(document.getElementById("mr-paid-amount")?.value) || 0) : total;
         const cash = Math.max(0, Number(mrCashInput.value) || 0);
-        mrOnlineInput.value = Math.max(0, total - cash);
-        updateMrSplitFields();
+        mrOnlineInput.value = Math.max(0, target - cash);
+        _mrSplitUpdating = false;
+        updateMrSplitFields(total);
       });
       mrOnlineInput.addEventListener("input", () => {
+        if (_mrSplitUpdating) return;
+        _mrSplitUpdating = true;
         mrOnlineInput.dataset.userEdited = "true";
-        const { total } = recalcMissingRecord();
+        const payStatus = document.getElementById("mr-payment-status")?.value;
+        const total = Number(document.getElementById("mr-total-display")?.textContent?.replace(/[^\d.-]/g, "")) || 0;
+        const target = payStatus === "Partial" ? Math.max(0, Number(document.getElementById("mr-paid-amount")?.value) || 0) : total;
         const online = Math.max(0, Number(mrOnlineInput.value) || 0);
-        mrCashInput.value = Math.max(0, total - online);
-        updateMrSplitFields();
+        mrCashInput.value = Math.max(0, target - online);
+        _mrSplitUpdating = false;
+        updateMrSplitFields(total);
       });
     }
 
@@ -4342,23 +4702,49 @@
         const startIso = startDate ? startDate.toISOString() : new Date().toISOString();
         const endIso = startDate ? new Date(startDate.getTime() + duration * 60000).toISOString() : startIso;
 
-        const isPaid = document.getElementById("mr-payment-status").value === "Paid";
-        const paymentMethod = isPaid ? document.getElementById("mr-payment-method").value : null;
+        const payStatus = document.getElementById("mr-payment-status")?.value || "Paid";
+        const isPartial = payStatus === "Partial";
+        const isPaid = payStatus === "Paid";
+        const isUnpaid = payStatus === "Unpaid";
+        const paymentMethod = isUnpaid ? null : (document.getElementById("mr-payment-method")?.value || "Cash");
+
+        let paidAmount = 0;
+        let dueAmount = 0;
+        if (isPaid) {
+          paidAmount = total;
+          dueAmount = 0;
+        } else if (isPartial) {
+          paidAmount = Math.max(0, Number(document.getElementById("mr-paid-amount")?.value) || 0);
+          dueAmount = Math.max(0, total - paidAmount);
+        } else {
+          paidAmount = 0;
+          dueAmount = total;
+        }
 
         let cashAmount = 0;
         let onlineAmount = 0;
+        let dbPaymentMethod = paymentMethod;
+        const splitTarget = isPartial ? paidAmount : total;
         if (paymentMethod === "Split") {
           cashAmount = Math.max(0, Number(document.getElementById("mr-cash-amount")?.value) || 0);
           onlineAmount = Math.max(0, Number(document.getElementById("mr-online-amount")?.value) || 0);
-          if (cashAmount + onlineAmount !== total && total > 0) {
-            onlineAmount = Math.max(0, total - cashAmount);
+          if (cashAmount + onlineAmount !== splitTarget && splitTarget > 0) {
+            onlineAmount = Math.max(0, splitTarget - cashAmount);
           }
+          // Store as "Cash" in DB (the check constraint on sessions.payment_method only accepts "Cash"|"Online"|null)
+          dbPaymentMethod = "Cash";
         } else if (paymentMethod === "Cash") {
-          cashAmount = total;
+          cashAmount = splitTarget;
           onlineAmount = 0;
+          dbPaymentMethod = "Cash";
         } else if (paymentMethod === "Online") {
           cashAmount = 0;
-          onlineAmount = total;
+          onlineAmount = splitTarget;
+          dbPaymentMethod = "Online";
+        } else {
+          cashAmount = 0;
+          onlineAmount = 0;
+          dbPaymentMethod = null;
         }
 
         const staffSelect = document.getElementById("mr-staff-select");
@@ -4376,11 +4762,18 @@
         const notes = document.getElementById("mr-notes").value.trim();
         const defaultTag = isInternal ? "[Internal Sale]" : isFoodOnly ? "[Food Only Sale]" : "[Paper Register]";
         let noteWithTag = notes ? `${defaultTag} ${notes}` : (isInternal ? "[Internal Sale Entry]" : isFoodOnly ? "[Food Only Sale]" : "[Paper Register Entry]");
-        if (paymentMethod === "Split") {
+        // Strip any existing payment tags
+        noteWithTag = noteWithTag.replace(/\[Payment:\s*(?:Split|Partial|Unpaid)[^\]]*\]/gi, "").trim();
+
+        if (isPartial) {
+          const partialTag = `[Payment: Partial | Paid: ${paidAmount} | Due: ${dueAmount} | Method: ${paymentMethod}${paymentMethod === "Split" ? ` | Cash: ${cashAmount} | Online: ${onlineAmount}` : ""}]`;
+          noteWithTag = [noteWithTag, partialTag].filter(Boolean).join(" ");
+        } else if (paymentMethod === "Split") {
           const splitTag = `[Payment: Split | Cash: ${cashAmount} | Online: ${onlineAmount}]`;
-          if (!noteWithTag.includes("[Payment: Split")) {
-            noteWithTag = `${noteWithTag} ${splitTag}`;
-          }
+          noteWithTag = [noteWithTag, splitTag].filter(Boolean).join(" ");
+        } else if (isUnpaid) {
+          const unpaidTag = `[Payment: Unpaid | Due: ${total}]`;
+          noteWithTag = [noteWithTag, unpaidTag].filter(Boolean).join(" ");
         }
 
         const recordPayload = {
@@ -4397,6 +4790,9 @@
           food_total: foodTotal,
           extra_stations: collectExtraStations("mr"),
           amount: total,
+          paid: isPaid,
+          paid_amount: paidAmount,
+          due_amount: dueAmount,
           cash_amount: cashAmount,
           online_amount: onlineAmount,
           overtime_amount: 0,
@@ -4408,17 +4804,18 @@
           notified_5min: true,
           staff_id: selectedStaffId || null,
           staff_name: selectedStaffName || null,
-          payment_method: paymentMethod,
-          paid: isPaid,
-          paid_at: isPaid ? endIso : null,
+          payment_method: dbPaymentMethod,
+          paid_at: (isPaid || (isPartial && paidAmount > 0)) ? endIso : null,
           created_at: startIso
         };
 
         let { data, error } = await window.sb.from("sessions").insert(recordPayload).select();
 
-        // Resilient fallback if cash_amount / online_amount not present in PostgREST schema cache
-        if (error && (error.message.includes("cash_amount") || error.message.includes("online_amount") || error.code === "PGRST204")) {
+        // Resilient fallback if paid_amount / due_amount / cash_amount / online_amount not present in PostgREST schema cache
+        if (error && (error.message.includes("paid_amount") || error.message.includes("due_amount") || error.message.includes("cash_amount") || error.message.includes("online_amount") || error.code === "PGRST204")) {
           const fallbackPayload = { ...recordPayload };
+          delete fallbackPayload.paid_amount;
+          delete fallbackPayload.due_amount;
           delete fallbackPayload.cash_amount;
           delete fallbackPayload.online_amount;
           const retry = await window.sb.from("sessions").insert(fallbackPayload).select();
@@ -4433,7 +4830,7 @@
           return;
         }
 
-        const savedRecord = (data && data[0]) ? { ...data[0], cash_amount: cashAmount, online_amount: onlineAmount } : { ...recordPayload, id: "TEMP-" + Date.now() };
+        const savedRecord = (data && data[0]) ? { ...data[0], paid_amount: paidAmount, due_amount: dueAmount, cash_amount: cashAmount, online_amount: onlineAmount } : { ...recordPayload, id: "TEMP-" + Date.now() };
 
         // Update in-memory records list
         const existingIdx = records.findIndex((r) => r.id === savedRecord.id);

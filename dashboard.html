@@ -947,6 +947,7 @@
                     <button type="button" class="records-pay-pill rounded-lg px-2.5 py-1 text-xs font-bold border border-slate-700 text-slate-400 hover:text-slate-200" data-pay="Cash">Cash</button>
                     <button type="button" class="records-pay-pill rounded-lg px-2.5 py-1 text-xs font-bold border border-slate-700 text-slate-400 hover:text-slate-200" data-pay="Online">Online</button>
                     <button type="button" class="records-pay-pill rounded-lg px-2.5 py-1 text-xs font-bold border border-purple-700/60 text-purple-300 hover:text-purple-200" data-pay="Split">Split</button>
+                    <button type="button" class="records-pay-pill rounded-lg px-2.5 py-1 text-xs font-bold border border-amber-700/60 text-amber-300 hover:text-amber-200" data-pay="partial">◐ Partial</button>
                     <button type="button" class="records-pay-pill rounded-lg px-2.5 py-1 text-xs font-bold border border-rose-700/60 text-rose-400 hover:text-rose-300" data-pay="unpaid">⚠️ Unpaid/Due</button>
                   </div>
                 </div>
@@ -2465,8 +2466,35 @@
         </div>
         <input id="checkout-discount-value" type="number" min="0" value="0" class="form-control">
         <p id="checkout-discount-cap" class="text-[11px] text-slate-500 mt-1"></p>
+      <!-- Payment status selection: Full Paid, Partial, or Unpaid/Due -->
+      <div class="mt-4">
+        <label class="block text-xs text-slate-400 mb-1.5 font-semibold">Settlement Status</label>
+        <div class="grid grid-cols-3 gap-1.5 mb-2.5">
+          <button id="checkout-status-btn-paid" type="button" class="checkout-status-btn active rounded-lg border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition" data-status="Paid">
+            <i data-lucide="check-circle-2" width="13" height="13"></i> Full Paid
+          </button>
+          <button id="checkout-status-btn-partial" type="button" class="checkout-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition" data-status="Partial">
+            <i data-lucide="pie-chart" width="13" height="13"></i> Partial / Due
+          </button>
+          <button id="checkout-status-btn-unpaid" type="button" class="checkout-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition" data-status="Unpaid">
+            <i data-lucide="clock" width="13" height="13"></i> Leave as Due
+          </button>
+        </div>
       </div>
-      <p class="text-sm font-medium mt-4 mb-2">Select Payment Method</p>
+
+      <!-- Partial payment amount row -->
+      <div id="checkout-partial-fields" class="hidden mb-3 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-1.5">
+        <div class="flex items-center justify-between">
+          <label for="checkout-paid-amount" class="text-xs font-bold text-amber-300">Amount Paid Now (रु)</label>
+          <div class="text-right">
+            <span class="text-[11px] text-slate-400">Due Balance:</span>
+            <span id="checkout-due-amount" class="mono text-xs font-bold text-amber-300 ml-1">रु 0</span>
+          </div>
+        </div>
+        <input id="checkout-paid-amount" type="number" min="0" step="1" class="form-control text-sm py-1.5 mono font-bold text-amber-300 border-amber-500/40 bg-slate-900" placeholder="0">
+      </div>
+
+      <p id="checkout-method-heading" class="text-sm font-medium mb-2">Select Payment Method</p>
       <div class="grid grid-cols-3 gap-2 mb-3">
         <button id="method-btn-cash" type="button" class="checkout-method-btn rounded-xl py-2.5 px-2 font-bold flex flex-col items-center gap-1 border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45] transition cursor-pointer text-xs" data-method="Cash">
           <i data-lucide="wallet" width="16" height="16"></i>
@@ -2796,6 +2824,7 @@
             <label class="block text-xs text-slate-400 mb-1" for="edit-payment-status">Payment Status</label>
             <select id="edit-payment-status" class="form-control font-semibold">
               <option value="Paid">Paid (Settled)</option>
+              <option value="Partial">Partial Payment (Paid + Due)</option>
               <option value="Unpaid">Unpaid / Due</option>
             </select>
           </div>
@@ -2806,6 +2835,16 @@
               <option value="Online">Online / QR (Fonepay/eSewa)</option>
               <option value="Split">Split (Cash + Online)</option>
             </select>
+          </div>
+          <div id="edit-partial-fields" class="hidden sm:col-span-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-1.5">
+            <div class="flex items-center justify-between">
+              <label for="edit-paid-amount" class="text-xs font-bold text-amber-300">Amount Paid (रु)</label>
+              <div class="text-right">
+                <span class="text-[11px] text-slate-400">Due Balance:</span>
+                <span id="edit-due-amount" class="mono text-xs font-bold text-amber-300 ml-1">रु 0</span>
+              </div>
+            </div>
+            <input id="edit-paid-amount" type="number" min="0" step="1" class="form-control text-xs py-1.5 mono font-bold text-amber-300 border-amber-500/40 bg-slate-900" placeholder="0">
           </div>
           <div id="edit-split-fields" class="hidden sm:col-span-2 p-2.5 rounded-xl bg-slate-900/90 border border-slate-700 space-y-1.5">
             <div class="flex items-center justify-between text-xs text-slate-400">
@@ -3121,6 +3160,7 @@
               <label class="block text-xs text-slate-400 mb-1" for="mr-payment-status">Payment Status</label>
               <select id="mr-payment-status" class="form-control font-semibold">
                 <option value="Paid" selected>Paid (Settled)</option>
+                <option value="Partial">Partial Payment (Paid + Due)</option>
                 <option value="Unpaid">Unpaid / Credit</option>
               </select>
             </div>
@@ -3135,6 +3175,16 @@
             <div>
               <label class="block text-xs text-slate-400 mb-1" for="mr-staff-select">Handled / Logged by</label>
               <select id="mr-staff-select" class="form-control"></select>
+            </div>
+            <div id="mr-partial-fields" class="hidden sm:col-span-3 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-1.5">
+              <div class="flex items-center justify-between">
+                <label for="mr-paid-amount" class="text-xs font-bold text-amber-300">Amount Paid (रु)</label>
+                <div class="text-right">
+                  <span class="text-[11px] text-slate-400">Due Balance:</span>
+                  <span id="mr-due-amount" class="mono text-xs font-bold text-amber-300 ml-1">रु 0</span>
+                </div>
+              </div>
+              <input id="mr-paid-amount" type="number" min="0" step="1" class="form-control text-xs py-1.5 mono font-bold text-amber-300 border-amber-500/40 bg-slate-900" placeholder="0">
             </div>
             <div id="mr-split-fields" class="hidden sm:col-span-3 p-2.5 rounded-xl bg-slate-900/90 border border-slate-700 space-y-1.5">
               <div class="flex items-center justify-between text-xs text-slate-400">
@@ -3470,6 +3520,14 @@
       <div style="display:flex; justify-content:space-between; margin-top: 2px; font-size: 10px;">
         <span>Payment Method:</span>
         <strong id="receipt-payment-method">Cash</strong>
+      </div>
+      <div id="receipt-paid-row" style="display:none; justify-content:space-between; margin-top: 2px; font-size: 11px;">
+        <span>Amount Paid:</span>
+        <strong id="receipt-paid-amount">रु 0</strong>
+      </div>
+      <div id="receipt-due-row" style="display:none; justify-content:space-between; margin-top: 2px; font-size: 11px; font-weight: bold;">
+        <span>Remaining Due:</span>
+        <strong id="receipt-due-amount" style="text-decoration: underline;">रु 0</strong>
       </div>
     </div>
     <div style="text-align:center; margin-top: 8px; border-top: 1px dashed #000; padding-top: 5px; font-size: 9px;">

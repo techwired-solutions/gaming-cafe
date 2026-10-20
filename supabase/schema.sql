@@ -97,6 +97,8 @@ end $$;
 alter table public.sessions add column if not exists discount_value numeric not null default 0;
 
 alter table public.sessions add column if not exists extra_stations jsonb not null default '[]'::jsonb;
+alter table public.sessions add column if not exists paid_amount numeric default 0;
+alter table public.sessions add column if not exists due_amount numeric default 0;
 
 create index if not exists sessions_status_idx on public.sessions (status);
 
