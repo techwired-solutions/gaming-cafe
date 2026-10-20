@@ -1532,7 +1532,7 @@
   }
 
   function getRecordPaymentBreakdown(r) {
-    if (!r) return { method: "Unpaid", cash: 0, online: 0, total: 0, paidAmount: 0, dueAmount: 0, isPartial: false, isUnpaid: true };
+    if (!r) return { method: "Unpaid", cash: 0, online: 0, total: 0, paidAmount: 0, dueAmount: 0, isPartial: false, isUnpaid: true, isSplit: false, isOnline: false };
     const total = Number(r.amount) || 0;
     let method = r.payment_method || (r.paid ? "Cash" : "Unpaid");
     let cash = Number(r.cash_amount) || 0;
@@ -1583,7 +1583,7 @@
       cash = 0;
       online = isPartial ? paidAmount : (r.paid ? total : 0);
     }
-    return { method, cash, online, total, paidAmount, dueAmount, isPartial, isUnpaid };
+    return { method, cash, online, total, paidAmount, dueAmount, isPartial, isUnpaid, isSplit: method === "Split", isOnline: method === "Online" };
   }
 
   function wireClickableTimeInputs() {
