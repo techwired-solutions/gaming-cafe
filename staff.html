@@ -3694,12 +3694,12 @@
       </div>
 
       <!-- Paid & Due Editable Fields -->
-      <div class="grid grid-cols-2 gap-3 mb-4">
-        <div>
+      <div id="cust-collect-amounts-grid" class="grid grid-cols-1 gap-3 mb-4">
+        <div id="cust-collect-paid-wrap">
           <label for="cust-collect-paid-amount" class="block text-xs font-semibold text-emerald-400 mb-1">Amount Paid (रु)</label>
           <input id="cust-collect-paid-amount" type="number" min="0" step="1" class="form-control mono font-bold text-base text-emerald-300">
         </div>
-        <div>
+        <div id="cust-collect-due-wrap" class="hidden">
           <label for="cust-collect-due-amount" class="block text-xs font-semibold text-rose-400 mb-1">Remaining Due (रु)</label>
           <input id="cust-collect-due-amount" type="number" min="0" step="1" class="form-control mono font-bold text-base text-rose-400">
         </div>

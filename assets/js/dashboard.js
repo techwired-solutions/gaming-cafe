@@ -642,10 +642,10 @@
 
   function updateCustCollectStatusUI(status) {
     activeCollectStatus = status;
+    const isFull = status === "full";
     const fullBtn = document.getElementById("cust-collect-status-full");
     const partialBtn = document.getElementById("cust-collect-status-partial");
     if (fullBtn) {
-      const isFull = status === "full";
       fullBtn.classList.toggle("active", isFull);
       fullBtn.className = isFull
         ? "cust-collect-status-btn active rounded-lg border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] py-2 px-2 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition"
@@ -657,6 +657,14 @@
       partialBtn.className = isPartial
         ? "cust-collect-status-btn active rounded-lg border border-amber-400 bg-amber-400/20 text-amber-300 py-2 px-2 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition"
         : "cust-collect-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-2 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition";
+    }
+
+    const dueWrap = document.getElementById("cust-collect-due-wrap");
+    const amountsGrid = document.getElementById("cust-collect-amounts-grid");
+    if (dueWrap) dueWrap.classList.toggle("hidden", isFull);
+    if (amountsGrid) {
+      amountsGrid.classList.toggle("grid-cols-2", !isFull);
+      amountsGrid.classList.toggle("grid-cols-1", isFull);
     }
 
     if (activeCollectGroup) {
@@ -777,7 +785,8 @@
           onlineAmount = paidAmount;
         }
 
-        const confirmMsg = `Collect payment for ${group.customerName}?\n• Amount Paid: ${inr(paidAmount)}\n• Remaining Due: ${inr(dueAmount)}\n• Method: ${activeCollectMethod}`;
+        const dueLine = dueAmount > 0 ? `\n• Remaining Due: ${inr(dueAmount)}` : "";
+        const confirmMsg = `Collect payment for ${group.customerName}?\n• Amount Paid: ${inr(paidAmount)}${dueLine}\n• Method: ${activeCollectMethod}`;
         if (!confirm(confirmMsg)) return;
 
         confirmBtn.disabled = true;
