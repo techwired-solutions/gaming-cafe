@@ -506,11 +506,19 @@
       <!-- ===================== TOP BAR ===================== -->
       <header class="border-b border-slate-700/80 sticky top-0 z-30" style="background: rgba(21,27,39,.96);backdrop-filter:blur(6px);">
         <div class="px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
-          <div class="flex items-center gap-3">
-            <button id="sidebar-toggle" type="button" class="rounded-lg border border-slate-600 p-2 text-slate-200 md:hidden"><i data-lucide="menu" width="18" height="18"></i></button>
+          <div class="flex items-center gap-2 sm:gap-3">
+            <button id="sidebar-toggle" type="button" class="rounded-lg border border-slate-600 p-2 text-slate-200 md:hidden" aria-label="Toggle sidebar"><i data-lucide="menu" width="18" height="18"></i></button>
+            <button id="nav-back-btn" type="button" class="rounded-xl border border-slate-600 p-2 text-slate-200 hover:border-[#d8ff45] hover:text-[#d8ff45] transition cursor-pointer flex items-center justify-center opacity-40 cursor-not-allowed" title="Go back to previous tab" aria-label="Go back" disabled>
+              <i data-lucide="arrow-left" width="18" height="18"></i>
+            </button>
             <h1 id="page-title" class="font-bold text-lg sm:text-xl">Overview</h1>
           </div>
           <div class="flex items-center gap-2 sm:gap-3 text-sm">
+            <!-- In-App Refresh Button -->
+            <button id="nav-refresh-btn" type="button" class="rounded-xl border border-slate-600 px-3 py-2 text-slate-200 hover:border-[#d8ff45] hover:text-[#d8ff45] transition cursor-pointer flex items-center gap-1.5 text-xs font-semibold" title="Refresh cafe data without reloading the browser" aria-label="Refresh data">
+              <i data-lucide="refresh-cw" width="14" height="14" id="nav-refresh-icon" class="transition-transform"></i>
+              <span class="hidden md:inline">Refresh</span>
+            </button>
             <div class="hidden sm:flex items-center gap-2 rounded-full border border-slate-600 bg-slate-900/70 px-3 py-2">
               <span id="connection-dot" class="pulse-dot h-2 w-2 rounded-full bg-[#d8ff45]"></span>
               <span id="connection-label" class="text-slate-200 text-xs">Connecting…</span>
@@ -962,6 +970,9 @@
                 </button>
               </div>
             </div>
+
+            <!-- Unpaid Customers Aggregated Summary (shown when unpaid filter is active) -->
+            <div id="records-unpaid-customer-summary" class="hidden p-3.5 mx-3 mt-3 rounded-xl border border-rose-500/30 bg-rose-500/5"></div>
 
             <div id="records-list" class="p-3 space-y-3" aria-live="polite"></div>
             <div id="empty-records" class="p-8 text-center">
@@ -3426,6 +3437,57 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ===================== UNPAID / DUE BILLS MODAL ===================== -->
+  <div id="unpaid-bills-modal" class="modal-overlay">
+    <div class="panel rounded-2xl p-6 w-full max-w-2xl" style="max-height:90vh; overflow-y:auto;">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-700/80 mb-4">
+        <div class="flex items-center gap-2.5">
+          <span class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-rose-500/20 text-[#ff6875] border border-rose-500/30">
+            <i data-lucide="alert-circle" width="18" height="18"></i>
+          </span>
+          <div>
+            <h3 class="font-bold text-lg text-white">Unpaid / Due Bills</h3>
+            <p class="text-xs text-slate-400">Customers with outstanding balances (grouped by customer)</p>
+          </div>
+        </div>
+        <button id="unpaid-modal-close" type="button" class="text-slate-400 hover:text-white text-xl p-1 leading-none cursor-pointer">✕</button>
+      </div>
+
+      <!-- KPI Summary Banner -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+        <div class="bg-[#111722] border border-rose-500/30 rounded-xl p-3">
+          <span class="text-[11px] text-slate-400 font-medium">Total Outstanding</span>
+          <p id="unpaid-modal-total-due" class="mono text-xl font-bold text-[#ff6875] mt-1">रु 0</p>
+        </div>
+        <div class="bg-[#111722] border border-slate-700 rounded-xl p-3">
+          <span class="text-[11px] text-slate-400 font-medium">Customers with Due</span>
+          <p id="unpaid-modal-customer-count" class="mono text-xl font-bold text-slate-100 mt-1">0</p>
+        </div>
+        <div class="bg-[#111722] border border-slate-700 rounded-xl p-3 col-span-2 sm:col-span-1">
+          <span class="text-[11px] text-slate-400 font-medium">Unpaid Sessions</span>
+          <p id="unpaid-modal-session-count" class="mono text-xl font-bold text-amber-300 mt-1">0</p>
+        </div>
+      </div>
+
+      <!-- Search Filter -->
+      <div class="relative mb-4">
+        <i data-lucide="search" width="15" height="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+        <input id="unpaid-modal-search" type="text" placeholder="Search customer name or phone..." class="form-control pl-9 text-xs py-2 w-full">
+      </div>
+
+      <!-- Customer Grouped List -->
+      <div id="unpaid-modal-customer-list" class="space-y-3"></div>
+      <p id="unpaid-modal-empty" class="hidden text-sm text-slate-400 text-center py-8">🎉 No customers with unpaid bills right now!</p>
+
+      <div class="mt-5 pt-3 border-t border-slate-700/80 flex items-center justify-between">
+        <button id="unpaid-modal-view-log-btn" type="button" class="text-xs font-semibold text-[#d8ff45] hover:underline flex items-center gap-1 cursor-pointer">
+          <i data-lucide="archive" width="14" height="14"></i> Open in Lounge Log (All Records)
+        </button>
+        <button id="unpaid-modal-close-btn" type="button" class="rounded-xl border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white cursor-pointer">Close</button>
+      </div>
     </div>
   </div>
 

@@ -281,14 +281,65 @@
   }
 
   // ---------- sidebar / page navigation ----------
-  function switchPage(pageId) {
+  const pageHistory = ["page-overview"];
+
+  function updateNavBackBtn() {
+    const btn = document.getElementById("nav-back-btn");
+    if (!btn) return;
+    const canGoBack = pageHistory.length > 1;
+    btn.disabled = !canGoBack;
+    btn.classList.toggle("opacity-40", !canGoBack);
+    btn.classList.toggle("cursor-not-allowed", !canGoBack);
+    btn.classList.toggle("cursor-pointer", canGoBack);
+  }
+
+  function handleNavBack() {
+    if (pageHistory.length <= 1) return;
+    pageHistory.pop(); // Remove current page
+    const prevPage = pageHistory[pageHistory.length - 1] || "page-overview";
+    switchPage(prevPage, false);
+  }
+
+  function switchPage(pageId, pushHistory = true) {
     if (ADMIN_ONLY_PAGES.has(pageId) && (!currentStaff || currentStaff.role !== "admin")) pageId = "page-overview";
+    if (pushHistory && pageHistory[pageHistory.length - 1] !== pageId) {
+      pageHistory.push(pageId);
+    }
+    updateNavBackBtn();
     document.querySelectorAll(".page-view").forEach((el) => el.classList.toggle("active", el.id === pageId));
     document.querySelectorAll(".sidebar-link").forEach((link) => link.classList.toggle("active", link.dataset.page === pageId));
     const activeLink = document.querySelector(`.sidebar-link[data-page="${pageId}"]`);
     document.getElementById("page-title").textContent = activeLink ? activeLink.textContent.trim() : "Overview";
     document.getElementById("sidebar").classList.remove("open");
     document.getElementById("sidebar-backdrop").classList.remove("show");
+  }
+
+  let isRefreshing = false;
+  async function handleSystemRefresh() {
+    if (isRefreshing) return;
+    isRefreshing = true;
+    const btn = document.getElementById("nav-refresh-btn");
+    const icon = document.getElementById("nav-refresh-icon");
+    if (btn) btn.disabled = true;
+    if (icon) icon.classList.add("animate-spin");
+    try {
+      await loadAll();
+      updateStationCards();
+      renderSummary();
+      renderRecordsList();
+      renderExpenses();
+      renderMenuManage();
+      renderWaitingList();
+      if (typeof renderRevenue === "function") renderRevenue();
+      showToast("Data refreshed successfully!");
+    } catch (err) {
+      console.error("Refresh error:", err);
+      showToast("Refresh failed: " + (err.message || "Unknown error"));
+    } finally {
+      if (icon) icon.classList.remove("animate-spin");
+      if (btn) btn.disabled = false;
+      isRefreshing = false;
+    }
   }
 
   function initSidebar() {
@@ -311,13 +362,19 @@
       location.reload();
     });
 
+    // In-System Back & Refresh navigation
+    const backBtn = document.getElementById("nav-back-btn");
+    if (backBtn) backBtn.addEventListener("click", handleNavBack);
+    const refreshBtn = document.getElementById("nav-refresh-btn");
+    if (refreshBtn) refreshBtn.addEventListener("click", handleSystemRefresh);
+
     // Overview quick-action buttons
     const ovNs = document.getElementById("overview-new-session-btn");
     if (ovNs) ovNs.addEventListener("click", () => switchPage("page-new-session"));
     const ovLog = document.getElementById("overview-lounge-log-btn");
     if (ovLog) ovLog.addEventListener("click", () => switchPage("page-records"));
     const ovUnpaid = document.getElementById("overview-unpaid-bills-btn");
-    if (ovUnpaid) ovUnpaid.addEventListener("click", () => showUnpaidRecordsInLog());
+    if (ovUnpaid) ovUnpaid.addEventListener("click", () => openUnpaidBillsModal());
   }
 
   function showUnpaidRecordsInLog() {
@@ -346,6 +403,174 @@
 
   // Alias used by updateSummary unpaid-collect handler and other places
   function navigateTo(pageId) { switchPage(pageId); }
+
+  // ---------- Unpaid / Due Bills & Customer Aggregation ----------
+  function getUnpaidCustomersGrouped(customRecords = null) {
+    const pool = customRecords || records;
+    const unpaidRecords = pool.filter((r) => {
+      if (r.status === "Cancelled") return false;
+      const bd = getRecordPaymentBreakdown(r);
+      return !r.paid || bd.isPartial || bd.dueAmount > 0;
+    });
+
+    const groups = new Map();
+    for (const r of unpaidRecords) {
+      const rawName = (r.customer_name || "Guest").trim();
+      const normKey = rawName.toLowerCase();
+      const phone = (r.customer_phone || "").trim();
+      const bd = getRecordPaymentBreakdown(r);
+      const due = bd.dueAmount > 0 ? bd.dueAmount : (!r.paid ? (Number(r.amount) || 0) : 0);
+
+      if (!groups.has(normKey)) {
+        groups.set(normKey, {
+          customerName: rawName,
+          customerPhone: phone,
+          totalDue: 0,
+          records: []
+        });
+      }
+      const g = groups.get(normKey);
+      if (!g.customerPhone && phone) g.customerPhone = phone;
+      g.totalDue += due;
+      g.records.push({ record: r, due, breakdown: bd });
+    }
+
+    return Array.from(groups.values()).sort((a, b) => b.totalDue - a.totalDue);
+  }
+
+  function openUnpaidBillsModal() {
+    const modal = document.getElementById("unpaid-bills-modal");
+    if (!modal) return showUnpaidRecordsInLog();
+    modal.classList.add("show");
+    renderUnpaidBillsModal();
+    const search = document.getElementById("unpaid-modal-search");
+    if (search) {
+      search.value = "";
+      search.focus();
+    }
+  }
+
+  function closeUnpaidBillsModal() {
+    const modal = document.getElementById("unpaid-bills-modal");
+    if (modal) modal.classList.remove("show");
+  }
+
+  function renderUnpaidBillsModal(searchQuery = "") {
+    const totalDueEl = document.getElementById("unpaid-modal-total-due");
+    const custCountEl = document.getElementById("unpaid-modal-customer-count");
+    const sessCountEl = document.getElementById("unpaid-modal-session-count");
+    const listEl = document.getElementById("unpaid-modal-customer-list");
+    const emptyEl = document.getElementById("unpaid-modal-empty");
+    if (!listEl) return;
+
+    const allGroups = getUnpaidCustomersGrouped();
+    let totalDueAll = 0;
+    let totalSessionsAll = 0;
+    allGroups.forEach((g) => {
+      totalDueAll += g.totalDue;
+      totalSessionsAll += g.records.length;
+    });
+
+    if (totalDueEl) totalDueEl.textContent = inr(totalDueAll);
+    if (custCountEl) custCountEl.textContent = allGroups.length;
+    if (sessCountEl) sessCountEl.textContent = totalSessionsAll;
+
+    const q = (searchQuery || "").trim().toLowerCase();
+    const filteredGroups = q
+      ? allGroups.filter((g) => g.customerName.toLowerCase().includes(q) || (g.customerPhone && g.customerPhone.includes(q)))
+      : allGroups;
+
+    if (emptyEl) emptyEl.classList.toggle("hidden", filteredGroups.length > 0);
+    listEl.innerHTML = "";
+
+    filteredGroups.forEach((g) => {
+      const card = document.createElement("div");
+      card.className = "rounded-xl border border-rose-500/30 bg-[#161c28] p-3.5 space-y-2.5 transition hover:border-rose-500/50";
+
+      const header = document.createElement("div");
+      header.className = "flex items-center justify-between gap-2 flex-wrap border-b border-slate-700/60 pb-2.5";
+      header.innerHTML = `
+        <div>
+          <div class="flex items-center gap-2">
+            <h4 class="font-bold text-white text-base">${escapeHtml(g.customerName)}</h4>
+            <span class="rounded-full px-2 py-0.5 text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">${g.records.length} session${g.records.length > 1 ? "s" : ""}</span>
+          </div>
+          ${g.customerPhone ? `<p class="text-xs text-slate-400 mt-0.5 mono">📱 ${escapeHtml(g.customerPhone)}</p>` : ""}
+        </div>
+        <div class="text-right">
+          <span class="text-[11px] text-slate-400 block font-medium">Total Outstanding</span>
+          <span class="mono font-bold text-lg text-[#ff6875]">${inr(g.totalDue)}</span>
+        </div>
+      `;
+      card.appendChild(header);
+
+      const sessionsWrap = document.createElement("div");
+      sessionsWrap.className = "space-y-1.5 pt-1";
+
+      g.records.forEach(({ record: r, due, breakdown }) => {
+        const row = document.createElement("div");
+        row.className = "flex items-center justify-between gap-2 p-2 rounded-lg bg-[#0e131d] border border-slate-800 text-xs";
+        const dateStr = r.created_at ? fmtDateTime(r.created_at) : "";
+        const stationStr = r.station_name || "Station";
+        const durStr = `${r.duration_minutes || 0} min`;
+        const partialNote = breakdown.isPartial ? `<span class="text-amber-400 ml-1 font-semibold">(Partial: ${inr(breakdown.paidAmount)} paid)</span>` : "";
+
+        row.innerHTML = `
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 truncate">
+              <span class="font-semibold text-slate-200 mono">${escapeHtml(stationStr)}</span>
+              <span class="text-slate-400">·</span>
+              <span class="text-slate-400 mono">${durStr}</span>
+              ${partialNote}
+            </div>
+            <p class="text-[11px] text-slate-500 mt-0.5">${dateStr}</p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="mono font-bold text-[#ff6875]">${inr(due)}</span>
+            <button type="button" class="btn-collect-session px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500 hover:bg-rose-600 text-white cursor-pointer shadow-sm transition">Collect</button>
+          </div>
+        `;
+
+        row.querySelector(".btn-collect-session").addEventListener("click", () => {
+          closeUnpaidBillsModal();
+          openCheckoutModal(r);
+        });
+
+        sessionsWrap.appendChild(row);
+      });
+
+      card.appendChild(sessionsWrap);
+      listEl.appendChild(card);
+    });
+    if (window.lucide) window.lucide.createIcons({ root: listEl });
+  }
+
+  function initUnpaidBillsModal() {
+    const modal = document.getElementById("unpaid-bills-modal");
+    if (!modal) return;
+    const closeBtn = document.getElementById("unpaid-modal-close");
+    const closeBtn2 = document.getElementById("unpaid-modal-close-btn");
+    if (closeBtn) closeBtn.addEventListener("click", closeUnpaidBillsModal);
+    if (closeBtn2) closeBtn2.addEventListener("click", closeUnpaidBillsModal);
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) closeUnpaidBillsModal();
+    });
+
+    const searchInput = document.getElementById("unpaid-modal-search");
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => {
+        renderUnpaidBillsModal(e.target.value);
+      });
+    }
+
+    const viewLogBtn = document.getElementById("unpaid-modal-view-log-btn");
+    if (viewLogBtn) {
+      viewLogBtn.addEventListener("click", () => {
+        closeUnpaidBillsModal();
+        showUnpaidRecordsInLog();
+      });
+    }
+  }
 
   function applyRoleVisibility() {
     const isAdmin = currentStaff && currentStaff.role === "admin";
@@ -1470,17 +1695,12 @@
     document.getElementById("record-count").textContent = records.length;
 
     // ---- Unpaid / Due panel & shortcut badge ----
-    const unpaid = records.filter((r) => {
-      if (r.status !== "Completed") return false;
-      const bd = getRecordPaymentBreakdown(r);
-      return !r.paid || bd.isPartial || bd.dueAmount > 0;
-    });
-
+    const unpaidGroups = getUnpaidCustomersGrouped();
     const ovUnpaidBtn = document.getElementById("overview-unpaid-bills-btn");
     const ovUnpaidBadge = document.getElementById("overview-unpaid-badge");
     if (ovUnpaidBadge) {
-      if (unpaid.length > 0) {
-        ovUnpaidBadge.textContent = unpaid.length;
+      if (unpaidGroups.length > 0) {
+        ovUnpaidBadge.textContent = unpaidGroups.length;
         ovUnpaidBadge.classList.remove("hidden");
         if (ovUnpaidBtn) {
           ovUnpaidBtn.classList.add("border-rose-500/50", "text-rose-300", "bg-rose-500/10");
@@ -1500,34 +1720,74 @@
     const countEl = document.getElementById("overview-unpaid-count");
     const listEl = document.getElementById("overview-unpaid-list");
     if (panel && listEl) {
-      panel.classList.toggle("hidden", unpaid.length === 0);
-      if (countEl) countEl.textContent = unpaid.length;
+      panel.classList.toggle("hidden", unpaidGroups.length === 0);
+      if (countEl) countEl.textContent = unpaidGroups.length;
       listEl.innerHTML = "";
-      unpaid.forEach((r) => {
-        const bd = getRecordPaymentBreakdown(r);
+      unpaidGroups.forEach((g) => {
         const card = document.createElement("div");
-        card.className = "overview-unpaid-card rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 flex items-center justify-between gap-3";
-        const dueText = bd.isPartial
-          ? `<div class="text-right"><span class="mono font-bold text-amber-300 text-sm">Due: ${inr(bd.dueAmount)}</span><p class="text-[10px] text-slate-400">Paid: ${inr(bd.paidAmount)} / ${inr(bd.total)}</p></div>`
-          : `<span class="mono font-bold text-[#ff6875] text-sm">${inr(r.amount)}</span>`;
-        card.innerHTML = `
-          <div class="min-w-0">
-            <p class="font-semibold text-sm truncate">${r.customer_name || "—"}</p>
-            <p class="text-xs text-slate-400 truncate mono">${r.station_name || "—"} · ${r.duration_minutes || 0} min</p>
-          </div>
-          <div class="flex items-center gap-2 shrink-0">
-            ${dueText}
-            <button type="button" class="unpaid-collect-btn rounded-lg px-2.5 py-1.5 text-xs font-bold cursor-pointer transition hover:brightness-110 whitespace-nowrap"
-              style="background:#ff6875;color:#10141e;" data-id="${r.id}">Collect</button>
-          </div>`;
-        card.querySelector(".unpaid-collect-btn").addEventListener("click", () => {
-          // Navigate to records tab and open checkout for this record
-          navigateTo("page-records");
-          setTimeout(() => {
-            const targetCard = document.querySelector(`[data-record-id="${r.id}"] .open-checkout`);
-            if (targetCard) targetCard.click();
-          }, 120);
-        });
+        card.className = "overview-unpaid-card rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 flex flex-col gap-2";
+
+        const stationsSummary = g.records.map((item) => item.record.station_name || "Station").join(", ");
+        const sessionCountLabel = g.records.length > 1
+          ? `${g.records.length} sessions (${stationsSummary})`
+          : `${g.records[0].record.station_name || "—"} · ${g.records[0].record.duration_minutes || 0} min`;
+
+        if (g.records.length === 1) {
+          const single = g.records[0];
+          const dueText = single.breakdown.isPartial
+            ? `<div class="text-right"><span class="mono font-bold text-amber-300 text-sm">Due: ${inr(single.due)}</span><p class="text-[10px] text-slate-400">Paid: ${inr(single.breakdown.paidAmount)} / ${inr(single.breakdown.total)}</p></div>`
+            : `<span class="mono font-bold text-[#ff6875] text-sm">${inr(single.due)}</span>`;
+
+          card.innerHTML = `
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <p class="font-semibold text-sm truncate text-white">${escapeHtml(g.customerName)}</p>
+                <p class="text-xs text-slate-400 truncate mono">${sessionCountLabel}</p>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                ${dueText}
+                <button type="button" class="unpaid-collect-btn rounded-lg px-2.5 py-1.5 text-xs font-bold cursor-pointer transition hover:brightness-110 whitespace-nowrap bg-rose-500 text-white"
+                  data-id="${single.record.id}">Collect</button>
+              </div>
+            </div>`;
+          card.querySelector(".unpaid-collect-btn").addEventListener("click", () => {
+            openCheckoutModal(single.record);
+          });
+        } else {
+          // Multiple sessions for this customer: grouped with combined total amount!
+          card.innerHTML = `
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <p class="font-semibold text-sm truncate text-white">${escapeHtml(g.customerName)}</p>
+                  <span class="rounded-full px-2 py-0.5 text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">${g.records.length} Sessions</span>
+                </div>
+                <p class="text-xs text-slate-400 truncate mono">${sessionCountLabel}</p>
+              </div>
+              <div class="text-right shrink-0">
+                <span class="text-[10px] text-slate-400 block font-medium">Total Due</span>
+                <span class="mono font-bold text-[#ff6875] text-sm sm:text-base">${inr(g.totalDue)}</span>
+              </div>
+            </div>
+            <div class="space-y-1.5 pt-1 border-t border-rose-500/10">
+              ${g.records.map((item) => `
+                <div class="flex items-center justify-between gap-2 p-1.5 rounded bg-black/20 text-xs">
+                  <span class="text-slate-300 mono truncate">${escapeHtml(item.record.station_name || "Station")} (${item.record.duration_minutes || 0}m)</span>
+                  <div class="flex items-center gap-2 shrink-0">
+                    <span class="mono font-bold text-rose-300">${inr(item.due)}</span>
+                    <button type="button" class="unpaid-item-collect-btn px-2 py-0.5 rounded text-[11px] font-bold bg-rose-500 hover:bg-rose-600 text-white cursor-pointer" data-rec-id="${item.record.id}">Collect</button>
+                  </div>
+                </div>
+              `).join("")}
+            </div>`;
+
+          card.querySelectorAll(".unpaid-item-collect-btn").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const rec = records.find((r) => r.id === btn.dataset.recId);
+              if (rec) openCheckoutModal(rec);
+            });
+          });
+        }
         listEl.appendChild(card);
       });
     }
@@ -1887,13 +2147,25 @@
     const printBtn = card.querySelector(".print-bill-btn");
     const isRunning = record.status === "Active" || record.status === "Booked";
     const isCompleted = record.status === "Completed";
+    const isDue = isCompleted && (!record.paid || (bd && bd.dueAmount > 0));
 
     if (isRunning || isCompleted) {
       actions.classList.remove("hidden");
       actions.classList.add("flex");
       const isActive = record.status === "Active";
       extendGroup.classList.toggle("hidden", !isActive);
-      checkoutBtn.classList.toggle("hidden", !isActive);
+
+      const showCheckout = isActive || isDue;
+      checkoutBtn.classList.toggle("hidden", !showCheckout);
+      if (isDue) {
+        const dueAmt = (bd && bd.dueAmount > 0) ? bd.dueAmount : (record.amount || 0);
+        checkoutBtn.textContent = `Collect ${inr(dueAmt)}`;
+        checkoutBtn.className = "open-checkout px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-500 hover:bg-rose-600 text-white shadow-sm flex items-center gap-1 transition-colors cursor-pointer";
+      } else {
+        checkoutBtn.textContent = "Checkout";
+        checkoutBtn.className = "open-checkout px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 transition-colors cursor-pointer";
+      }
+
       addFoodBtn.classList.toggle("hidden", !isActive);
       editBtn.classList.remove("hidden");
       if (printBtn) printBtn.classList.toggle("hidden", !isCompleted && !isActive);
@@ -2230,6 +2502,58 @@
     renderRecordsList();
   }
 
+  function renderRecordsUnpaidSummary(filteredRecords) {
+    const summaryContainer = document.getElementById("records-unpaid-customer-summary");
+    if (!summaryContainer) return;
+    if (recordsFilterPay !== "unpaid") {
+      summaryContainer.classList.add("hidden");
+      return;
+    }
+
+    const groups = getUnpaidCustomersGrouped(filteredRecords);
+    if (groups.length === 0) {
+      summaryContainer.classList.add("hidden");
+      return;
+    }
+
+    summaryContainer.classList.remove("hidden");
+    const totalAllDue = groups.reduce((acc, g) => acc + g.totalDue, 0);
+    summaryContainer.innerHTML = `
+      <div class="flex items-center justify-between gap-2 flex-wrap mb-2.5 pb-2 border-b border-rose-500/20">
+        <div class="flex items-center gap-2">
+          <span class="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-rose-500/20 text-rose-300 text-xs font-bold">!</span>
+          <h4 class="font-bold text-xs sm:text-sm text-rose-200">Customer Due Summary (Combined Outstanding)</h4>
+        </div>
+        <div class="flex items-center gap-2 text-xs">
+          <span class="text-slate-400">Total Due:</span>
+          <span class="mono font-bold text-rose-400 text-sm">${inr(totalAllDue)}</span>
+          <span class="text-slate-500">(${groups.length} customer${groups.length > 1 ? "s" : ""})</span>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+        ${groups.map((g) => `
+          <div class="p-2.5 rounded-lg bg-[#141a26] border border-rose-500/20 flex items-center justify-between gap-2 hover:border-rose-500/40 transition">
+            <div class="min-w-0">
+              <button type="button" class="font-bold text-xs text-white hover:text-[#d8ff45] text-left truncate block records-summary-cust-btn cursor-pointer" data-cust="${escapeHtml(g.customerName)}" title="Click to filter by ${escapeHtml(g.customerName)}">
+                ${escapeHtml(g.customerName)}
+              </button>
+              <p class="text-[11px] text-slate-400 mono">${g.records.length} session${g.records.length > 1 ? "s" : ""} ${g.customerPhone ? `· ${escapeHtml(g.customerPhone)}` : ""}</p>
+            </div>
+            <div class="text-right shrink-0">
+              <span class="mono font-bold text-rose-400 text-xs sm:text-sm">${inr(g.totalDue)}</span>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+
+    summaryContainer.querySelectorAll(".records-summary-cust-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        setRecordsCustomerFilter(btn.dataset.cust);
+      });
+    });
+  }
+
   function renderRecordsList() {
     const listEl = document.getElementById("records-list");
     const emptyEl = document.getElementById("empty-records");
@@ -2237,6 +2561,7 @@
     const filtered = getFilteredRecords();
     syncCardList(listEl, filtered);
     updateRecordsFilterIndicator(filtered.length, records.length);
+    renderRecordsUnpaidSummary(filtered);
     if (emptyEl) {
       emptyEl.classList.toggle("hidden", filtered.length > 0);
       const titleP = emptyEl.querySelector("p.font-semibold");
@@ -7162,6 +7487,7 @@
     applyRoleVisibility();
     initSidebar();
     initCheckoutModal();
+    initUnpaidBillsModal();
     initEditModal();
     initQuickFoodModal();
     initEditNoticeModal();
