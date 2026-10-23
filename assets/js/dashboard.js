@@ -2434,15 +2434,17 @@
       const isActive = record.status === "Active";
       extendGroup.classList.toggle("hidden", !isActive);
 
-      const showCheckout = isActive || isDue;
-      checkoutBtn.classList.toggle("hidden", !showCheckout);
-      if (isDue) {
+      if (isActive) {
+        checkoutBtn.textContent = "Checkout";
+        checkoutBtn.className = "open-checkout px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 transition-colors cursor-pointer";
+        checkoutBtn.classList.remove("hidden");
+      } else if (isDue) {
         const dueAmt = (bd && bd.dueAmount > 0) ? bd.dueAmount : (record.amount || 0);
         checkoutBtn.textContent = `Collect ${inr(dueAmt)}`;
         checkoutBtn.className = "open-checkout px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-500 hover:bg-rose-600 text-white shadow-sm flex items-center gap-1 transition-colors cursor-pointer";
+        checkoutBtn.classList.remove("hidden");
       } else {
-        checkoutBtn.textContent = "Checkout";
-        checkoutBtn.className = "open-checkout px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 transition-colors cursor-pointer";
+        checkoutBtn.classList.add("hidden");
       }
 
       addFoodBtn.classList.toggle("hidden", !isActive);
@@ -2506,7 +2508,20 @@
 
     card.querySelector(".open-checkout").addEventListener("click", () => {
       const item = records.find((row) => String(row.id) === String(card.dataset.recordId)) || record;
-      if (item) openCheckoutModal(item);
+      if (!item) return;
+      if (item.status === "Completed") {
+        const bd = getRecordPaymentBreakdown(item);
+        const group = {
+          customerName: item.customer_name || "Walk-in",
+          customerPhone: item.customer_phone || "",
+          records: [{ record: item, breakdown: bd, due: bd.dueAmount || item.amount || 0 }],
+          totalDue: bd.dueAmount || item.amount || 0,
+          totalAmount: item.amount || 0
+        };
+        openCustomerCollectModal(group);
+      } else {
+        openCheckoutModal(item);
+      }
     });
 
     card.querySelector(".open-edit").addEventListener("click", () => {
