@@ -15,6 +15,7 @@
   <style>
     /* ===== DARK THEME (default) ===== */
     :root, [data-theme="dark"] {
+      color-scheme: dark;
       --ink: #10141e; --panel: #181e2b; --panel-soft: #202838;
       --panel-bg: rgba(24,30,43,.94);
       --line: #334056; --acid: #d8ff45; --acid-dim: rgba(216,255,69,.14); --muted: #95a0b8; --danger: #ff6875;
@@ -27,6 +28,7 @@
     }
     /* ===== LIGHT THEME ===== */
     [data-theme="light"] {
+      color-scheme: light;
       --ink: #f0f4fa; --panel: #ffffff; --panel-soft: #e8edf6;
       --panel-bg: rgba(255,255,255,.96);
       --line: #d1dae8; --acid: #5f8800; --acid-dim: rgba(95,136,0,.12); --muted: #6b7a96; --danger: #c0303c;
@@ -348,6 +350,155 @@
     /* ---- Count badges (bg-slate-700) ---- */
     [data-theme="light"] #waiting-count,
     [data-theme="light"] #record-count { background-color: #dde5f0 !important; color: var(--text-secondary) !important; }
+
+    /* ---- Light mode: Alerts, Confirms & Popups ---- */
+    [data-theme="light"] #toast {
+      background-color: #ffffff !important;
+      border-color: #c0cfe8 !important;
+      color: #10141e !important;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.12) !important;
+    }
+    [data-theme="light"] #notification-panel {
+      background-color: #ffffff !important;
+      border-color: #c0cfe8 !important;
+      color: #10141e !important;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.12) !important;
+    }
+    [data-theme="light"] #capital-sql-alert {
+      background-color: #fffbeb !important;
+      border-color: #f59e0b !important;
+      color: #92400e !important;
+    }
+    [data-theme="light"] .delete-confirm {
+      background-color: #ffffff !important;
+      border-color: #c0cfe8 !important;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
+    }
+    [data-theme="light"] .delete-no {
+      background-color: #eef2fa !important;
+      border-color: #c0cfe8 !important;
+      color: var(--text-secondary) !important;
+    }
+    [data-theme="light"] .alert,
+    [data-theme="light"] [role="alert"],
+    [data-theme="light"] .flash-alert {
+      background-color: #fff1f2 !important;
+      border-color: #fca5a5 !important;
+      color: #991b1b !important;
+    }
+
+    /* ---- Light mode: All Modals, Panels, Dialogs & Inner Boxes ---- */
+    [data-theme="light"] .modal-overlay .panel,
+    [data-theme="light"] .modal-overlay .modal-box,
+    [data-theme="light"] #unpaid-bills-modal .panel,
+    [data-theme="light"] #customer-collect-modal .panel,
+    [data-theme="light"] #reset-tournament-modal .panel,
+    [data-theme="light"] #tournament-expense-modal .panel,
+    [data-theme="light"] #tournament-modal .modal-box,
+    [data-theme="light"] #bulk-import-modal .modal-box,
+    [data-theme="light"] #match-score-modal .modal-box,
+    [data-theme="light"] #live-draw-ceremony-modal .modal-box,
+    [data-theme="light"] #fullscreen-standings-modal .modal-box,
+    [data-theme="light"] #staff-reset-pw-modal .panel,
+    [data-theme="light"] #checkout-modal .panel,
+    [data-theme="light"] #quick-food-modal .panel,
+    [data-theme="light"] #expense-edit-modal .panel,
+    [data-theme="light"] #edit-session-modal .panel,
+    [data-theme="light"] #missing-record-modal .panel,
+    [data-theme="light"] #waiting-edit-modal .panel,
+    [data-theme="light"] #edit-notice-modal .panel {
+      background: #ffffff !important;
+      border-color: #c8d6ec !important;
+      color: #10141e !important;
+      box-shadow: 0 20px 45px rgba(0,0,0,0.12) !important;
+    }
+
+    [data-theme="light"] .modal-overlay .bg-\[\#141c2b\],
+    [data-theme="light"] .modal-overlay .bg-\[\#101622\],
+    [data-theme="light"] .modal-overlay .bg-\[\#0e1420\],
+    [data-theme="light"] .modal-overlay .bg-\[\#0e131d\],
+    [data-theme="light"] .modal-overlay .bg-\[\#0f1520\],
+    [data-theme="light"] .modal-overlay .bg-\[\#111722\],
+    [data-theme="light"] .modal-overlay .bg-\[\#161c28\],
+    [data-theme="light"] .modal-overlay .bg-\[\#161d2a\],
+    [data-theme="light"] .modal-overlay .bg-\[\#06090e\],
+    [data-theme="light"] .modal-overlay .bg-\[\#070b11\],
+    [data-theme="light"] .modal-overlay .bg-\[\#0a0e17\],
+    [data-theme="light"] .modal-overlay .bg-\[\#090d14\],
+    [data-theme="light"] .modal-overlay .bg-\[\#131b27\] {
+      background-color: #f4f7fc !important;
+      border-color: #d1dae8 !important;
+      color: #10141e !important;
+    }
+
+    [data-theme="light"] #unpaid-modal-customer-list > div,
+    [data-theme="light"] .unpaid-customer-card {
+      background-color: #ffffff !important;
+      border-color: rgba(176,35,53,.22) !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
+    }
+    [data-theme="light"] #unpaid-bills-modal .bg-\[\#111722\] {
+      background-color: #f4f7fc !important;
+      border-color: #d1dae8 !important;
+    }
+    [data-theme="light"] #unpaid-bills-modal .bg-\[\#161c28\] {
+      background-color: #ffffff !important;
+      border-color: rgba(176,35,53,.25) !important;
+    }
+    [data-theme="light"] #unpaid-bills-modal .bg-\[\#0e131d\] {
+      background-color: #f8fafc !important;
+      border-color: #e2e8f0 !important;
+    }
+    [data-theme="light"] #records-unpaid-customer-summary {
+      background-color: #fff5f5 !important;
+      border-color: rgba(176,35,53,.25) !important;
+    }
+    [data-theme="light"] #records-unpaid-customer-summary .bg-\[\#141a26\] {
+      background-color: #ffffff !important;
+      border-color: rgba(176,35,53,.2) !important;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.03) !important;
+    }
+    [data-theme="light"] .overview-unpaid-card {
+      background-color: #ffffff !important;
+      border-color: rgba(176,35,53,.22) !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.03) !important;
+    }
+    [data-theme="light"] .overview-unpaid-card .bg-black\/20,
+    [data-theme="light"] .overview-unpaid-card .bg-black\/10 {
+      background-color: #f8fafc !important;
+      border-color: #e2e8f0 !important;
+    }
+
+    /* ---- Light mode: Checkout & Collect modal inner panels ---- */
+    [data-theme="light"] #checkout-modal .panel {
+      background-color: #ffffff !important;
+      border-color: #c8d6ec !important;
+    }
+    [data-theme="light"] #checkout-modal .bg-\[\#0f1520\] {
+      background-color: #fbfcfe !important;
+      border-color: #d8e2f0 !important;
+    }
+    [data-theme="light"] #customer-collect-modal .bg-rose-500\/10 {
+      background-color: #fff8f8 !important;
+      border-color: rgba(176,35,53,.25) !important;
+    }
+    [data-theme="light"] #checkout-modal .bg-slate-900,
+    [data-theme="light"] #customer-collect-modal .bg-slate-900\/60 {
+      background-color: #f0f4fa !important;
+      border-color: #c8d6ec !important;
+    }
+    [data-theme="light"] .checkout-status-btn:not(.active),
+    [data-theme="light"] .cust-collect-status-btn:not(.active),
+    [data-theme="light"] .cust-collect-method-btn:not(.active) {
+      background-color: #eef2fa !important;
+      border-color: #c0cfe8 !important;
+      color: var(--text-secondary) !important;
+    }
+    [data-theme="light"] .checkout-method-btn:not(.active):not([class*="border-\[\#d8ff45\]"]):not([class*="border-sky-400"]) {
+      background-color: #eef2fa !important;
+      border-color: #c0cfe8 !important;
+      color: var(--text-secondary) !important;
+    }
 
     /* ---- Food row: responsive 2-row layout on mobile ---- */
     /* Row 1: source | qty | unit-price | total | remove */
@@ -925,16 +1076,20 @@
 
               <!-- Row 2: Date Picker, Quick Date Chips, Status Pills, and Payment Filter -->
               <div class="flex flex-wrap items-center justify-between gap-2.5 pt-1">
-                <!-- Date Filter Group -->
+                <!-- Date Filter Group: Start Date & End Date -->
                 <div class="flex flex-wrap items-center gap-1.5">
-                  <div class="flex items-center gap-1.5 bg-[#10141e] border border-slate-700 rounded-lg px-2.5 py-1">
-                    <i data-lucide="calendar" width="14" height="14" class="text-[#d8ff45]"></i>
-                    <label for="records-date-filter" class="text-[11px] text-slate-400 font-medium">Date:</label>
-                    <input id="records-date-filter" type="date" class="bg-transparent text-xs text-slate-200 outline-none border-0 cursor-pointer" title="Pick a particular date">
+                  <div class="flex items-center gap-1 bg-[#10141e] border border-slate-700 rounded-lg px-2 py-1">
+                    <i data-lucide="calendar" width="13" height="13" class="text-[#d8ff45]"></i>
+                    <label for="records-date-start" class="text-[11px] text-slate-400 font-medium">From:</label>
+                    <input id="records-date-start" type="date" class="bg-transparent text-xs text-slate-200 outline-none border-0 cursor-pointer" title="Start date">
+                  </div>
+                  <div class="flex items-center gap-1 bg-[#10141e] border border-slate-700 rounded-lg px-2 py-1">
+                    <label for="records-date-end" class="text-[11px] text-slate-400 font-medium">To:</label>
+                    <input id="records-date-end" type="date" class="bg-transparent text-xs text-slate-200 outline-none border-0 cursor-pointer" title="End date">
                   </div>
                   <button type="button" id="records-date-today" class="rounded-lg px-2.5 py-1 text-xs font-semibold border border-slate-700 text-slate-300 hover:text-white transition cursor-pointer">Today</button>
                   <button type="button" id="records-date-yesterday" class="rounded-lg px-2.5 py-1 text-xs font-semibold border border-slate-700 text-slate-300 hover:text-white transition cursor-pointer">Yesterday</button>
-                  <button type="button" id="records-date-clear" class="hidden rounded-lg px-2 py-1 text-xs font-semibold text-amber-400 hover:text-amber-300 transition cursor-pointer" title="Show all dates">✕ All Dates</button>
+                  <button type="button" id="records-date-clear" class="hidden rounded-lg px-2 py-1 text-xs font-semibold text-amber-400 hover:text-amber-300 transition cursor-pointer" title="Clear date range">✕ Clear Dates</button>
                 </div>
 
                 <!-- Status & Payment Pills -->
@@ -3487,6 +3642,103 @@
           <i data-lucide="archive" width="14" height="14"></i> Open in Lounge Log (All Records)
         </button>
         <button id="unpaid-modal-close-btn" type="button" class="rounded-xl border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white cursor-pointer">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== CUSTOMER COLLECT MODAL ===================== -->
+  <div id="customer-collect-modal" class="modal-overlay">
+    <div class="panel rounded-2xl p-6 w-full max-w-md">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-700/80 mb-4">
+        <div class="flex items-center gap-2.5">
+          <span class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-rose-500/20 text-[#ff6875] border border-rose-500/30">
+            <i data-lucide="wallet" width="18" height="18"></i>
+          </span>
+          <div>
+            <p class="mono text-[10px] font-bold tracking-[.16em] text-[#d8ff45]">COLLECT PAYMENT</p>
+            <h3 id="cust-collect-customer-name" class="font-bold text-lg text-white truncate">—</h3>
+          </div>
+        </div>
+        <button id="cust-collect-modal-close" type="button" class="text-slate-400 hover:text-white text-xl p-1 leading-none cursor-pointer">✕</button>
+      </div>
+
+      <!-- Customer & Outstanding Total Card -->
+      <div class="rounded-xl p-3.5 mb-3.5 border border-rose-500/30 bg-rose-500/10 flex items-center justify-between gap-3">
+        <div>
+          <span class="text-xs text-slate-400 block font-medium">Total Outstanding</span>
+          <p id="cust-collect-phone" class="text-xs text-slate-400 mono mt-0.5"></p>
+        </div>
+        <div class="text-right">
+          <span id="cust-collect-total-due" class="mono text-2xl font-bold text-[#ff6875]">रु 0</span>
+          <span id="cust-collect-session-count" class="text-[11px] text-slate-400 block font-medium">1 session</span>
+        </div>
+      </div>
+
+      <!-- Included Sessions Breakdown list -->
+      <div class="mb-4">
+        <span class="text-xs font-semibold text-slate-400 block mb-1.5">Unpaid Sessions Included:</span>
+        <div id="cust-collect-sessions-list" class="space-y-1.5 max-h-36 overflow-y-auto pr-1"></div>
+      </div>
+
+      <!-- Settlement Status selection -->
+      <div class="mb-3.5">
+        <label class="block text-xs text-slate-400 mb-1.5 font-semibold">Settlement Action</label>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="cust-collect-status-full" type="button" class="cust-collect-status-btn active rounded-lg border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] py-2 px-2 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition">
+            <i data-lucide="check-circle-2" width="14" height="14"></i> Full Settlement
+          </button>
+          <button id="cust-collect-status-partial" type="button" class="cust-collect-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-2 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition">
+            <i data-lucide="pie-chart" width="14" height="14"></i> Partial / Edit
+          </button>
+        </div>
+      </div>
+
+      <!-- Paid & Due Editable Fields -->
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <div>
+          <label for="cust-collect-paid-amount" class="block text-xs font-semibold text-emerald-400 mb-1">Amount Paid (रु)</label>
+          <input id="cust-collect-paid-amount" type="number" min="0" step="1" class="form-control mono font-bold text-base text-emerald-300">
+        </div>
+        <div>
+          <label for="cust-collect-due-amount" class="block text-xs font-semibold text-rose-400 mb-1">Remaining Due (रु)</label>
+          <input id="cust-collect-due-amount" type="number" min="0" step="1" class="form-control mono font-bold text-base text-rose-400">
+        </div>
+      </div>
+
+      <!-- Payment Method -->
+      <div class="mb-4">
+        <label class="block text-xs text-slate-400 mb-1.5 font-semibold">Payment Method</label>
+        <div class="grid grid-cols-3 gap-2">
+          <button id="cust-collect-method-cash" type="button" class="cust-collect-method-btn rounded-xl py-2 px-2 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] flex items-center justify-center gap-1 cursor-pointer transition">
+            💵 Cash
+          </button>
+          <button id="cust-collect-method-online" type="button" class="cust-collect-method-btn rounded-xl py-2 px-2 text-xs font-bold border border-slate-600 bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center gap-1 cursor-pointer transition">
+            📱 Online
+          </button>
+          <button id="cust-collect-method-split" type="button" class="cust-collect-method-btn rounded-xl py-2 px-2 text-xs font-bold border border-slate-600 bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center gap-1 cursor-pointer transition">
+            ⚡ Split
+          </button>
+        </div>
+
+        <!-- Split Fields (if split selected) -->
+        <div id="cust-collect-split-fields" class="hidden mt-2.5 p-2.5 rounded-xl border border-slate-700 bg-slate-900/60 grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-[11px] text-slate-400 block mb-0.5">Cash Amount</label>
+            <input id="cust-collect-split-cash" type="number" min="0" class="form-control py-1 text-xs mono">
+          </div>
+          <div>
+            <label class="text-[11px] text-slate-400 block mb-0.5">Online Amount</label>
+            <input id="cust-collect-split-online" type="number" min="0" class="form-control py-1 text-xs mono">
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="space-y-2 pt-2 border-t border-slate-700/80">
+        <button id="cust-collect-confirm-btn" type="button" class="w-full rounded-xl py-2.5 font-bold text-sm flex items-center justify-center gap-2 bg-rose-500 hover:bg-rose-600 text-white shadow transition cursor-pointer">
+          <i data-lucide="check" width="16" height="16"></i> Confirm Collection
+        </button>
+        <button id="cust-collect-cancel-btn" type="button" class="w-full rounded-xl py-2 text-xs font-semibold text-slate-400 hover:text-white border border-slate-700 hover:border-slate-600 transition cursor-pointer">Cancel</button>
       </div>
     </div>
   </div>

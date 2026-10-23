@@ -380,9 +380,12 @@
   function showUnpaidRecordsInLog() {
     switchPage("page-records");
     recordsFilterPay = "unpaid";
-    recordsFilterDate = "";
-    const dateInput = document.getElementById("records-date-filter");
-    if (dateInput) dateInput.value = "";
+    recordsFilterStartDate = "";
+    recordsFilterEndDate = "";
+    const startInput = document.getElementById("records-date-start");
+    if (startInput) startInput.value = "";
+    const endInput = document.getElementById("records-date-end");
+    if (endInput) endInput.value = "";
     const dateClear = document.getElementById("records-date-clear");
     if (dateClear) dateClear.classList.add("hidden");
 
@@ -485,21 +488,26 @@
 
     filteredGroups.forEach((g) => {
       const card = document.createElement("div");
-      card.className = "rounded-xl border border-rose-500/30 bg-[#161c28] p-3.5 space-y-2.5 transition hover:border-rose-500/50";
+      card.className = "unpaid-customer-card rounded-xl border border-rose-500/30 bg-[#161c28] p-3.5 space-y-2.5 transition hover:border-rose-500/50";
 
       const header = document.createElement("div");
-      header.className = "flex items-center justify-between gap-2 flex-wrap border-b border-slate-700/60 pb-2.5";
+      header.className = "flex items-center justify-between gap-3 flex-wrap border-b border-slate-700/60 pb-2.5";
       header.innerHTML = `
-        <div>
-          <div class="flex items-center gap-2">
-            <h4 class="font-bold text-white text-base">${escapeHtml(g.customerName)}</h4>
-            <span class="rounded-full px-2 py-0.5 text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">${g.records.length} session${g.records.length > 1 ? "s" : ""}</span>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <h4 class="font-bold text-base truncate">${escapeHtml(g.customerName)}</h4>
+            <span class="rounded-full px-2 py-0.5 text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 shrink-0">${g.records.length} session${g.records.length > 1 ? "s" : ""}</span>
           </div>
           ${g.customerPhone ? `<p class="text-xs text-slate-400 mt-0.5 mono">📱 ${escapeHtml(g.customerPhone)}</p>` : ""}
         </div>
-        <div class="text-right">
-          <span class="text-[11px] text-slate-400 block font-medium">Total Outstanding</span>
-          <span class="mono font-bold text-lg text-[#ff6875]">${inr(g.totalDue)}</span>
+        <div class="flex items-center gap-3 shrink-0">
+          <div class="text-right">
+            <span class="text-[11px] text-slate-400 block font-medium">Total Outstanding</span>
+            <span class="mono font-bold text-lg text-[#ff6875]">${inr(g.totalDue)}</span>
+          </div>
+          <button type="button" class="btn-customer-collect px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-500 hover:bg-rose-600 text-white shadow transition cursor-pointer flex items-center gap-1.5 shrink-0">
+            <i data-lucide="wallet" width="14" height="14"></i> Collect ${inr(g.totalDue)}
+          </button>
         </div>
       `;
       card.appendChild(header);
@@ -516,30 +524,25 @@
         const partialNote = breakdown.isPartial ? `<span class="text-amber-400 ml-1 font-semibold">(Partial: ${inr(breakdown.paidAmount)} paid)</span>` : "";
 
         row.innerHTML = `
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2 truncate">
-              <span class="font-semibold text-slate-200 mono">${escapeHtml(stationStr)}</span>
-              <span class="text-slate-400">·</span>
-              <span class="text-slate-400 mono">${durStr}</span>
-              ${partialNote}
-            </div>
-            <p class="text-[11px] text-slate-500 mt-0.5">${dateStr}</p>
+          <div class="min-w-0 flex-1 truncate">
+            <span class="font-semibold mono">${escapeHtml(stationStr)}</span>
+            <span class="text-slate-400">·</span>
+            <span class="text-slate-400 mono">${durStr}</span>
+            ${partialNote}
+            <span class="text-[11px] text-slate-400 ml-2">${dateStr}</span>
           </div>
-          <div class="flex items-center gap-2 shrink-0">
-            <span class="mono font-bold text-[#ff6875]">${inr(due)}</span>
-            <button type="button" class="btn-collect-session px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500 hover:bg-rose-600 text-white cursor-pointer shadow-sm transition">Collect</button>
-          </div>
+          <span class="mono font-bold text-rose-400 shrink-0">${inr(due)}</span>
         `;
-
-        row.querySelector(".btn-collect-session").addEventListener("click", () => {
-          closeUnpaidBillsModal();
-          openCheckoutModal(r);
-        });
-
         sessionsWrap.appendChild(row);
       });
 
       card.appendChild(sessionsWrap);
+
+      card.querySelector(".btn-customer-collect").addEventListener("click", () => {
+        closeUnpaidBillsModal();
+        openCustomerCollectModal(g);
+      });
+
       listEl.appendChild(card);
     });
     if (window.lucide) window.lucide.createIcons({ root: listEl });
@@ -568,6 +571,304 @@
       viewLogBtn.addEventListener("click", () => {
         closeUnpaidBillsModal();
         showUnpaidRecordsInLog();
+      });
+    }
+  }
+
+  // ---------- Single Customer Collect Modal & Settlement ----------
+  let activeCollectGroup = null;
+  let activeCollectMethod = "Cash";
+  let activeCollectStatus = "full"; // "full" or "partial"
+
+  function openCustomerCollectModal(group) {
+    if (!group || !group.records || !group.records.length) return;
+    activeCollectGroup = group;
+    activeCollectMethod = "Cash";
+    activeCollectStatus = "full";
+
+    const modal = document.getElementById("customer-collect-modal");
+    if (!modal) return;
+
+    document.getElementById("cust-collect-customer-name").textContent = group.customerName || "Customer";
+    const phoneEl = document.getElementById("cust-collect-phone");
+    if (phoneEl) {
+      phoneEl.textContent = group.customerPhone ? "📱 " + group.customerPhone : "Walk-in Guest";
+    }
+    document.getElementById("cust-collect-total-due").textContent = inr(group.totalDue);
+    document.getElementById("cust-collect-session-count").textContent = `${group.records.length} unpaid session${group.records.length > 1 ? "s" : ""}`;
+
+    // Render included sessions list
+    const sessionsList = document.getElementById("cust-collect-sessions-list");
+    if (sessionsList) {
+      sessionsList.innerHTML = group.records.map(({ record: r, due, breakdown }) => {
+        const stationStr = r.station_name || "Station";
+        const durStr = `${r.duration_minutes || 0}m`;
+        const dateStr = r.created_at ? fmtDateTime(r.created_at) : "";
+        const partialNote = breakdown.isPartial ? `<span class="text-amber-500 text-[10px] font-semibold">(${inr(breakdown.paidAmount)} paid)</span>` : "";
+        return `
+          <div class="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/10 border border-slate-700/60 text-xs">
+            <div class="min-w-0 truncate">
+              <span class="font-bold mono">${escapeHtml(stationStr)}</span>
+              <span class="text-slate-400">·</span>
+              <span class="text-slate-400 mono">${durStr}</span>
+              ${partialNote}
+              <p class="text-[10px] text-slate-500 mt-0.5">${dateStr}</p>
+            </div>
+            <span class="mono font-bold text-rose-400 shrink-0">${inr(due)}</span>
+          </div>
+        `;
+      }).join("");
+    }
+
+    // Set initial amounts: Paid = totalDue, Due = 0
+    const paidInput = document.getElementById("cust-collect-paid-amount");
+    const dueInput = document.getElementById("cust-collect-due-amount");
+    if (paidInput) paidInput.value = group.totalDue;
+    if (dueInput) dueInput.value = 0;
+
+    // Reset status & method buttons
+    updateCustCollectStatusUI("full");
+    updateCustCollectMethodUI("Cash");
+
+    modal.classList.add("show");
+    if (window.lucide) window.lucide.createIcons({ root: modal });
+  }
+
+  function closeCustomerCollectModal() {
+    const modal = document.getElementById("customer-collect-modal");
+    if (modal) modal.classList.remove("show");
+    activeCollectGroup = null;
+  }
+
+  function updateCustCollectStatusUI(status) {
+    activeCollectStatus = status;
+    const fullBtn = document.getElementById("cust-collect-status-full");
+    const partialBtn = document.getElementById("cust-collect-status-partial");
+    if (fullBtn) {
+      const isFull = status === "full";
+      fullBtn.classList.toggle("active", isFull);
+      fullBtn.className = isFull
+        ? "cust-collect-status-btn active rounded-lg border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] py-2 px-2 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition"
+        : "cust-collect-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-2 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition";
+    }
+    if (partialBtn) {
+      const isPartial = status === "partial";
+      partialBtn.classList.toggle("active", isPartial);
+      partialBtn.className = isPartial
+        ? "cust-collect-status-btn active rounded-lg border border-amber-400 bg-amber-400/20 text-amber-300 py-2 px-2 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition"
+        : "cust-collect-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-2 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition";
+    }
+
+    if (activeCollectGroup) {
+      const paidInput = document.getElementById("cust-collect-paid-amount");
+      const dueInput = document.getElementById("cust-collect-due-amount");
+      if (status === "full") {
+        if (paidInput) paidInput.value = activeCollectGroup.totalDue;
+        if (dueInput) dueInput.value = 0;
+      }
+    }
+  }
+
+  function updateCustCollectMethodUI(method) {
+    activeCollectMethod = method;
+    const cashBtn = document.getElementById("cust-collect-method-cash");
+    const onlineBtn = document.getElementById("cust-collect-method-online");
+    const splitBtn = document.getElementById("cust-collect-method-split");
+    const splitFields = document.getElementById("cust-collect-split-fields");
+
+    [cashBtn, onlineBtn, splitBtn].forEach((b) => {
+      if (b) {
+        b.classList.remove("border-[#d8ff45]", "bg-[#d8ff45]/20", "text-[#d8ff45]", "border-sky-400", "bg-sky-400/20", "text-sky-300");
+        b.classList.add("border-slate-600", "bg-slate-800", "text-slate-400");
+      }
+    });
+
+    if (method === "Cash" && cashBtn) {
+      cashBtn.className = "cust-collect-method-btn rounded-xl py-2 px-2 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] flex items-center justify-center gap-1 cursor-pointer transition";
+    } else if (method === "Online" && onlineBtn) {
+      onlineBtn.className = "cust-collect-method-btn rounded-xl py-2 px-2 text-xs font-bold border border-sky-400 bg-sky-400/20 text-sky-300 flex items-center justify-center gap-1 cursor-pointer transition";
+    } else if (method === "Split" && splitBtn) {
+      splitBtn.className = "cust-collect-method-btn rounded-xl py-2 px-2 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] flex items-center justify-center gap-1 cursor-pointer transition";
+    }
+
+    if (splitFields) {
+      splitFields.classList.toggle("hidden", method !== "Split");
+      if (method === "Split" && activeCollectGroup) {
+        const paidAmount = Number(document.getElementById("cust-collect-paid-amount")?.value) || activeCollectGroup.totalDue;
+        const cashIn = document.getElementById("cust-collect-split-cash");
+        const onlineIn = document.getElementById("cust-collect-split-online");
+        if (cashIn && !cashIn.value) cashIn.value = Math.round(paidAmount / 2);
+        if (onlineIn && !onlineIn.value) onlineIn.value = paidAmount - (Number(cashIn.value) || 0);
+      }
+    }
+  }
+
+  function initCustomerCollectModal() {
+    const modal = document.getElementById("customer-collect-modal");
+    if (!modal) return;
+
+    const closeBtn = document.getElementById("cust-collect-modal-close");
+    const cancelBtn = document.getElementById("cust-collect-cancel-btn");
+    if (closeBtn) closeBtn.addEventListener("click", closeCustomerCollectModal);
+    if (cancelBtn) cancelBtn.addEventListener("click", closeCustomerCollectModal);
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) closeCustomerCollectModal();
+    });
+
+    // Settlement status buttons
+    const fullBtn = document.getElementById("cust-collect-status-full");
+    const partialBtn = document.getElementById("cust-collect-status-partial");
+    if (fullBtn) fullBtn.addEventListener("click", () => updateCustCollectStatusUI("full"));
+    if (partialBtn) partialBtn.addEventListener("click", () => updateCustCollectStatusUI("partial"));
+
+    // Payment method buttons
+    const cashBtn = document.getElementById("cust-collect-method-cash");
+    const onlineBtn = document.getElementById("cust-collect-method-online");
+    const splitBtn = document.getElementById("cust-collect-method-split");
+    if (cashBtn) cashBtn.addEventListener("click", () => updateCustCollectMethodUI("Cash"));
+    if (onlineBtn) onlineBtn.addEventListener("click", () => updateCustCollectMethodUI("Online"));
+    if (splitBtn) splitBtn.addEventListener("click", () => updateCustCollectMethodUI("Split"));
+
+    // Two-way sync for Paid Amount & Due Amount inputs
+    const paidInput = document.getElementById("cust-collect-paid-amount");
+    const dueInput = document.getElementById("cust-collect-due-amount");
+
+    if (paidInput && dueInput) {
+      paidInput.addEventListener("input", () => {
+        if (!activeCollectGroup) return;
+        const paid = Math.max(0, Number(paidInput.value) || 0);
+        const due = Math.max(0, activeCollectGroup.totalDue - paid);
+        dueInput.value = due;
+        if (due > 0 && activeCollectStatus !== "partial") updateCustCollectStatusUI("partial");
+        else if (due === 0 && activeCollectStatus !== "full") updateCustCollectStatusUI("full");
+      });
+
+      dueInput.addEventListener("input", () => {
+        if (!activeCollectGroup) return;
+        const due = Math.max(0, Number(dueInput.value) || 0);
+        const paid = Math.max(0, activeCollectGroup.totalDue - due);
+        paidInput.value = paid;
+        if (due > 0 && activeCollectStatus !== "partial") updateCustCollectStatusUI("partial");
+        else if (due === 0 && activeCollectStatus !== "full") updateCustCollectStatusUI("full");
+      });
+    }
+
+    // Confirm button
+    const confirmBtn = document.getElementById("cust-collect-confirm-btn");
+    if (confirmBtn) {
+      confirmBtn.addEventListener("click", async () => {
+        if (!activeCollectGroup || !activeCollectGroup.records.length) return;
+        const group = activeCollectGroup;
+        const paidAmount = Math.max(0, Number(paidInput?.value) || 0);
+        const dueAmount = Math.max(0, Number(dueInput?.value) || 0);
+
+        let cashAmount = 0;
+        let onlineAmount = 0;
+        let dbMethod = activeCollectMethod === "Split" ? "Cash" : activeCollectMethod;
+
+        if (activeCollectMethod === "Split") {
+          const splitCash = Number(document.getElementById("cust-collect-split-cash")?.value) || 0;
+          const splitOnline = Number(document.getElementById("cust-collect-split-online")?.value) || 0;
+          cashAmount = splitCash;
+          onlineAmount = (cashAmount + splitOnline === paidAmount) ? splitOnline : Math.max(0, paidAmount - cashAmount);
+        } else if (activeCollectMethod === "Cash") {
+          cashAmount = paidAmount;
+        } else if (activeCollectMethod === "Online") {
+          onlineAmount = paidAmount;
+        }
+
+        const confirmMsg = `Collect payment for ${group.customerName}?\n• Amount Paid: ${inr(paidAmount)}\n• Remaining Due: ${inr(dueAmount)}\n• Method: ${activeCollectMethod}`;
+        if (!confirm(confirmMsg)) return;
+
+        confirmBtn.disabled = true;
+
+        try {
+          // Greedily distribute paidAmount across the customer's unpaid sessions
+          let remainingPayment = paidAmount;
+
+          for (let i = 0; i < group.records.length; i++) {
+            const item = group.records[i];
+            const rec = item.record;
+            const recDue = item.due;
+
+            let payForRec = 0;
+            if (i === group.records.length - 1 && remainingPayment > recDue) {
+              payForRec = remainingPayment;
+            } else {
+              payForRec = Math.min(remainingPayment, recDue);
+            }
+            remainingPayment = Math.max(0, remainingPayment - payForRec);
+
+            const prevPaid = Number(item.breakdown.paidAmount) || 0;
+            const newTotalPaid = prevPaid + payForRec;
+            const newRecDue = Math.max(0, (Number(rec.amount) || 0) - newTotalPaid);
+            const isFullyPaid = newRecDue <= 0 && newTotalPaid > 0;
+
+            let recCash = 0;
+            let recOnline = 0;
+            if (paidAmount > 0) {
+              recCash = Math.round((payForRec / paidAmount) * cashAmount);
+              recOnline = payForRec - recCash;
+            }
+
+            let finalNotes = (rec.notes || "").replace(/\[Payment:\s*(?:Split|Partial|Unpaid)[^\]]*\]/gi, "").trim();
+            let paymentTag = "";
+            if (!isFullyPaid && newTotalPaid > 0) {
+              paymentTag = `[Payment: Partial | Paid: ${newTotalPaid} | Due: ${newRecDue} | Method: ${activeCollectMethod}]`;
+            } else if (activeCollectMethod === "Split" && isFullyPaid) {
+              paymentTag = `[Payment: Split | Cash: ${recCash} | Online: ${recOnline}]`;
+            } else if (!isFullyPaid && newTotalPaid === 0) {
+              paymentTag = `[Payment: Unpaid | Due: ${newRecDue}]`;
+            }
+            if (paymentTag) finalNotes = [finalNotes, paymentTag].filter(Boolean).join(" ");
+
+            const updatePayload = {
+              status: "Completed",
+              paid: isFullyPaid,
+              payment_method: isFullyPaid || newTotalPaid > 0 ? dbMethod : null,
+              paid_amount: newTotalPaid,
+              due_amount: newRecDue,
+              cash_amount: recCash,
+              online_amount: recOnline,
+              paid_at: (payForRec > 0 ? new Date().toISOString() : rec.paid_at),
+              notes: finalNotes
+            };
+
+            let { error } = await window.sb.from("sessions").update(updatePayload).eq("id", rec.id);
+            if (error && (error.message.includes("cash_amount") || error.message.includes("online_amount") || error.message.includes("paid_amount") || error.message.includes("due_amount"))) {
+              delete updatePayload.cash_amount;
+              delete updatePayload.online_amount;
+              delete updatePayload.paid_amount;
+              delete updatePayload.due_amount;
+              await window.sb.from("sessions").update(updatePayload).eq("id", rec.id);
+            }
+
+            // Update in-memory records cache
+            const idx = records.findIndex((r) => r.id === rec.id);
+            if (idx !== -1) {
+              records[idx] = {
+                ...records[idx],
+                ...updatePayload,
+                paid: isFullyPaid,
+                paid_amount: newTotalPaid,
+                due_amount: newRecDue
+              };
+            }
+          }
+
+          showToast(`Collected ${inr(paidAmount)} from ${group.customerName}!`);
+          closeCustomerCollectModal();
+          renderSummary();
+          renderRecordsList();
+          if (document.getElementById("unpaid-bills-modal")?.classList.contains("show")) {
+            renderUnpaidBillsModal();
+          }
+        } catch (err) {
+          console.error("Collect error:", err);
+          showToast("Failed to record collection: " + (err.message || "Unknown error"));
+        } finally {
+          confirmBtn.disabled = false;
+        }
       });
     }
   }
@@ -1732,62 +2033,40 @@
           ? `${g.records.length} sessions (${stationsSummary})`
           : `${g.records[0].record.station_name || "—"} · ${g.records[0].record.duration_minutes || 0} min`;
 
-        if (g.records.length === 1) {
-          const single = g.records[0];
-          const dueText = single.breakdown.isPartial
-            ? `<div class="text-right"><span class="mono font-bold text-amber-300 text-sm">Due: ${inr(single.due)}</span><p class="text-[10px] text-slate-400">Paid: ${inr(single.breakdown.paidAmount)} / ${inr(single.breakdown.total)}</p></div>`
-            : `<span class="mono font-bold text-[#ff6875] text-sm">${inr(single.due)}</span>`;
-
-          card.innerHTML = `
-            <div class="flex items-center justify-between gap-3">
-              <div class="min-w-0">
-                <p class="font-semibold text-sm truncate text-white">${escapeHtml(g.customerName)}</p>
-                <p class="text-xs text-slate-400 truncate mono">${sessionCountLabel}</p>
+        card.innerHTML = `
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <p class="font-semibold text-sm truncate">${escapeHtml(g.customerName)}</p>
+                ${g.records.length > 1 ? `<span class="rounded-full px-2 py-0.5 text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">${g.records.length} Sessions</span>` : ""}
               </div>
-              <div class="flex items-center gap-2 shrink-0">
-                ${dueText}
-                <button type="button" class="unpaid-collect-btn rounded-lg px-2.5 py-1.5 text-xs font-bold cursor-pointer transition hover:brightness-110 whitespace-nowrap bg-rose-500 text-white"
-                  data-id="${single.record.id}">Collect</button>
-              </div>
-            </div>`;
-          card.querySelector(".unpaid-collect-btn").addEventListener("click", () => {
-            openCheckoutModal(single.record);
-          });
-        } else {
-          // Multiple sessions for this customer: grouped with combined total amount!
-          card.innerHTML = `
-            <div class="flex items-center justify-between gap-3">
-              <div class="min-w-0">
-                <div class="flex items-center gap-2">
-                  <p class="font-semibold text-sm truncate text-white">${escapeHtml(g.customerName)}</p>
-                  <span class="rounded-full px-2 py-0.5 text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">${g.records.length} Sessions</span>
-                </div>
-                <p class="text-xs text-slate-400 truncate mono">${sessionCountLabel}</p>
-              </div>
-              <div class="text-right shrink-0">
+              <p class="text-xs text-slate-400 truncate mono">${sessionCountLabel}</p>
+            </div>
+            <div class="flex items-center gap-2.5 shrink-0">
+              <div class="text-right">
                 <span class="text-[10px] text-slate-400 block font-medium">Total Due</span>
                 <span class="mono font-bold text-[#ff6875] text-sm sm:text-base">${inr(g.totalDue)}</span>
               </div>
+              <button type="button" class="unpaid-collect-btn rounded-lg px-2.5 py-1.5 text-xs font-bold cursor-pointer transition hover:brightness-110 whitespace-nowrap bg-rose-500 hover:bg-rose-600 text-white flex items-center gap-1 shadow-sm">
+                Collect
+              </button>
             </div>
-            <div class="space-y-1.5 pt-1 border-t border-rose-500/10">
+          </div>
+          ${g.records.length > 1 ? `
+            <div class="space-y-1 pt-1 border-t border-rose-500/10">
               ${g.records.map((item) => `
-                <div class="flex items-center justify-between gap-2 p-1.5 rounded bg-black/20 text-xs">
-                  <span class="text-slate-300 mono truncate">${escapeHtml(item.record.station_name || "Station")} (${item.record.duration_minutes || 0}m)</span>
-                  <div class="flex items-center gap-2 shrink-0">
-                    <span class="mono font-bold text-rose-300">${inr(item.due)}</span>
-                    <button type="button" class="unpaid-item-collect-btn px-2 py-0.5 rounded text-[11px] font-bold bg-rose-500 hover:bg-rose-600 text-white cursor-pointer" data-rec-id="${item.record.id}">Collect</button>
-                  </div>
+                <div class="flex items-center justify-between gap-2 p-1.5 rounded bg-black/10 text-xs">
+                  <span class="mono truncate text-slate-300">${escapeHtml(item.record.station_name || "Station")} (${item.record.duration_minutes || 0}m)</span>
+                  <span class="mono font-bold text-rose-400">${inr(item.due)}</span>
                 </div>
               `).join("")}
-            </div>`;
+            </div>` : ""}
+        `;
 
-          card.querySelectorAll(".unpaid-item-collect-btn").forEach((btn) => {
-            btn.addEventListener("click", () => {
-              const rec = records.find((r) => r.id === btn.dataset.recId);
-              if (rec) openCheckoutModal(rec);
-            });
-          });
-        }
+        card.querySelector(".unpaid-collect-btn").addEventListener("click", () => {
+          openCustomerCollectModal(g);
+        });
+
         listEl.appendChild(card);
       });
     }
@@ -2264,6 +2543,8 @@
   let recordsFilterStatus = "all";
   let recordsFilterPay = "all";
   let recordsFilterDate = "";
+  let recordsFilterStartDate = "";
+  let recordsFilterEndDate = "";
   let recordsFilterCustomer = "";
   let recordsSearchQuery = "";
 
@@ -2311,7 +2592,11 @@
           }
         }
 
-        if (recordsFilterDate) {
+        if (recordsFilterStartDate || recordsFilterEndDate) {
+          const recDateStr = getRecordLocalDateStr(r);
+          if (recordsFilterStartDate && recDateStr < recordsFilterStartDate) return false;
+          if (recordsFilterEndDate && recDateStr > recordsFilterEndDate) return false;
+        } else if (recordsFilterDate) {
           const recDateStr = getRecordLocalDateStr(r);
           if (recDateStr !== recordsFilterDate) return false;
         }
@@ -2385,6 +2670,8 @@
     const hasActiveFilter =
       recordsFilterStatus !== "all" ||
       recordsFilterPay !== "all" ||
+      !!recordsFilterStartDate ||
+      !!recordsFilterEndDate ||
       !!recordsFilterDate ||
       !!recordsFilterCustomer ||
       !!recordsSearchQuery;
@@ -2399,7 +2686,25 @@
     summary.textContent = `Showing ${filteredCount} of ${totalCount} records`;
     tagsContainer.innerHTML = "";
 
-    if (recordsFilterDate) {
+    if (recordsFilterStartDate || recordsFilterEndDate) {
+      const todayStr = getTodayDateStr();
+      const yestStr = getYesterdayDateStr();
+      let label = "";
+      if (recordsFilterStartDate && recordsFilterEndDate) {
+        if (recordsFilterStartDate === recordsFilterEndDate) {
+          if (recordsFilterStartDate === todayStr) label = `Today (${recordsFilterStartDate})`;
+          else if (recordsFilterStartDate === yestStr) label = `Yesterday (${recordsFilterStartDate})`;
+          else label = recordsFilterStartDate;
+        } else {
+          label = `${recordsFilterStartDate} → ${recordsFilterEndDate}`;
+        }
+      } else if (recordsFilterStartDate) {
+        label = `From ${recordsFilterStartDate}`;
+      } else {
+        label = `Up to ${recordsFilterEndDate}`;
+      }
+      tagsContainer.appendChild(createFilterTag(`Date: ${label}`, () => setRecordsDateRange("", "")));
+    } else if (recordsFilterDate) {
       const todayStr = getTodayDateStr();
       const yestStr = getYesterdayDateStr();
       let label = recordsFilterDate;
@@ -2469,21 +2774,30 @@
     renderRecordsList();
   }
 
-  function setRecordsDateFilter(dateStr) {
-    recordsFilterDate = (dateStr || "").trim();
-    const dateInput = document.getElementById("records-date-filter");
-    if (dateInput) dateInput.value = recordsFilterDate;
+  function setRecordsDateRange(startStr, endStr) {
+    recordsFilterStartDate = (startStr || "").trim();
+    recordsFilterEndDate = (endStr || "").trim();
+    recordsFilterDate = (recordsFilterStartDate === recordsFilterEndDate) ? recordsFilterStartDate : (recordsFilterStartDate || recordsFilterEndDate);
+
+    const startInput = document.getElementById("records-date-start");
+    const endInput = document.getElementById("records-date-end");
+    const legacyInput = document.getElementById("records-date-filter");
+    if (startInput) startInput.value = recordsFilterStartDate;
+    if (endInput) endInput.value = recordsFilterEndDate;
+    if (legacyInput) legacyInput.value = recordsFilterStartDate;
 
     const clearBtn = document.getElementById("records-date-clear");
-    if (clearBtn) clearBtn.classList.toggle("hidden", !recordsFilterDate);
+    if (clearBtn) clearBtn.classList.toggle("hidden", !recordsFilterStartDate && !recordsFilterEndDate);
 
     const todayStr = getTodayDateStr();
     const yestStr = getYesterdayDateStr();
     const todayBtn = document.getElementById("records-date-today");
     const yestBtn = document.getElementById("records-date-yesterday");
 
+    const isToday = recordsFilterStartDate === todayStr && recordsFilterEndDate === todayStr;
+    const isYest = recordsFilterStartDate === yestStr && recordsFilterEndDate === yestStr;
+
     if (todayBtn) {
-      const isToday = recordsFilterDate === todayStr;
       todayBtn.classList.toggle("bg-[#d8ff45]/20", isToday);
       todayBtn.classList.toggle("border-[#d8ff45]", isToday);
       todayBtn.classList.toggle("text-[#d8ff45]", isToday);
@@ -2491,7 +2805,6 @@
       todayBtn.classList.toggle("text-slate-300", !isToday);
     }
     if (yestBtn) {
-      const isYest = recordsFilterDate === yestStr;
       yestBtn.classList.toggle("bg-[#d8ff45]/20", isYest);
       yestBtn.classList.toggle("border-[#d8ff45]", isYest);
       yestBtn.classList.toggle("text-[#d8ff45]", isYest);
@@ -2500,6 +2813,10 @@
     }
 
     renderRecordsList();
+  }
+
+  function setRecordsDateFilter(dateStr) {
+    setRecordsDateRange(dateStr, dateStr);
   }
 
   function renderRecordsUnpaidSummary(filteredRecords) {
@@ -2531,7 +2848,7 @@
         </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-        ${groups.map((g) => `
+        ${groups.map((g, idx) => `
           <div class="p-2.5 rounded-lg bg-[#141a26] border border-rose-500/20 flex items-center justify-between gap-2 hover:border-rose-500/40 transition">
             <div class="min-w-0">
               <button type="button" class="font-bold text-xs text-white hover:text-[#d8ff45] text-left truncate block records-summary-cust-btn cursor-pointer" data-cust="${escapeHtml(g.customerName)}" title="Click to filter by ${escapeHtml(g.customerName)}">
@@ -2539,8 +2856,13 @@
               </button>
               <p class="text-[11px] text-slate-400 mono">${g.records.length} session${g.records.length > 1 ? "s" : ""} ${g.customerPhone ? `· ${escapeHtml(g.customerPhone)}` : ""}</p>
             </div>
-            <div class="text-right shrink-0">
-              <span class="mono font-bold text-rose-400 text-xs sm:text-sm">${inr(g.totalDue)}</span>
+            <div class="flex items-center gap-2 shrink-0">
+              <div class="text-right">
+                <span class="mono font-bold text-rose-400 text-xs sm:text-sm block">${inr(g.totalDue)}</span>
+              </div>
+              <button type="button" class="records-summary-collect-btn px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500 hover:bg-rose-600 text-white cursor-pointer transition shadow-sm whitespace-nowrap" data-idx="${idx}">
+                Collect
+              </button>
             </div>
           </div>
         `).join("")}
@@ -2550,6 +2872,13 @@
     summaryContainer.querySelectorAll(".records-summary-cust-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         setRecordsCustomerFilter(btn.dataset.cust);
+      });
+    });
+
+    summaryContainer.querySelectorAll(".records-summary-collect-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idx = Number(btn.dataset.idx);
+        if (groups[idx]) openCustomerCollectModal(groups[idx]);
       });
     });
   }
@@ -2600,33 +2929,45 @@
       });
     }
 
-    const dateInput = document.getElementById("records-date-filter");
+    const startInput = document.getElementById("records-date-start");
+    const endInput = document.getElementById("records-date-end");
+    const legacyDateInput = document.getElementById("records-date-filter");
     const dateClearBtn = document.getElementById("records-date-clear");
     const todayBtn = document.getElementById("records-date-today");
     const yestBtn = document.getElementById("records-date-yesterday");
 
-    if (dateInput) {
-      dateInput.addEventListener("change", (e) => {
+    if (startInput) {
+      startInput.addEventListener("change", (e) => {
+        setRecordsDateRange(e.target.value, endInput ? endInput.value : recordsFilterEndDate);
+      });
+    }
+    if (endInput) {
+      endInput.addEventListener("change", (e) => {
+        setRecordsDateRange(startInput ? startInput.value : recordsFilterStartDate, e.target.value);
+      });
+    }
+    if (legacyDateInput) {
+      legacyDateInput.addEventListener("change", (e) => {
         setRecordsDateFilter(e.target.value);
       });
     }
     if (dateClearBtn) {
       dateClearBtn.addEventListener("click", () => {
-        setRecordsDateFilter("");
+        setRecordsDateRange("", "");
       });
     }
     if (todayBtn) {
       todayBtn.addEventListener("click", () => {
         const today = getTodayDateStr();
-        if (recordsFilterDate === today) setRecordsDateFilter("");
-        else setRecordsDateFilter(today);
+        if (recordsFilterStartDate === today && recordsFilterEndDate === today) setRecordsDateRange("", "");
+        else setRecordsDateRange(today, today);
       });
     }
     if (yestBtn) {
       yestBtn.addEventListener("click", () => {
         const yest = getYesterdayDateStr();
-        if (recordsFilterDate === yest) setRecordsDateFilter("");
-        else setRecordsDateFilter(yest);
+        if (recordsFilterStartDate === yest && recordsFilterEndDate === yest) setRecordsDateRange("", "");
+        else setRecordsDateRange(yest, yest);
       });
     }
 
@@ -2664,13 +3005,17 @@
         recordsSearchQuery = "";
         recordsFilterCustomer = "";
         recordsFilterDate = "";
+        recordsFilterStartDate = "";
+        recordsFilterEndDate = "";
         recordsFilterStatus = "all";
         recordsFilterPay = "all";
 
         if (searchInput) searchInput.value = "";
         if (custInput) custInput.value = "";
         if (custClearBtn) custClearBtn.classList.add("hidden");
-        if (dateInput) dateInput.value = "";
+        if (startInput) startInput.value = "";
+        if (endInput) endInput.value = "";
+        if (legacyDateInput) legacyDateInput.value = "";
         if (dateClearBtn) dateClearBtn.classList.add("hidden");
 
         if (todayBtn) {
@@ -7488,6 +7833,7 @@
     initSidebar();
     initCheckoutModal();
     initUnpaidBillsModal();
+    initCustomerCollectModal();
     initEditModal();
     initQuickFoodModal();
     initEditNoticeModal();
