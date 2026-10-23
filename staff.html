@@ -552,6 +552,13 @@
               class="flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800/60 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:border-[#d8ff45] hover:text-[#d8ff45] transition cursor-pointer">
               <i data-lucide="scroll-text" width="16" height="16"></i> Lounge Log
             </button>
+            <button id="overview-unpaid-bills-btn" type="button"
+              class="flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800/60 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:border-rose-500 hover:text-rose-300 transition cursor-pointer"
+              title="View unpaid and due bills in Lounge Log">
+              <i data-lucide="alert-circle" width="16" height="16" class="text-rose-400"></i>
+              <span>Unpaid Bills</span>
+              <span id="overview-unpaid-badge" class="hidden font-mono text-xs px-2 py-0.5 rounded-full font-bold bg-rose-500 text-white shadow-sm">0</span>
+            </button>
           </div>
 
           <!-- KPI cards -->
@@ -573,19 +580,10 @@
             </article>
           </div>
 
-          <!-- Unpaid / Due alert panel -->
-          <div id="overview-unpaid-panel" class="hidden panel rounded-2xl p-5 mb-5 border border-rose-500/25 bg-rose-500/5">
-            <div class="flex items-center justify-between gap-3 mb-3">
-              <div class="flex items-center gap-2">
-                <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-rose-500/20 text-[#ff6875]">
-                  <i data-lucide="alert-circle" width="15" height="15"></i>
-                </span>
-                <h2 class="font-bold text-base">Unpaid / Due</h2>
-                <span id="overview-unpaid-count" class="mono text-xs rounded-full bg-rose-500/20 text-[#ff6875] px-2.5 py-0.5 font-bold">0</span>
-              </div>
-              <span class="text-xs text-slate-500">Completed sessions awaiting payment</span>
-            </div>
-            <div id="overview-unpaid-list" class="grid sm:grid-cols-2 gap-2.5"></div>
+          <!-- Hidden Unpaid panel container kept for backward compatibility with existing DOM lookups -->
+          <div id="overview-unpaid-panel" class="hidden">
+            <span id="overview-unpaid-count" class="hidden">0</span>
+            <div id="overview-unpaid-list" class="hidden"></div>
           </div>
 
           <!-- Active sessions panel -->
@@ -1041,12 +1039,12 @@
           <!-- Dynamic KPI Cards (Reflects selected period & department) -->
           <div class="dashboard-grid mb-6">
             <!-- Net Cafe Earnings -->
-            <article class="panel rounded-2xl p-4 col-span-2">
+            <article id="rev-kpi-earnings-card" class="panel rounded-2xl p-4 col-span-2 cursor-pointer hover:border-[#d8ff45] transition group" title="Click to view Sessions Breakdown table">
               <div class="flex items-center justify-between">
                 <i data-lucide="banknote" class="text-[#d8ff45]" width="19" height="19"></i>
                 <span id="rev-kpi-badge" class="text-[11px] px-2 py-0.5 rounded-full bg-[#d8ff45]/15 text-[#d8ff45] font-semibold border border-[#d8ff45]/30">Net Cafe Earnings</span>
               </div>
-              <p id="revenue-total" class="mono text-2xl font-bold mt-3">रु 0</p>
+              <p id="revenue-total" class="mono text-2xl font-bold mt-3 group-hover:text-[#d8ff45] transition">रु 0</p>
               <div class="flex items-center justify-between text-xs text-slate-400 mt-1">
                 <span id="rev-kpi-desc">Time + Own Food + Commissions</span>
                 <span>Gross collected: <strong id="revenue-gross-total" class="mono text-slate-200">रु 0</strong></span>
@@ -1054,7 +1052,7 @@
             </article>
 
             <!-- Food Orders Price vs Actual Net Profit to Cafe -->
-            <article class="panel rounded-2xl p-4 col-span-2 sm:col-span-1">
+            <article id="rev-kpi-food-card" class="panel rounded-2xl p-4 col-span-2 sm:col-span-1 cursor-pointer hover:border-amber-400 transition group" title="Click to view Restaurant Partnerships & Food Revenue">
               <div class="flex items-center justify-between">
                 <i data-lucide="utensils" class="text-amber-300" width="19" height="19"></i>
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">Food Breakdown</span>
@@ -1073,12 +1071,12 @@
             </article>
 
             <!-- Station Gameplay Time Revenue -->
-            <article class="panel rounded-2xl p-4 col-span-2 sm:col-span-1">
+            <article id="rev-kpi-gameplay-card" class="panel rounded-2xl p-4 col-span-2 sm:col-span-1 cursor-pointer hover:border-sky-400 transition group" title="Click to view Gaming Station Breakdown">
               <div class="flex items-center justify-between">
                 <i data-lucide="gamepad-2" class="text-sky-300" width="19" height="19"></i>
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30">Gameplay Time</span>
               </div>
-              <p id="rev-kpi-station-net" class="mono text-2xl font-bold mt-2.5 text-sky-300">रु 0</p>
+              <p id="rev-kpi-station-net" class="mono text-2xl font-bold mt-2.5 text-sky-300 group-hover:text-sky-200 transition">रु 0</p>
               <div class="flex items-center justify-between text-xs text-slate-400 mt-1">
                 <span>Station Play Earnings</span>
                 <span id="rev-kpi-station-hours" class="mono text-slate-300">0 hrs</span>
@@ -1086,12 +1084,12 @@
             </article>
 
             <!-- Partner Restaurant Payables for Period -->
-            <article class="panel rounded-2xl p-4 col-span-2 sm:col-span-1">
+            <article id="rev-kpi-payables-card" class="panel rounded-2xl p-4 col-span-2 sm:col-span-1 cursor-pointer hover:border-purple-400 transition group" title="Click to view Restaurant Payables">
               <div class="flex items-center justify-between">
                 <i data-lucide="store" class="text-purple-300" width="19" height="19"></i>
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">Partner Payables</span>
               </div>
-              <p id="rev-kpi-payables" class="mono text-2xl font-bold mt-2.5 text-purple-300">रु 0</p>
+              <p id="rev-kpi-payables" class="mono text-2xl font-bold mt-2.5 text-purple-300 group-hover:text-purple-200 transition">रु 0</p>
               <div class="flex items-center justify-between text-[11px] text-slate-400 mt-1">
                 <span>Bro's: <strong id="rev-kpi-bros-payable" class="mono text-amber-300">रु 0</strong></span>
                 <span>Bardali: <strong id="rev-kpi-bardali-payable" class="mono text-purple-300">रु 0</strong></span>
@@ -1099,7 +1097,7 @@
             </article>
 
             <!-- Cash & Online Collections -->
-            <article class="panel rounded-2xl p-4 col-span-2 sm:col-span-1">
+            <article id="rev-kpi-payment-card" class="panel rounded-2xl p-4 col-span-2 sm:col-span-1 cursor-pointer hover:border-slate-500 transition group" title="Click to view Daily Earnings & Payment Mix">
               <div class="flex items-center justify-between">
                 <i data-lucide="wallet" class="text-[#d8ff45]" width="19" height="19"></i>
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">Payment Mix</span>
@@ -1122,8 +1120,8 @@
           </div>
 
           <!-- Filtered Sessions Breakdown Table -->
-          <div class="panel rounded-2xl p-5 mb-5">
-            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div id="rev-sessions-breakdown-panel" class="panel rounded-2xl p-5 mb-5 transition-all">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
               <div>
                 <h3 class="font-bold text-base flex items-center gap-2">
                   <i data-lucide="receipt" width="16" height="16" class="text-[#d8ff45]"></i>
@@ -1131,9 +1129,15 @@
                 </h3>
                 <p class="text-xs text-slate-400 mt-0.5">Itemized transaction log showing station gameplay time vs gross food orders vs ChillPill net cafe profit.</p>
               </div>
-              <span id="rev-table-session-count" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">0 sessions</span>
+              <div class="flex items-center gap-2">
+                <span id="rev-table-session-count" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">0 sessions</span>
+                <button type="button" id="rev-toggle-sessions-btn" class="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-600 bg-slate-800/80 text-slate-200 hover:border-[#d8ff45] hover:text-[#d8ff45] transition cursor-pointer">
+                  <span class="btn-text">Show Table</span>
+                  <i data-lucide="chevron-down" width="14" height="14" class="btn-icon transition-transform"></i>
+                </button>
+              </div>
             </div>
-            <div class="overflow-x-auto">
+            <div id="rev-sessions-table-wrapper" class="hidden overflow-x-auto mt-4">
               <table class="w-full text-sm">
                 <thead>
                   <tr class="text-left text-xs text-slate-400 border-b border-slate-700">
@@ -1150,8 +1154,8 @@
                 </thead>
                 <tbody id="rev-day-sessions" class="divide-y divide-slate-800"></tbody>
               </table>
+              <p id="rev-day-empty" class="text-sm text-slate-500 mt-4 text-center py-4 hidden">No paid sessions match the selected filters.</p>
             </div>
-            <p id="rev-day-empty" class="text-sm text-slate-500 mt-4 text-center py-4 hidden">No paid sessions match the selected filters.</p>
           </div>
 
           <!-- Daily Revenue Chart -->
@@ -1170,9 +1174,21 @@
           </div>
 
           <!-- Daily earnings breakdown table -->
-          <div class="panel rounded-2xl p-5 mb-5">
-            <h3 class="font-bold mb-4">Earnings per day</h3>
-            <div class="overflow-x-auto">
+          <div id="rev-daily-breakdown-panel" class="panel rounded-2xl p-5 mb-5 transition-all">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+              <div>
+                <h3 class="font-bold text-base flex items-center gap-2">
+                  <i data-lucide="calendar" width="16" height="16" class="text-amber-300"></i>
+                  <span>Earnings per day</span>
+                </h3>
+                <p class="text-xs text-slate-400 mt-0.5">Summary of daily cash, online, and total cafe collections.</p>
+              </div>
+              <button type="button" id="rev-toggle-daily-btn" class="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-600 bg-slate-800/80 text-slate-200 hover:border-amber-400 hover:text-amber-300 transition cursor-pointer">
+                <span class="btn-text">Show Table</span>
+                <i data-lucide="chevron-down" width="14" height="14" class="btn-icon transition-transform"></i>
+              </button>
+            </div>
+            <div id="rev-daily-table-wrapper" class="hidden overflow-x-auto mt-4">
               <table class="w-full text-sm">
                 <thead>
                   <tr class="text-left text-xs text-slate-500 border-b border-slate-700">
@@ -1185,8 +1201,8 @@
                 </thead>
                 <tbody id="rev-daily-table" class="divide-y divide-slate-800"></tbody>
               </table>
+              <p id="rev-daily-empty" class="text-sm text-slate-500 mt-3 hidden">No paid sessions yet.</p>
             </div>
-            <p id="rev-daily-empty" class="text-sm text-slate-500 mt-3 hidden">No paid sessions yet.</p>
           </div>
 
           <!-- Cash vs Online + Staff Breakdown -->
@@ -1269,6 +1285,10 @@
               </div>
               <div class="flex items-center gap-2">
                 <span id="rev-trn-summary-badge" class="text-xs font-bold px-3 py-1 rounded-full bg-[#d8ff45]/15 text-[#d8ff45] border border-[#d8ff45]/30">Net Profit: रु 0</span>
+                <button type="button" id="rev-toggle-tournament-btn" class="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-600 bg-slate-800/80 text-slate-200 hover:border-[#d8ff45] hover:text-[#d8ff45] transition cursor-pointer">
+                  <span class="btn-text">Show Table</span>
+                  <i data-lucide="chevron-down" width="14" height="14" class="btn-icon transition-transform"></i>
+                </button>
               </div>
             </div>
 
@@ -1297,7 +1317,7 @@
             </div>
 
             <!-- Tournaments Financial Audit Table -->
-            <div class="overflow-x-auto">
+            <div id="rev-tournament-table-wrapper" class="hidden overflow-x-auto mt-4">
               <table class="w-full text-left border-collapse text-xs sm:text-sm">
                 <thead>
                   <tr class="border-b border-slate-700 text-slate-400 text-xs uppercase tracking-wider font-semibold">
@@ -1322,7 +1342,7 @@
 
           <!-- Station Breakdown Panel (visible only in Station mode) -->
           <div id="rev-station-breakdown" class="hidden panel rounded-2xl p-5 mb-5 mt-5">
-            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
               <div>
                 <h3 class="font-bold text-base flex items-center gap-2">
                   <i data-lucide="gamepad-2" width="16" height="16" class="text-sky-300"></i>
@@ -1330,8 +1350,12 @@
                 </h3>
                 <p class="text-xs text-slate-400 mt-0.5">Gaming time revenue broken down by individual station for the selected period.</p>
               </div>
+              <button type="button" id="rev-toggle-station-btn" class="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-600 bg-slate-800/80 text-slate-200 hover:border-sky-400 hover:text-sky-300 transition cursor-pointer">
+                <span class="btn-text">Show Table</span>
+                <i data-lucide="chevron-down" width="14" height="14" class="btn-icon transition-transform"></i>
+              </button>
             </div>
-            <div class="overflow-x-auto">
+            <div id="rev-station-table-wrapper" class="hidden overflow-x-auto mt-4">
               <table class="w-full text-sm">
                 <thead>
                   <tr class="text-left text-xs text-slate-400 border-b border-slate-700">
@@ -1344,13 +1368,13 @@
                 </thead>
                 <tbody id="rev-station-breakdown-body" class="divide-y divide-slate-800"></tbody>
               </table>
+              <p id="rev-station-breakdown-empty" class="hidden text-sm text-slate-500 mt-4 text-center py-4">No gaming sessions found for this period.</p>
             </div>
-            <p id="rev-station-breakdown-empty" class="hidden text-sm text-slate-500 mt-4 text-center py-4">No gaming sessions found for this period.</p>
           </div>
 
           <!-- Food Items Breakdown Panel (visible only in Food mode) -->
           <div id="rev-food-dept-breakdown" class="hidden panel rounded-2xl p-5 mb-5 mt-5">
-            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
               <div>
                 <h3 class="font-bold text-base flex items-center gap-2">
                   <i data-lucide="sandwich" width="16" height="16" class="text-amber-300"></i>
@@ -1358,8 +1382,12 @@
                 </h3>
                 <p class="text-xs text-slate-400 mt-0.5">All food and drink items ordered in the period, grouped by menu item with source and gross value.</p>
               </div>
+              <button type="button" id="rev-toggle-food-btn" class="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-600 bg-slate-800/80 text-slate-200 hover:border-amber-400 hover:text-amber-300 transition cursor-pointer">
+                <span class="btn-text">Show Table</span>
+                <i data-lucide="chevron-down" width="14" height="14" class="btn-icon transition-transform"></i>
+              </button>
             </div>
-            <div class="overflow-x-auto">
+            <div id="rev-food-table-wrapper" class="hidden overflow-x-auto mt-4">
               <table class="w-full text-sm">
                 <thead>
                   <tr class="text-left text-xs text-slate-400 border-b border-slate-700">
@@ -1371,8 +1399,8 @@
                 </thead>
                 <tbody id="rev-food-items-body" class="divide-y divide-slate-800"></tbody>
               </table>
+              <p id="rev-food-items-empty" class="hidden text-sm text-slate-500 mt-4 text-center py-4">No food orders found for this period.</p>
             </div>
-            <p id="rev-food-items-empty" class="hidden text-sm text-slate-500 mt-4 text-center py-4">No food orders found for this period.</p>
           </div>
 
         </section>

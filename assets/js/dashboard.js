@@ -316,6 +316,32 @@
     if (ovNs) ovNs.addEventListener("click", () => switchPage("page-new-session"));
     const ovLog = document.getElementById("overview-lounge-log-btn");
     if (ovLog) ovLog.addEventListener("click", () => switchPage("page-records"));
+    const ovUnpaid = document.getElementById("overview-unpaid-bills-btn");
+    if (ovUnpaid) ovUnpaid.addEventListener("click", () => showUnpaidRecordsInLog());
+  }
+
+  function showUnpaidRecordsInLog() {
+    switchPage("page-records");
+    recordsFilterPay = "unpaid";
+    recordsFilterDate = "";
+    const dateInput = document.getElementById("records-date-filter");
+    if (dateInput) dateInput.value = "";
+    const dateClear = document.getElementById("records-date-clear");
+    if (dateClear) dateClear.classList.add("hidden");
+
+    const payPills = document.querySelectorAll(".records-pay-pill");
+    payPills.forEach((p) => {
+      const isTarget = p.dataset.pay === "unpaid";
+      p.classList.toggle("active", isTarget);
+      p.classList.toggle("border-rose-500", isTarget);
+      p.classList.toggle("bg-rose-500/20", isTarget);
+      p.classList.toggle("text-rose-300", isTarget);
+      p.classList.toggle("border-slate-700", !isTarget);
+      p.classList.toggle("text-slate-400", !isTarget);
+    });
+    renderRecordsList();
+    const recordsEl = document.getElementById("page-records");
+    if (recordsEl) recordsEl.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   // Alias used by updateSummary unpaid-collect handler and other places
@@ -708,12 +734,18 @@
 
     if (isCustom) {
       // Custom item — use whatever is typed, price is manual
-      itemName = typedName || "Custom Item";
-      if (!row.dataset.customId) {
-        row.dataset.customId = "custom_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+      if (typedName) {
+        itemName = typedName;
+        if (!row.dataset.customId) {
+          row.dataset.customId = "custom_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+        }
+        itemId = row.dataset.customId;
+        unitPrice = Math.max(0, Number(unitPriceInput.value) || 0);
+      } else {
+        itemId = "";
+        itemName = "";
+        unitPrice = 0;
       }
-      itemId = row.dataset.customId;
-      unitPrice = Math.max(0, Number(unitPriceInput.value) || 0);
     } else {
       // Try to match by stored itemId first, then by typed name
       let item = null;
@@ -732,14 +764,19 @@
           unitPrice = item.price;
           unitPriceInput.value = unitPrice;
         }
-      } else {
+      } else if (typedName) {
         // Unmatched text — treat as custom
-        itemName = typedName || "Item";
+        itemName = typedName;
         if (!row.dataset.customId) {
           row.dataset.customId = "custom_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
         }
         itemId = row.dataset.customId;
         unitPrice = Math.max(0, Number(unitPriceInput.value) || 0);
+      } else {
+        // No item typed or selected
+        itemId = "";
+        itemName = "";
+        unitPrice = 0;
       }
     }
 
@@ -760,7 +797,7 @@
 
   function collectFrItems(containerId) {
     const raw = [...document.querySelectorAll(`#${containerId} .fr-row`)]
-      .filter((row) => row.dataset.itemId && (row.dataset.itemName || row.dataset.price > 0))
+      .filter((row) => row.dataset.itemId && row.dataset.itemName && row.dataset.itemName.trim() !== "" && row.dataset.itemName !== "Item")
       .map((row) => {
         const item = menuItems.find((m) => m.id === row.dataset.itemId);
         const supplier = (item && item.supplier) ? item.supplier : (row.dataset.supplier || "chillpill");
@@ -1425,16 +1462,40 @@
     document.getElementById("active-count").textContent = activeSessions.length;
     document.getElementById("ending-soon-count").textContent = endingSoon.length;
     document.getElementById("completed-count").textContent = completedToday.length;
-    document.getElementById("food-count").textContent = records.filter((r) => r.food_items && r.food_items.length && isToday(r.paid_at || r.start_time || r.created_at)).length;
+    document.getElementById("food-count").textContent = records.filter((r) => {
+      if (!r.food_items || !Array.isArray(r.food_items) || !isToday(r.paid_at || r.start_time || r.created_at)) return false;
+      return r.food_items.some((f) => f && f.id !== "_extra_ctrl" && f.name && f.name !== "Item" && Number(f.qty) > 0);
+    }).length;
     document.getElementById("today-revenue").textContent = inr(todayRevenue);
     document.getElementById("record-count").textContent = records.length;
 
-    // ---- Unpaid / Due panel ----
+    // ---- Unpaid / Due panel & shortcut badge ----
     const unpaid = records.filter((r) => {
       if (r.status !== "Completed") return false;
       const bd = getRecordPaymentBreakdown(r);
       return !r.paid || bd.isPartial || bd.dueAmount > 0;
     });
+
+    const ovUnpaidBtn = document.getElementById("overview-unpaid-bills-btn");
+    const ovUnpaidBadge = document.getElementById("overview-unpaid-badge");
+    if (ovUnpaidBadge) {
+      if (unpaid.length > 0) {
+        ovUnpaidBadge.textContent = unpaid.length;
+        ovUnpaidBadge.classList.remove("hidden");
+        if (ovUnpaidBtn) {
+          ovUnpaidBtn.classList.add("border-rose-500/50", "text-rose-300", "bg-rose-500/10");
+          ovUnpaidBtn.classList.remove("border-slate-600", "text-slate-200");
+        }
+      } else {
+        ovUnpaidBadge.textContent = "0";
+        ovUnpaidBadge.classList.add("hidden");
+        if (ovUnpaidBtn) {
+          ovUnpaidBtn.classList.remove("border-rose-500/50", "text-rose-300", "bg-rose-500/10");
+          ovUnpaidBtn.classList.add("border-slate-600", "text-slate-200");
+        }
+      }
+    }
+
     const panel = document.getElementById("overview-unpaid-panel");
     const countEl = document.getElementById("overview-unpaid-count");
     const listEl = document.getElementById("overview-unpaid-list");
@@ -1473,8 +1534,10 @@
   }
 
   function foodSummaryText(record) {
-    if (!record.food_items || !record.food_items.length) return "";
-    return "🍟 " + record.food_items.map((f) => `${f.name} ×${f.qty}`).join(", ");
+    if (!record || !record.food_items || !Array.isArray(record.food_items)) return "";
+    const valid = record.food_items.filter((f) => f && f.id !== "_extra_ctrl" && f.name && f.name.trim() !== "" && f.name !== "Item" && Number(f.qty) > 0);
+    if (!valid.length) return "";
+    return "🍟 " + valid.map((f) => `${f.name} ×${f.qty}`).join(", ");
   }
 
   // A station can only have one Active session at a time. This finds that
@@ -1731,7 +1794,7 @@
   // minutes past the grace window) — e.g. 8 minutes overdue with a 5-minute
   // grace period bills all 8 minutes, not just 3.
   function computeOvertimeCharge(record) {
-    if (!record.end_time) return { minutes: 0, amount: 0 };
+    if (!record || record.status !== "Active" || !record.end_time) return { minutes: 0, amount: 0 };
     const overdueMinutes = Math.floor((new Date() - new Date(record.end_time)) / 60000);
     if (overdueMinutes <= OVERTIME_GRACE_MINUTES) return { minutes: 0, amount: 0 };
     const perMinuteRate = (Number(record.rate) || 0) / 60;
@@ -2376,15 +2439,16 @@
   }
 
   function renderCheckoutBreakdown(record) {
+    const isCompleted = record && record.status === "Completed";
     const timeCost = ((Number(record.duration_minutes) || 0) / 60) * (Number(record.rate) || 0);
-    let overtime = computeOvertimeCharge(record);
+    let overtime = isCompleted ? { minutes: 0, amount: 0 } : computeOvertimeCharge(record);
 
     const waiveCheckbox = document.getElementById("checkout-waive-overtime");
     const overtimeRow = document.getElementById("checkout-overtime-row");
     const overtimeAmountEl = document.getElementById("checkout-overtime-amount");
 
     if (overtimeRow && overtimeAmountEl) {
-      if (overtime.amount > 0) {
+      if (overtime.amount > 0 && !isCompleted) {
         overtimeRow.classList.remove("hidden");
         overtimeAmountEl.textContent = inr(overtime.amount);
       } else {
@@ -2396,7 +2460,7 @@
       overtime = { minutes: overtime.minutes, amount: 0, waived: true };
     }
 
-    const subtotal = Math.round((Number(record.amount) || 0) + overtime.amount);
+    const subtotal = Math.round((Number(record.amount) || 0) + (isCompleted ? 0 : overtime.amount));
 
     const rawValue = document.getElementById("checkout-discount-value").value;
     const discount = computeDiscount(record, checkoutDiscountMode, rawValue);
@@ -5624,11 +5688,68 @@
     });
   }
 
+  function setupRevenueCollapsibles() {
+    function wireCollapse(btnId, wrapperId, defaultOpen = false) {
+      const btn = document.getElementById(btnId);
+      const wrapper = document.getElementById(wrapperId);
+      if (!btn || !wrapper) return;
+
+      function setOpen(isOpen) {
+        wrapper.classList.toggle("hidden", !isOpen);
+        const textSpan = btn.querySelector(".btn-text");
+        const icon = btn.querySelector(".btn-icon");
+        if (textSpan) textSpan.textContent = isOpen ? "Hide Table" : "Show Table";
+        if (icon) icon.style.transform = isOpen ? "rotate(180deg)" : "rotate(0deg)";
+      }
+
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const isCurrentlyOpen = !wrapper.classList.contains("hidden");
+        setOpen(!isCurrentlyOpen);
+        if (window.lucide && typeof window.lucide.createIcons === "function") window.lucide.createIcons();
+      });
+
+      if (defaultOpen) setOpen(true);
+    }
+
+    wireCollapse("rev-toggle-sessions-btn", "rev-sessions-table-wrapper", false);
+    wireCollapse("rev-toggle-daily-btn", "rev-daily-table-wrapper", false);
+    wireCollapse("rev-toggle-tournament-btn", "rev-tournament-table-wrapper", false);
+    wireCollapse("rev-toggle-station-btn", "rev-station-table-wrapper", false);
+    wireCollapse("rev-toggle-food-btn", "rev-food-table-wrapper", false);
+
+    // Clickable KPI cards that expand and smoothly scroll to the target section
+    function wireCardToPanel(cardId, panelId, wrapperId, toggleBtnId) {
+      const card = document.getElementById(cardId);
+      if (!card) return;
+      card.addEventListener("click", () => {
+        const wrapper = document.getElementById(wrapperId);
+        const btn = document.getElementById(toggleBtnId);
+        if (wrapper && wrapper.classList.contains("hidden") && btn) {
+          btn.click();
+        }
+        const panel = document.getElementById(panelId);
+        if (panel) {
+          panel.scrollIntoView({ behavior: "smooth", block: "start" });
+          panel.classList.add("flash-alert");
+          setTimeout(() => panel.classList.remove("flash-alert"), 2500);
+        }
+      });
+    }
+
+    wireCardToPanel("rev-kpi-earnings-card", "rev-sessions-breakdown-panel", "rev-sessions-table-wrapper", "rev-toggle-sessions-btn");
+    wireCardToPanel("rev-kpi-food-card", "rev-restaurant-partnerships", "rev-food-table-wrapper", "rev-toggle-food-btn");
+    wireCardToPanel("rev-kpi-gameplay-card", "rev-station-breakdown", "rev-station-table-wrapper", "rev-toggle-station-btn");
+    wireCardToPanel("rev-kpi-payment-card", "rev-daily-breakdown-panel", "rev-daily-table-wrapper", "rev-toggle-daily-btn");
+    wireCardToPanel("rev-kpi-payables-card", "rev-restaurant-partnerships", "rev-food-table-wrapper", "rev-toggle-food-btn");
+  }
+
   function initRevenueFiltersOnce() {
     if (revFiltersWired) return;
     revFiltersWired = true;
 
     initTournamentExpenseModalOnce();
+    setupRevenueCollapsibles();
 
     // Department / Category filter buttons
     document.querySelectorAll(".rev-dept-btn").forEach((btn) => {
