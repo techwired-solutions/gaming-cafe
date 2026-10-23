@@ -9046,8 +9046,9 @@ Here is the menu image:`;
 
       if (toggleBtn && panel) {
         toggleBtn.addEventListener("click", () => {
-          panel.classList.toggle("hidden");
-          if (!panel.classList.contains("hidden") && input) {
+          const isHidden = panel.classList.toggle("hidden");
+          toggleBtn.classList.toggle("active", !isHidden);
+          if (!isHidden && input) {
             input.focus();
           }
         });

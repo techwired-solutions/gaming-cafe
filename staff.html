@@ -156,6 +156,7 @@
       font-family: 'Space Mono', monospace;
     }
     .theme-toggle-btn:hover { border-color: var(--acid); color: var(--acid); }
+    #btn-toggle-embed-settings.active { border-color: #d8ff45 !important; color: #d8ff45 !important; background-color: rgba(216,255,69,.14) !important; }
     .theme-icon-moon { display: none; }
     /* ===== LIGHT MODE OVERRIDES ===== */
     /* Header & sidebar backgrounds — overrides inline dark rgba styles */
@@ -193,7 +194,8 @@
     [data-theme="light"] .border-\[\#d8ff45\]\/25, [data-theme="light"] .border-\[\#d8ff45\]\/30, [data-theme="light"] .border-\[\#d8ff45\]\/40 { border-color: rgba(95,136,0,.35) !important; }
     /* Tailwind background overrides */
     [data-theme="light"] .bg-\[\#202838\]     { background-color: var(--panel-soft) !important; }
-    [data-theme="light"] .bg-\[\#111722\]     { background-color: #f5f7fb !important; }
+    [data-theme="light"] .bg-\[\#111722\],
+    [data-theme="light"] .bg-\[\#121722\]     { background-color: #f5f7fb !important; }
     [data-theme="light"] .bg-\[\#10141e\]     { background-color: var(--ink) !important; }
     [data-theme="light"] .bg-slate-800        { background-color: #dde5f0 !important; }
     [data-theme="light"] .bg-slate-900\/70    { background: rgba(240,244,250,.7) !important; }
@@ -336,9 +338,75 @@
     [data-theme="light"] #btn-toggle-embed-settings,
     [data-theme="light"] #btn-copy-linkypot,
     [data-theme="light"] #btn-refresh-linkypot { background-color: #eef2fa !important; border-color: #c0cfe8 !important; color: var(--text-secondary) !important; }
-    [data-theme="light"] #btn-toggle-embed-settings:hover { border-color: rgba(95,136,0,.5) !important; color: #3d6600 !important; }
+    [data-theme="light"] #btn-toggle-embed-settings:hover,
+    [data-theme="light"] #btn-toggle-embed-settings.active { border-color: rgba(95,136,0,.5) !important; color: #3d6600 !important; background-color: rgba(95,136,0,.08) !important; }
     [data-theme="light"] #btn-copy-linkypot:hover,
     [data-theme="light"] #btn-refresh-linkypot:hover { border-color: #a0b3d0 !important; color: var(--text-primary) !important; }
+
+    /* Settings & Tools Card in light theme */
+    [data-theme="light"] #linkypot-embed-settings-panel {
+      background-color: #ffffff !important;
+      border-color: #c0cfe8 !important;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05) !important;
+    }
+    [data-theme="light"] #linkypot-embed-settings-panel .border-b {
+      border-color: var(--line) !important;
+    }
+    [data-theme="light"] #linkypot-embed-settings-panel h3 {
+      color: var(--text-primary) !important;
+    }
+    [data-theme="light"] #btn-save-linkypot-embed {
+      background-color: #5f8800 !important;
+      color: #ffffff !important;
+    }
+    [data-theme="light"] #btn-save-linkypot-embed:hover {
+      background-color: #4d6f00 !important;
+    }
+    [data-theme="light"] #btn-reset-linkypot-embed {
+      background-color: #eef2fa !important;
+      border-color: #c0cfe8 !important;
+      color: var(--text-secondary) !important;
+    }
+    [data-theme="light"] #btn-reset-linkypot-embed:hover {
+      border-color: #a0b3d0 !important;
+      color: var(--text-primary) !important;
+    }
+    /* Inner POS historical sync row inside Settings & Tools */
+    [data-theme="light"] #linkypot-embed-settings-panel .bg-slate-900\/60 {
+      background-color: #f5f7fb !important;
+      border-color: #c0cfe8 !important;
+    }
+    [data-theme="light"] #linkypot-embed-settings-panel .text-slate-200 {
+      color: var(--text-primary) !important;
+    }
+    [data-theme="light"] #btn-sync-linkypot {
+      background-color: rgba(147, 51, 234, 0.10) !important;
+      border-color: rgba(147, 51, 234, 0.30) !important;
+      color: #6b21a8 !important;
+    }
+    [data-theme="light"] #btn-sync-linkypot:hover {
+      background-color: rgba(147, 51, 234, 0.18) !important;
+      color: #581c87 !important;
+    }
+
+    /* LinkyPot iframe container */
+    [data-theme="light"] #page-linkypot .panel.bg-\[\#121722\] {
+      background-color: #ffffff !important;
+      border-color: #c0cfe8 !important;
+    }
+    [data-theme="light"] #page-linkypot .bg-white\/5 {
+      background-color: #f8fafc !important;
+      border-color: #d1dae8 !important;
+    }
+    [data-theme="light"] #linkypot-frame {
+      border-color: #c0cfe8 !important;
+    }
+
+    /* Checkout LinkyPot loyalty badge */
+    [data-theme="light"] #checkout-linkypot-badge {
+      background-color: rgba(147, 51, 234, 0.08) !important;
+      border-color: rgba(147, 51, 234, 0.30) !important;
+    }
 
     /* ---- Overview quick-action buttons ---- */
     [data-theme="light"] #overview-lounge-log-btn { background-color: #eef2fa !important; border-color: #c0cfe8 !important; color: var(--text-secondary) !important; }
