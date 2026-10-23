@@ -6035,9 +6035,11 @@
   // ---------- revenue (admin) ----------
   let revDailyChart = null;
   let revChartDays = 30;
-  let revSelectedDept = "all";       // "all" | "station" | "food"
-  let revSelectedPeriod = "all";     // "all" | "today" | "yesterday" | "week" | "month" | "quarter" | "custom"
-  let revCustomDate = "";            // "YYYY-MM-DD"
+  let revSelectedDept = "all";       // "all" | "station" | "food" | "tournament"
+  let revSelectedPeriod = "all";     // "all" | "today" | "yesterday" | "month" | "range" | "custom"
+  let revStartDate = "";             // "YYYY-MM-DD"
+  let revEndDate = "";               // "YYYY-MM-DD"
+  let revCustomDate = "";            // for backwards compatibility
   let revFiltersWired = false;
 
   function getDateStr(iso) {
@@ -6059,57 +6061,45 @@
     return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
   };
 
-  const isThisWeek = (iso) => {
-    if (!iso) return false;
-    const d = new Date(iso), now = new Date();
-    const dayOfWeek = (now.getDay() + 6) % 7; // Mon = 0, Sun = 6
-    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek, 0, 0, 0, 0);
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(endOfWeek.getDate() + 7);
-    const t = d.getTime();
-    return t >= startOfWeek.getTime() && t < endOfWeek.getTime();
-  };
-
   const isThisMonth = (iso) => {
     if (!iso) return false;
     const d = new Date(iso), n = new Date();
     return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth();
   };
 
-  const isThisQuarter = (iso) => {
-    if (!iso) return false;
-    const d = new Date(iso), n = new Date();
-    if (d.getFullYear() !== n.getFullYear()) return false;
-    return Math.floor(n.getMonth() / 3) === Math.floor(d.getMonth() / 3);
-  };
-
-  function filterRecordByPeriod(r, period, customDate) {
+  function filterRecordByPeriod(r, period, startDate, endDate) {
     const iso = r.paid_at || r.created_at;
     if (!iso) return false;
+    const ds = getDateStr(iso);
+    if (!ds) return false;
+
+    if (period === "range" || (startDate || endDate)) {
+      if (startDate && ds < startDate) return false;
+      if (endDate && ds > endDate) return false;
+      return true;
+    }
     if (period === "today") return isToday(iso);
     if (period === "yesterday") return isYesterday(iso);
-    if (period === "week") return isThisWeek(iso);
     if (period === "month") return isThisMonth(iso);
-    if (period === "quarter") return isThisQuarter(iso);
-    if (period === "custom") return getDateStr(iso) === customDate;
+    if (period === "custom") return ds === (startDate || revCustomDate);
     return true; // "all"
   }
 
-  function getRevPeriodLabel(period, customDate) {
+  function getRevPeriodLabel(period, startDate, endDate) {
     const now = new Date();
+    if (startDate || endDate) {
+      if (startDate && endDate) {
+        if (startDate === endDate) return getFriendlyDate(startDate);
+        return `${getFriendlyDate(startDate)} → ${getFriendlyDate(endDate)}`;
+      }
+      if (startDate) return `From ${getFriendlyDate(startDate)}`;
+      return `Up to ${getFriendlyDate(endDate)}`;
+    }
     if (period === "today") return "Today";
     if (period === "yesterday") return "Yesterday";
-    if (period === "week") return "This Week";
     if (period === "month") {
       const monthName = new Intl.DateTimeFormat("en-IN", { month: "long" }).format(now);
       return `This Month (${monthName})`;
-    }
-    if (period === "quarter") {
-      const q = Math.floor(now.getMonth() / 3) + 1;
-      return `This Quarter (Q${q} ${now.getFullYear()})`;
-    }
-    if (period === "custom" && customDate) {
-      return getFriendlyDate(customDate);
     }
     return "All Time";
   }
@@ -6163,9 +6153,9 @@
     }
   }
 
-  function filterTournamentByPeriod(t, period, customDate) {
+  function filterTournamentByPeriod(t, period, startDate, endDate) {
     const iso = t.start_date || t.created_at;
-    return filterRecordByPeriod({ created_at: iso }, period, customDate);
+    return filterRecordByPeriod({ created_at: iso }, period, startDate, endDate);
   }
 
   function computeRecordRevenue(record) {
@@ -6358,15 +6348,7 @@
     tbody.querySelectorAll(".rev-daily-row").forEach((row) => {
       row.addEventListener("click", () => {
         const ds = row.dataset.date;
-        revSelectedPeriod = "custom";
-        revCustomDate = ds;
-        const customDateInput = document.getElementById("rev-custom-date");
-        if (customDateInput) customDateInput.value = ds;
-        // Update period button styles
-        document.querySelectorAll(".rev-period-btn").forEach((b) => {
-          b.className = "rev-period-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-400 hover:border-slate-500 transition cursor-pointer";
-        });
-        renderRevenue();
+        setRevDateRange(ds, ds);
         const pageRevenue = document.getElementById("page-revenue");
         if (pageRevenue) pageRevenue.scrollIntoView({ behavior: "smooth", block: "start" });
       });
@@ -6454,9 +6436,16 @@
     document.querySelectorAll(".rev-period-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         revSelectedPeriod = btn.dataset.period || "all";
+        revStartDate = "";
+        revEndDate = "";
         revCustomDate = "";
-        const customDateInput = document.getElementById("rev-custom-date");
-        if (customDateInput) customDateInput.value = "";
+        const startInput = document.getElementById("rev-date-start");
+        const endInput = document.getElementById("rev-date-end");
+        const clearBtn = document.getElementById("rev-date-clear");
+        if (startInput) startInput.value = "";
+        if (endInput) endInput.value = "";
+        if (clearBtn) clearBtn.classList.add("hidden");
+
         document.querySelectorAll(".rev-period-btn").forEach((b) => {
           const active = (b.dataset.period || "all") === revSelectedPeriod;
           b.className = `rev-period-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
@@ -6467,18 +6456,24 @@
       });
     });
 
-    // Custom date picker
-    const customDateInput = document.getElementById("rev-custom-date");
-    if (customDateInput) {
-      customDateInput.addEventListener("change", () => {
-        if (customDateInput.value) {
-          revSelectedPeriod = "custom";
-          revCustomDate = customDateInput.value;
-          document.querySelectorAll(".rev-period-btn").forEach((b) => {
-            b.className = "rev-period-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-400 hover:border-slate-500 transition cursor-pointer";
-          });
-          renderRevenue();
-        }
+    // Date range inputs (From / To)
+    const startInput = document.getElementById("rev-date-start");
+    const endInput = document.getElementById("rev-date-end");
+    const clearBtn = document.getElementById("rev-date-clear");
+
+    if (startInput) {
+      startInput.addEventListener("change", (e) => {
+        setRevDateRange(e.target.value, endInput ? endInput.value : revEndDate);
+      });
+    }
+    if (endInput) {
+      endInput.addEventListener("change", (e) => {
+        setRevDateRange(startInput ? startInput.value : revStartDate, e.target.value);
+      });
+    }
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        setRevDateRange("", "");
       });
     }
 
@@ -6502,11 +6497,41 @@
     });
   }
 
+  function setRevDateRange(start, end) {
+    revStartDate = (start || "").trim();
+    revEndDate = (end || "").trim();
+    revCustomDate = (revStartDate === revEndDate) ? revStartDate : (revStartDate || revEndDate);
+
+    if (revStartDate || revEndDate) {
+      revSelectedPeriod = "range";
+      document.querySelectorAll(".rev-period-btn").forEach((b) => {
+        b.className = "rev-period-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-400 hover:border-slate-500 transition cursor-pointer";
+      });
+    } else {
+      revSelectedPeriod = "all";
+      document.querySelectorAll(".rev-period-btn").forEach((b) => {
+        const isAll = (b.dataset.period || "all") === "all";
+        b.className = `rev-period-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+          isAll ? "border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45]" : "border-slate-700 text-slate-400 hover:border-slate-500"
+        }`;
+      });
+    }
+
+    const startInput = document.getElementById("rev-date-start");
+    const endInput = document.getElementById("rev-date-end");
+    const clearBtn = document.getElementById("rev-date-clear");
+    if (startInput) startInput.value = revStartDate;
+    if (endInput) endInput.value = revEndDate;
+    if (clearBtn) clearBtn.classList.toggle("hidden", !revStartDate && !revEndDate);
+
+    renderRevenue();
+  }
+
   function renderRevenue() {
     initRevenueFiltersOnce();
 
     const allPaid = records.filter((r) => r.paid);
-    const periodPaid = allPaid.filter((r) => filterRecordByPeriod(r, revSelectedPeriod, revCustomDate));
+    const periodPaid = allPaid.filter((r) => filterRecordByPeriod(r, revSelectedPeriod, revStartDate, revEndDate));
 
     let totalGross = 0;
     let totalNet = 0;
@@ -6560,7 +6585,7 @@
     const totalPartnerPayables = totalBrosPayable + totalBardaliPayable;
 
     // Filter tournaments matching period
-    const periodTournaments = tournamentsFinancials.filter((t) => filterTournamentByPeriod(t, revSelectedPeriod, revCustomDate));
+    const periodTournaments = tournamentsFinancials.filter((t) => filterTournamentByPeriod(t, revSelectedPeriod, revStartDate, revEndDate));
     const totalTrnGross = periodTournaments.reduce((s, t) => s + (t.grossFees || 0), 0);
     const totalTrnPrizes = periodTournaments.reduce((s, t) => s + (t.cashPrizes || 0), 0);
     const totalTrnExpenses = periodTournaments.reduce((s, t) => s + (t.expenses || 0), 0);
@@ -6633,7 +6658,7 @@
     if (discEl) discEl.textContent = inr(totalDiscounts);
 
     // Filter summaries and labels
-    const periodLabel = getRevPeriodLabel(revSelectedPeriod, revCustomDate);
+    const periodLabel = getRevPeriodLabel(revSelectedPeriod, revStartDate, revEndDate);
     const deptLabel = getRevDeptLabel(revSelectedDept);
 
     const summaryEl = document.getElementById("rev-active-filter-summary");
@@ -6889,8 +6914,9 @@
       partnersPanelEl.classList.toggle("ring-[#d8ff45]/30", revSelectedDept === "food");
     }
 
-    // Build daily map and render chart + table (responsive to selected department)
-    const dailyMap = buildDailyMap(allPaid, revSelectedDept);
+    // Build daily map and render chart + table (responsive to selected department & period)
+    const targetPaid = (revSelectedPeriod !== "all" || revStartDate || revEndDate) ? periodPaid : allPaid;
+    const dailyMap = buildDailyMap(targetPaid, revSelectedDept);
     renderRevenueChart(dailyMap, revSelectedDept);
     renderDailyTable(dailyMap);
 

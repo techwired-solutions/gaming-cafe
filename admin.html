@@ -1165,12 +1165,12 @@
                 </div>
               </div>
 
-              <!-- Time Period Filter Buttons -->
+              <!-- Time Period & Date Range Filters -->
               <div>
                 <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2 flex items-center gap-1.5">
-                  <i data-lucide="calendar" width="14" height="14" class="text-[#d8ff45]"></i> Time Period
+                  <i data-lucide="calendar" width="14" height="14" class="text-[#d8ff45]"></i> Time Period &amp; Date Range
                 </span>
-                <div class="flex flex-wrap items-center gap-1.5" id="rev-period-group">
+                <div class="flex flex-wrap items-center gap-2" id="rev-period-group">
                   <button type="button" data-period="all" class="rev-period-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45] transition cursor-pointer">
                     All Time
                   </button>
@@ -1180,17 +1180,17 @@
                   <button type="button" data-period="yesterday" class="rev-period-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-400 hover:border-slate-500 transition cursor-pointer">
                     Yesterday
                   </button>
-                  <button type="button" data-period="week" class="rev-period-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-400 hover:border-slate-500 transition cursor-pointer">
-                    This Week
-                  </button>
                   <button type="button" data-period="month" class="rev-period-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-400 hover:border-slate-500 transition cursor-pointer">
                     This Month
                   </button>
-                  <button type="button" data-period="quarter" class="rev-period-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-400 hover:border-slate-500 transition cursor-pointer">
-                    This Quarter
-                  </button>
-                  <div class="flex items-center gap-1">
-                    <input id="rev-custom-date" type="date" class="bg-[#111722] border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-[#d8ff45]" title="Pick specific date" />
+                  <div class="flex items-center gap-1.5 pl-2 sm:border-l border-slate-700/80">
+                    <span class="text-xs text-slate-400">From</span>
+                    <input id="rev-date-start" type="date" class="form-control text-xs py-1 px-2 w-32 mono" title="From start date" />
+                    <span class="text-xs text-slate-400">To</span>
+                    <input id="rev-date-end" type="date" class="form-control text-xs py-1 px-2 w-32 mono" title="To end date" />
+                    <button type="button" id="rev-date-clear" class="hidden text-xs text-slate-400 hover:text-white px-2 py-1 rounded-lg border border-slate-700 hover:border-slate-500 transition cursor-pointer" title="Clear date range">
+                      Clear
+                    </button>
                   </div>
                 </div>
               </div>
