@@ -3037,6 +3037,25 @@
     food.textContent = foodText;
     food.classList.toggle("hidden", !foodText);
 
+    const notesEl = card.querySelector(".record-notes");
+    if (notesEl) {
+      const rawNotes = (record.notes || "").trim();
+      let displayNote = rawNotes;
+      const bdTmp = getRecordPaymentBreakdown(record);
+      if (bdTmp.isWaived && bdTmp.waiveReason) {
+        displayNote = bdTmp.waiveReason;
+      } else {
+        displayNote = rawNotes.replace(/\[Payment:[^\]]*\]/gi, "").trim();
+      }
+      if (displayNote) {
+        notesEl.textContent = "📝 " + displayNote;
+        notesEl.title = displayNote;
+        notesEl.classList.remove("hidden");
+      } else {
+        notesEl.classList.add("hidden");
+      }
+    }
+
     const staffEl = card.querySelector(".record-staff");
     if (record.staff_name) { staffEl.textContent = "👤 " + record.staff_name; staffEl.classList.remove("hidden"); }
     else staffEl.classList.add("hidden");
