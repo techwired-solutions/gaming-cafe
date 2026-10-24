@@ -691,11 +691,11 @@
 
       const totalEst = items.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
       statsEl.innerHTML = `
-        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+        <div class="kpi-stat-box p-2.5 rounded-xl bg-black/20 border border-slate-800">
           <span class="text-slate-400 block text-[10px]">Active Sessions</span>
           <span class="mono font-bold text-sm text-[#d8ff45]">${items.length}</span>
         </div>
-        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+        <div class="kpi-stat-box p-2.5 rounded-xl bg-black/20 border border-slate-800">
           <span class="text-slate-400 block text-[10px]">Estimated Total</span>
           <span class="mono font-bold text-sm text-white">${inr(totalEst)}</span>
         </div>
@@ -708,11 +708,11 @@
       items = records.filter((r) => r.status === "Active" && r.end_time && new Date(r.end_time) - new Date() > 0 && new Date(r.end_time) - new Date() <= ALERT_MS);
 
       statsEl.innerHTML = `
-        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+        <div class="kpi-stat-box p-2.5 rounded-xl bg-black/20 border border-slate-800">
           <span class="text-slate-400 block text-[10px]">Ending Soon</span>
           <span class="mono font-bold text-sm text-amber-300">${items.length} session${items.length === 1 ? "" : "s"}</span>
         </div>
-        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+        <div class="kpi-stat-box p-2.5 rounded-xl bg-black/20 border border-slate-800">
           <span class="text-slate-400 block text-[10px]">Action</span>
           <span class="text-slate-300 text-xs">Extend or Checkout below</span>
         </div>
@@ -732,19 +732,19 @@
       const dueAmt = Math.max(0, totalAmt - paidAmt);
 
       statsEl.innerHTML = `
-        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+        <div class="kpi-stat-box p-2.5 rounded-xl bg-black/20 border border-slate-800">
           <span class="text-slate-400 block text-[10px]">Completed Today</span>
           <span class="mono font-bold text-sm text-sky-300">${items.length}</span>
         </div>
-        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+        <div class="kpi-stat-box p-2.5 rounded-xl bg-black/20 border border-slate-800">
           <span class="text-slate-400 block text-[10px]">Total Value</span>
           <span class="mono font-bold text-sm text-white">${inr(totalAmt)}</span>
         </div>
-        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+        <div class="kpi-stat-box p-2.5 rounded-xl bg-black/20 border border-slate-800">
           <span class="text-slate-400 block text-[10px]">Collected</span>
           <span class="mono font-bold text-sm text-emerald-400">${inr(paidAmt)}</span>
         </div>
-        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+        <div class="kpi-stat-box p-2.5 rounded-xl bg-black/20 border border-slate-800">
           <span class="text-slate-400 block text-[10px]">Unpaid / Due</span>
           <span class="mono font-bold text-sm ${dueAmt > 0 ? "text-rose-400" : "text-slate-400"}">${inr(dueAmt)}</span>
         </div>
@@ -788,19 +788,19 @@
       });
 
       statsEl.innerHTML = `
-        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+        <div class="kpi-stat-box p-2.5 rounded-xl bg-black/20 border border-slate-800">
           <span class="text-slate-400 block text-[10px]">Total Items</span>
           <span class="mono font-bold text-sm text-orange-300">${totalQty}</span>
         </div>
-        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+        <div class="kpi-stat-box p-2.5 rounded-xl bg-black/20 border border-slate-800">
           <span class="text-slate-400 block text-[10px]">Total Food Sales</span>
           <span class="mono font-bold text-sm text-white">${inr(totalFoodVal)}</span>
         </div>
-        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+        <div class="kpi-stat-box p-2.5 rounded-xl bg-black/20 border border-slate-800">
           <span class="text-slate-400 block text-[10px]">ChillPill Cafe</span>
           <span class="mono font-bold text-sm text-slate-200">${inr(cpTotal)}</span>
         </div>
-        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+        <div class="kpi-stat-box p-2.5 rounded-xl bg-black/20 border border-slate-800">
           <span class="text-slate-400 block text-[10px]">Partner Orders</span>
           <span class="mono font-bold text-sm text-amber-300">${inr(partnerTotal)}</span>
         </div>
@@ -812,7 +812,7 @@
         emptyEl.classList.add("hidden");
         orderRows.forEach(({ session: r, item: f, qty, price, rowTotal }) => {
           const card = document.createElement("div");
-          card.className = "p-3 rounded-xl border border-slate-700/70 bg-slate-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs";
+          card.className = "kpi-card p-3 rounded-xl border border-slate-700/70 bg-slate-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs";
           const srcName = f.source || "ChillPill";
           const srcClass = srcName.toLowerCase().includes("bro")
             ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
@@ -871,19 +871,19 @@
       });
 
       statsEl.innerHTML = `
-        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+        <div class="kpi-stat-box p-2.5 rounded-xl bg-black/20 border border-slate-800">
           <span class="text-slate-400 block text-[10px]">Today's Revenue</span>
-          <span class="mono font-bold text-sm text-[#d8ff45]">${inr(totalGross)}</span>
+          <span class="kpi-amount mono font-bold text-sm text-[#d8ff45]">${inr(totalGross)}</span>
         </div>
-        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+        <div class="kpi-stat-box p-2.5 rounded-xl bg-black/20 border border-slate-800">
           <span class="text-slate-400 block text-[10px]">Cash</span>
           <span class="mono font-bold text-sm text-amber-300">${inr(totalCash)}</span>
         </div>
-        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+        <div class="kpi-stat-box p-2.5 rounded-xl bg-black/20 border border-slate-800">
           <span class="text-slate-400 block text-[10px]">Online / UPI</span>
           <span class="mono font-bold text-sm text-sky-300">${inr(totalOnline)}</span>
         </div>
-        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+        <div class="kpi-stat-box p-2.5 rounded-xl bg-black/20 border border-slate-800">
           <span class="text-slate-400 block text-[10px]">Sessions Count</span>
           <span class="mono font-bold text-sm text-white">${items.length}</span>
         </div>
@@ -903,7 +903,7 @@
         items.forEach((r) => {
           const bd = getRecordPaymentBreakdown(r);
           const card = document.createElement("div");
-          card.className = "p-3 rounded-xl border border-slate-700/70 bg-slate-900/50 flex flex-col gap-2 text-xs";
+          card.className = "kpi-card p-3 rounded-xl border border-slate-700/70 bg-slate-900/50 flex flex-col gap-2 text-xs";
 
           const stationStr = r.station_name || "Station";
           const durStr = `${r.duration_minutes || 0}m`;
@@ -949,7 +949,7 @@
                 </div>
               </div>
               <div class="text-right shrink-0">
-                <span class="mono font-bold text-base text-[#d8ff45] block">${inr(r.amount)}</span>
+                <span class="kpi-amount mono font-bold text-base text-[#d8ff45] block">${inr(r.amount)}</span>
                 ${bd.dueAmount > 0 ? `<span class="text-[10px] text-rose-400 font-semibold block">Due: ${inr(bd.dueAmount)}</span>` : ""}
               </div>
             </div>
