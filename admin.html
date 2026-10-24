@@ -1676,7 +1676,7 @@
               <div class="bg-[#111722] border border-purple-500/30 rounded-xl p-4">
                 <div class="flex items-center justify-between">
                   <span class="text-xs text-purple-300 font-bold">🍽️ Bardali</span>
-                  <span id="rev-bardali-comm-rate-badge" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">20% Comm</span>
+                  <span id="rev-bardali-comm-rate-badge" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">0% Comm</span>
                 </div>
                 <div class="mt-2.5 flex items-baseline justify-between">
                   <div>
@@ -2550,7 +2550,7 @@
                     <select id="menu-supplier" class="form-control text-xs font-semibold">
                       <option value="chillpill" selected>ChillPill Cafe (Own Drinks/Snacks · 100% Revenue)</option>
                       <option value="bros_burger">Bro's Burger (Partner · 20% Commission)</option>
-                      <option value="bardali">Bardali (Partner · 20% Commission)</option>
+                      <option value="bardali">Bardali (Partner · 0% Commission)</option>
                     </select>
                   </div>
                   <div>
@@ -2610,20 +2610,20 @@
                         <button type="button" class="bulk-import-partner-btn text-[11px] font-bold text-sky-300 border border-sky-500/40 rounded-lg px-2 py-0.5 hover:bg-sky-500/10 flex items-center gap-1 transition" data-supplier="bardali" title="Bulk import Bardali menu">
                           <i data-lucide="upload" width="11" height="11"></i>Import Menu
                         </button>
-                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40">Default 20%</span>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40">Default 0%</span>
                       </div>
                     </div>
                     <div class="grid grid-cols-2 gap-2 text-xs">
                       <div>
                         <label class="block text-slate-400 mb-1" for="partner-bardali-commission">ChillPill Revenue (%)</label>
-                        <input id="partner-bardali-commission" type="number" min="0" max="100" value="20" class="form-control text-xs py-1.5 mono font-semibold" required>
+                        <input id="partner-bardali-commission" type="number" min="0" max="100" value="0" class="form-control text-xs py-1.5 mono font-semibold" required>
                       </div>
                       <div>
                         <label class="block text-slate-400 mb-1" for="partner-bardali-phone">WhatsApp Number</label>
                         <input id="partner-bardali-phone" type="text" placeholder="Enter number when confirmed..." class="form-control text-xs py-1.5">
                       </div>
                     </div>
-                    <p class="text-[11px] text-slate-400 mt-2">Commission default 20% (admin editable). WhatsApp ordering will activate when number is provided.</p>
+                    <p class="text-[11px] text-slate-400 mt-2">Commission rate: 0% (admin editable). WhatsApp ordering will activate when number is provided.</p>
                   </div>
                 </div>
                 <div class="flex items-center justify-between pt-1">
@@ -3150,6 +3150,38 @@
           <button type="button" class="edit-preset-chip rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] cursor-pointer" data-name="Internal Sale (Testing/Demo)">🎮 Station Testing/Demo</button>
           <button type="button" class="edit-preset-chip rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] cursor-pointer" data-name="Internal Sale">🏢 General Internal</button>
         </div>
+
+        <!-- Bro's Burger 20% internal discount option -->
+        <div id="edit-bros-discount-wrap" class="hidden flex items-center justify-between pt-2 mt-2.5 border-t border-slate-700/60 text-xs">
+          <div class="flex items-center gap-2">
+            <span class="text-amber-400 font-bold">🍔 Bro's Burger 20% Staff Discount</span>
+            <span class="text-[10px] text-slate-400">(0% cafe commission on internal orders)</span>
+          </div>
+          <label class="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white">
+            <input type="checkbox" id="edit-bros-internal-discount" class="rounded accent-[#d8ff45]" checked>
+            <span class="text-xs font-semibold">Apply 20% off</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Food Only Sale Toggle Card -->
+      <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3.5 mb-4">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5">
+            <span class="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 text-sm font-bold">🍽️</span>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-slate-200">Food Only Sale</span>
+                <span id="edit-food-only-badge" class="hidden text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase tracking-wider">Active</span>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-0.5">Customer bought food without gaming station time. Hides time tracking &amp; gaming discount.</p>
+            </div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer shrink-0">
+            <input type="checkbox" id="edit-is-food-only" class="sr-only peer">
+            <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+          </label>
+        </div>
       </div>
 
       <div class="grid sm:grid-cols-2 gap-3">
@@ -3163,7 +3195,7 @@
         <div><label class="block text-xs text-slate-400 mb-1" for="edit-customer-phone">Customer phone</label><input id="edit-customer-phone" class="form-control" type="tel"></div>
       </div>
 
-      <div class="border-t border-slate-700 mt-4 pt-4">
+      <div id="edit-time-section" class="border-t border-slate-700 mt-4 pt-4">
         <div class="flex items-center justify-between mb-3">
           <h4 class="font-semibold text-sm">Time tracking</h4>
           <span id="edit-today-label" class="mono text-xs text-slate-500"></span>
@@ -3329,7 +3361,7 @@
         </div>
 
         <!-- Discount on play time -->
-        <div class="pt-2 border-t border-slate-800">
+        <div id="edit-discount-section" class="pt-2 border-t border-slate-800">
           <div class="flex items-center justify-between mb-1">
             <label class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
               <i data-lucide="tag" width="13" height="13" class="text-orange-400"></i> Discount on play time
@@ -3424,6 +3456,18 @@
             <button type="button" class="mr-preset-chip rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] cursor-pointer" data-name="Internal Sale (Staff)">👤 Staff Consumption</button>
             <button type="button" class="mr-preset-chip rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] cursor-pointer" data-name="Internal Sale (Testing/Demo)">🎮 Station Testing/Demo</button>
             <button type="button" class="mr-preset-chip rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] cursor-pointer" data-name="Internal Sale">🏢 General Internal</button>
+          </div>
+
+          <!-- Bro's Burger 20% internal discount option -->
+          <div id="mr-bros-discount-wrap" class="hidden flex items-center justify-between pt-2 mt-2.5 border-t border-slate-700/60 text-xs">
+            <div class="flex items-center gap-2">
+              <span class="text-amber-400 font-bold">🍔 Bro's Burger 20% Staff Discount</span>
+              <span class="text-[10px] text-slate-400">(0% cafe commission on internal orders)</span>
+            </div>
+            <label class="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white">
+              <input type="checkbox" id="mr-bros-internal-discount" class="rounded accent-[#d8ff45]" checked>
+              <span class="text-xs font-semibold">Apply 20% off</span>
+            </label>
           </div>
         </div>
 

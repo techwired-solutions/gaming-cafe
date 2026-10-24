@@ -1335,7 +1335,7 @@
   const PARTNER_STORAGE_KEY = "chillpill_partner_settings";
   const partnerSettings = {
     bros_burger: { name: "Bro's Burger", commission: 20, whatsapp: "9779841268666" },
-    bardali: { name: "Bardali", commission: 20, whatsapp: "" },
+    bardali: { name: "Bardali", commission: 0, whatsapp: "" },
     get bros_burger_commission() { return this.bros_burger.commission; },
     set bros_burger_commission(v) { this.bros_burger.commission = Number(v) || 0; },
     get bros_burger_whatsapp() { return this.bros_burger.whatsapp; },
@@ -1378,7 +1378,11 @@
           if (parsed.bros_burger.whatsapp != null) partnerSettings.bros_burger.whatsapp = parsed.bros_burger.whatsapp;
         }
         if (parsed.bardali) {
-          if (parsed.bardali.commission != null) partnerSettings.bardali.commission = Number(parsed.bardali.commission);
+          // If commission in localStorage is old default of 20, reset to 0
+          if (parsed.bardali.commission != null) {
+            const bComm = Number(parsed.bardali.commission);
+            partnerSettings.bardali.commission = (bComm === 20) ? 0 : bComm;
+          }
           if (parsed.bardali.whatsapp != null) partnerSettings.bardali.whatsapp = parsed.bardali.whatsapp;
         }
       }
@@ -1411,7 +1415,7 @@
       e.preventDefault();
       const brosComm = Math.max(0, Math.min(100, Number(document.getElementById("partner-bros-commission").value) || 20));
       const brosPhone = (document.getElementById("partner-bros-phone").value || "").trim();
-      const bardaliComm = Math.max(0, Math.min(100, Number(document.getElementById("partner-bardali-commission").value) || 20));
+      const bardaliComm = Math.max(0, Math.min(100, Number(document.getElementById("partner-bardali-commission").value) || 0));
       const bardaliPhone = (document.getElementById("partner-bardali-phone").value || "").trim();
 
       partnerSettings.bros_burger.commission = brosComm;
@@ -1528,6 +1532,56 @@
     frChangeHandlers[containerId] = onChange;
   }
 
+  function isBrosDiscountApplicable(containerId) {
+    if (containerId === "edit-food-rows" || containerId === "edit") {
+      const isInternal = !!document.getElementById("edit-is-internal-sale")?.checked;
+      const isDisc = !!document.getElementById("edit-bros-internal-discount")?.checked;
+      return isInternal && isDisc;
+    }
+    if (containerId === "mr-food-rows" || containerId === "mr") {
+      const isInternal = !!document.getElementById("mr-is-internal-sale")?.checked;
+      const isDisc = !!document.getElementById("mr-bros-internal-discount")?.checked;
+      return isInternal && isDisc;
+    }
+    return false;
+  }
+
+  function syncBrosInternalDiscountRows(containerId) {
+    const isApplicable = isBrosDiscountApplicable(containerId);
+    const rows = document.querySelectorAll(`#${containerId} .fr-row`);
+    rows.forEach((row) => {
+      let item = null;
+      if (row.dataset.itemId) {
+        item = (menuItems || []).find((m) => m.id === row.dataset.itemId);
+      }
+      const searchInput = row.querySelector(".fr-search");
+      if (!item && searchInput && searchInput.value) {
+        item = (menuItems || []).find((m) => m.name.toLowerCase() === searchInput.value.trim().toLowerCase());
+      }
+      const sourceSelect = row.querySelector(".fr-source");
+      const isBros = (item && item.supplier === "bros_burger") || (sourceSelect && sourceSelect.value === "bros_burger");
+      if (isBros && item) {
+        const pInput = row.querySelector(".fr-unit-price");
+        if (pInput) {
+          const regularPrice = Number(item.price) || 0;
+          const discountedPrice = Math.round(regularPrice * 0.8);
+          if (isApplicable) {
+            if (pInput.dataset.userEdited !== "true" || Number(pInput.value) === regularPrice) {
+              pInput.value = discountedPrice;
+              delete pInput.dataset.userEdited;
+            }
+          } else {
+            if (pInput.dataset.userEdited !== "true" || Number(pInput.value) === discountedPrice) {
+              pInput.value = regularPrice;
+              delete pInput.dataset.userEdited;
+            }
+          }
+          updateFrRow(row);
+        }
+      }
+    });
+  }
+
   function addFrRow(containerId, selectedId = "", qty = 1, customUnitPrice = null, preselectedSupplier = "all", customItemName = "") {
     let initialSupplier = preselectedSupplier || "all";
     let isCustom = selectedId === "_custom" || (Boolean(selectedId) && !String(selectedId).startsWith("custom_") === false) ||
@@ -1550,7 +1604,9 @@
     if (customUnitPrice !== null && customUnitPrice !== undefined) {
       initialPrice = Number(customUnitPrice) || 0;
     } else if (matchedItem) {
-      initialPrice = matchedItem.price || 0;
+      const isBros = matchedItem.supplier === "bros_burger" || initialSupplier === "bros_burger";
+      const applyDisc = isBros && isBrosDiscountApplicable(containerId);
+      initialPrice = applyDisc ? Math.round((matchedItem.price || 0) * 0.8) : (matchedItem.price || 0);
     }
 
     const sourceLabels = { chillpill: "🍟 ChillPill", bros_burger: "🍔 Bro's", bardali: "🍽️ Bardali", all: "🌐 All", custom: "✏️ Custom" };
@@ -1735,11 +1791,23 @@
       if (item) {
         itemId = item.id;
         itemName = item.name;
+        const container = row.closest("#edit-food-rows") ? "edit" : row.closest("#mr-food-rows") ? "mr" : "";
+        const isBros = item.supplier === "bros_burger" || (sourceSelect && sourceSelect.value === "bros_burger");
+        const applyBrosDisc = isBros && isBrosDiscountApplicable(container);
+        const regularPrice = Number(item.price) || 0;
+        const discountedPrice = Math.round(regularPrice * 0.8);
+
         if (unitPriceInput.dataset.userEdited === "true") {
           unitPrice = Math.max(0, Number(unitPriceInput.value) || 0);
         } else {
-          unitPrice = item.price;
+          unitPrice = applyBrosDisc ? discountedPrice : regularPrice;
           unitPriceInput.value = unitPrice;
+        }
+
+        if (applyBrosDisc) {
+          unitPriceInput.title = `Bro's Burger 20% internal staff discount applied (Regular: Rs. ${regularPrice})`;
+        } else {
+          unitPriceInput.title = "";
         }
       } else if (typedName) {
         // Unmatched text — treat as custom
@@ -2170,7 +2238,7 @@
     function renderViewMode() {
       const supplier = item.supplier || "chillpill";
       const brosComm = partnerSettings ? partnerSettings.bros_burger_commission : 20;
-      const bardaliComm = partnerSettings ? partnerSettings.bardali_commission : 20;
+      const bardaliComm = partnerSettings ? partnerSettings.bardali_commission : 0;
       const supplierBadge = supplier === "bros_burger"
         ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 font-semibold">🍔 Bro's Burger (${brosComm}%)</span>`
         : supplier === "bardali"
@@ -4646,26 +4714,27 @@
   let editDiscountMode = "percent";
 
   function recalcEditModal() {
-    const duration = Math.max(0, Number(document.getElementById("edit-duration").value) || 0);
-    const rate = Math.max(0, Number(document.getElementById("edit-rate").value) || 0);
+    const isFoodOnly = !!document.getElementById("edit-is-food-only")?.checked;
+    const duration = isFoodOnly ? 0 : Math.max(0, Number(document.getElementById("edit-duration").value) || 0);
+    const rate = isFoodOnly ? 0 : Math.max(0, Number(document.getElementById("edit-rate").value) || 0);
     const foodTotal = frTotal("edit-food-rows");
-    const extraCost = calcExtraStationsCost("edit");
-    const rawTimeCost = Math.round((duration / 60) * rate);
+    const extraCost = isFoodOnly ? 0 : calcExtraStationsCost("edit");
+    const rawTimeCost = isFoodOnly ? 0 : Math.round((duration / 60) * rate);
 
     // Apply discount (on play time only, same as checkout)
     const discountValInput = document.getElementById("edit-discount-value");
     const rawDiscountVal = discountValInput ? discountValInput.value : 0;
-    const discount = computeDiscount({ duration_minutes: duration, rate }, editDiscountMode, rawDiscountVal);
-    if (discountValInput && String(discount.value) !== String(rawDiscountVal)) discountValInput.value = discount.value;
+    const discount = isFoodOnly ? { amount: 0, mode: editDiscountMode, value: 0 } : computeDiscount({ duration_minutes: duration, rate }, editDiscountMode, rawDiscountVal);
+    if (!isFoodOnly && discountValInput && String(discount.value) !== String(rawDiscountVal)) discountValInput.value = discount.value;
 
     const discountCapEl = document.getElementById("edit-discount-cap");
     const timeCost = Math.round((duration / 60) * rate);
-    if (discountCapEl) discountCapEl.textContent = discountCapLabel(editDiscountMode, timeCost, duration);
+    if (discountCapEl) discountCapEl.textContent = isFoodOnly ? "" : discountCapLabel(editDiscountMode, timeCost, duration);
 
     const tagEl = document.getElementById("edit-discount-summary-tag");
-    if (tagEl) tagEl.textContent = discount.amount > 0 ? `−${inr(discount.amount)}` : "";
+    if (tagEl) tagEl.textContent = (!isFoodOnly && discount.amount > 0) ? `−${inr(discount.amount)}` : "";
 
-    const ctrlCount = Math.max(0, Number(document.getElementById("edit-extra-controllers")?.value) || 0);
+    const ctrlCount = isFoodOnly ? 0 : Math.max(0, Number(document.getElementById("edit-extra-controllers")?.value) || 0);
     const ctrlCost = ctrlCount * CTRL_RATE;
     const ctrlCostEl = document.getElementById("edit-ctrl-cost");
     if (ctrlCostEl) ctrlCostEl.textContent = ctrlCost > 0 ? `+${inr(ctrlCost)}` : inr(0);
@@ -4694,47 +4763,110 @@
     return { total: effectiveTotal, foodTotal, duration, rate, extraCost, discount, rawTimeCost, ctrlCount, ctrlCost };
   }
 
-
   function updateEditInternalSaleState() {
     const isInternal = !!document.getElementById("edit-is-internal-sale")?.checked;
+    const isFoodOnly = !!document.getElementById("edit-is-food-only")?.checked;
     const badge = document.getElementById("edit-internal-badge");
     const chips = document.getElementById("edit-internal-chips");
+    const brosWrap = document.getElementById("edit-bros-discount-wrap");
     const stationReq = document.getElementById("edit-station-req");
     const startTimeReq = document.getElementById("edit-start-time-req");
     const custInput = document.getElementById("edit-customer-name");
     const phoneInput = document.getElementById("edit-customer-phone");
     const stationInput = document.getElementById("edit-station");
-    const durationInput = document.getElementById("edit-duration");
-    const rateInput = document.getElementById("edit-rate");
     const foodHdrNote = document.getElementById("edit-food-header-note");
 
     if (badge) badge.classList.toggle("hidden", !isInternal);
     if (chips) chips.classList.toggle("hidden", !isInternal);
-    if (stationReq) stationReq.classList.toggle("hidden", isInternal);
-    if (startTimeReq) startTimeReq.classList.toggle("hidden", isInternal);
+    if (brosWrap) brosWrap.classList.toggle("hidden", !isInternal);
+    if (stationReq) stationReq.classList.toggle("hidden", isInternal || isFoodOnly);
+    if (startTimeReq) startTimeReq.classList.toggle("hidden", isInternal || isFoodOnly);
 
     if (isInternal) {
       if (!custInput.value) {
         custInput.value = "Internal Sale";
       }
       if (phoneInput) phoneInput.placeholder = "Optional for internal sale";
-      if (stationInput) stationInput.placeholder = "Optional (e.g. Counter, Lounge, or leave blank)";
+      if (stationInput) stationInput.placeholder = isFoodOnly ? "Counter / Cafe (optional)" : "Optional (e.g. Counter, Lounge, or leave blank)";
       if (foodHdrNote) {
-        foodHdrNote.textContent = "· 👑 Custom food prices enabled";
+        foodHdrNote.textContent = isFoodOnly ? "· 🍽️ Food-only internal sale" : "· 👑 Custom food prices enabled";
         foodHdrNote.className = "text-[#d8ff45] font-semibold text-xs";
       }
     } else {
       if (custInput.value === "Internal Sale" || custInput.value.startsWith("Internal Sale")) {
         custInput.value = "";
       }
-      if (phoneInput) phoneInput.placeholder = "Customer phone";
-      if (stationInput) stationInput.placeholder = "Station / table";
+      if (phoneInput) phoneInput.placeholder = isFoodOnly ? "Optional for food-only" : "Customer phone";
+      if (stationInput) stationInput.placeholder = isFoodOnly ? "Counter / Cafe (optional)" : "Station / table";
       if (foodHdrNote) {
-        foodHdrNote.textContent = "";
+        foodHdrNote.textContent = isFoodOnly ? "· 🍽️ Food-only — no station time" : "";
+        if (isFoodOnly) foodHdrNote.className = "text-amber-400 font-semibold text-xs";
       }
     }
 
+    // Toggle unit price input state in all edit-food-rows
+    const rows = document.querySelectorAll("#edit-food-rows .fr-row");
+    rows.forEach((row) => {
+      const pInput = row.querySelector(".fr-unit-price");
+      if (pInput) {
+        pInput.disabled = !isInternal;
+        pInput.classList.toggle("border-[#d8ff45]/60", isInternal);
+        pInput.classList.toggle("text-[#d8ff45]", isInternal);
+        pInput.classList.toggle("bg-[#101520]", isInternal);
+        pInput.classList.toggle("border-slate-700", !isInternal);
+        pInput.classList.toggle("text-slate-400", !isInternal);
+        pInput.classList.toggle("bg-slate-900/50", !isInternal);
+        pInput.title = isInternal ? "Custom price for internal sale" : "Turn on Internal Sale to edit price";
+        if (!isInternal) {
+          pInput.dataset.userEdited = "false";
+          updateFrRow(row);
+        }
+      }
+    });
+
+    syncBrosInternalDiscountRows("edit-food-rows");
     recalcEditModal();
+  }
+
+  function updateEditFoodOnlyState() {
+    const isFoodOnly = !!document.getElementById("edit-is-food-only")?.checked;
+    const timeSection = document.getElementById("edit-time-section");
+    const extraStationsSection = document.getElementById("edit-extra-stations-section");
+    const discountSection = document.getElementById("edit-discount-section");
+    const stationInput = document.getElementById("edit-station");
+    const durationInput = document.getElementById("edit-duration");
+    const rateInput = document.getElementById("edit-rate");
+    const foodOnlyBadge = document.getElementById("edit-food-only-badge");
+    const internalToggle = document.getElementById("edit-is-internal-sale");
+    const isInternal = !!(internalToggle && internalToggle.checked);
+
+    if (timeSection) timeSection.classList.toggle("hidden", isFoodOnly);
+    if (extraStationsSection) extraStationsSection.classList.toggle("hidden", isFoodOnly);
+    if (discountSection) discountSection.classList.toggle("hidden", isFoodOnly);
+    if (foodOnlyBadge) foodOnlyBadge.classList.toggle("hidden", !isFoodOnly);
+
+    if (isFoodOnly) {
+      if (stationInput) {
+        stationInput.placeholder = "Counter / Café (optional)";
+        if (!stationInput.value) stationInput.value = "";
+      }
+      if (durationInput) durationInput.value = "0";
+      if (rateInput) rateInput.value = "0";
+    } else {
+      if (stationInput) {
+        stationInput.placeholder = isInternal
+          ? "Optional (e.g. Counter, Lounge, or leave blank)"
+          : "Station / table";
+        if (stationInput.value === "Counter / Cafe" && !isInternal) stationInput.value = "";
+      }
+      if (durationInput && durationInput.value === "0") {
+        durationInput.value = editTarget ? (editTarget.duration_minutes || "60") : "60";
+      }
+      if (rateInput && rateInput.value === "0") {
+        rateInput.value = editTarget ? (editTarget.rate || "100") : "100";
+      }
+    }
+    updateEditInternalSaleState();
   }
 
   function openEditModal(record) {
@@ -4760,6 +4892,18 @@
       const internalToggle = document.getElementById("edit-is-internal-sale");
       if (internalToggle) {
         internalToggle.checked = isInternal;
+      }
+      const editBrosDiscToggle = document.getElementById("edit-bros-internal-discount");
+      if (editBrosDiscToggle) {
+        editBrosDiscToggle.checked = true;
+      }
+
+      const isFoodOnly = (Number(record.duration_minutes) === 0 && (record.notes && record.notes.includes("[Food Only Sale]"))) ||
+                         (Number(record.duration_minutes) === 0 && (record.station_name === "Counter / Cafe" || record.station_name === "Counter" || record.station_name === "Food Counter")) ||
+                         (Number(record.duration_minutes) === 0 && record.food_items && record.food_items.filter(i => i && i.id !== "_extra_ctrl").length > 0 && (Number(record.rate) === 0 || !record.station_name || record.station_name.toLowerCase().includes("counter") || record.station_name.toLowerCase().includes("cafe")));
+      const foodOnlyToggle = document.getElementById("edit-is-food-only");
+      if (foodOnlyToggle) {
+        foodOnlyToggle.checked = !!isFoodOnly;
       }
 
       // Editing an older record keeps its original date (just changing the time-of-day)
@@ -4806,7 +4950,7 @@
       if (!record.food_items || !record.food_items.filter((i) => i && i.id !== "_extra_ctrl").length) addFrRow("edit-food-rows");
 
 
-      updateEditInternalSaleState();
+      updateEditFoodOnlyState();
 
       const payStatusEl = document.getElementById("edit-payment-status");
       const payMethodEl = document.getElementById("edit-payment-method");
@@ -4946,6 +5090,19 @@
       editInternalToggle.addEventListener("change", updateEditInternalSaleState);
     }
 
+    const editFoodOnlyToggle = document.getElementById("edit-is-food-only");
+    if (editFoodOnlyToggle) {
+      editFoodOnlyToggle.addEventListener("change", updateEditFoodOnlyState);
+    }
+
+    const editBrosDiscToggle = document.getElementById("edit-bros-internal-discount");
+    if (editBrosDiscToggle) {
+      editBrosDiscToggle.addEventListener("change", () => {
+        syncBrosInternalDiscountRows("edit-food-rows");
+        recalcEditModal();
+      });
+    }
+
     document.querySelectorAll(".edit-preset-chip").forEach((chip) => {
       chip.addEventListener("click", () => {
         const toggle = document.getElementById("edit-is-internal-sale");
@@ -5003,6 +5160,7 @@
       const internalToggle = document.getElementById("edit-is-internal-sale");
       const isInternal = !!(internalToggle && internalToggle.checked) ||
                          document.getElementById("edit-customer-name").value.trim().toLowerCase().includes("internal");
+      const isFoodOnly = !!document.getElementById("edit-is-food-only")?.checked;
 
       let station = document.getElementById("edit-station").value.trim();
       let customerName = document.getElementById("edit-customer-name").value.trim();
@@ -5011,11 +5169,15 @@
 
       if (isInternal) {
         if (!customerName) customerName = "Internal Sale";
-        if (!station) station = "Internal / Cafe";
+        if (!station) station = isFoodOnly ? "Counter / Cafe" : "Internal / Cafe";
         if (!customerPhone) customerPhone = "Internal";
+      } else if (isFoodOnly) {
+        if (!customerName) customerName = "Counter Sale";
+        if (!station) station = "Counter / Cafe";
+        if (!customerPhone) customerPhone = "";
       } else {
-        if (!station || !customerName || !customerPhone) {
-          msgEl.textContent = "Station, customer name, and phone can't be empty.";
+        if (!station || !customerName) {
+          msgEl.textContent = "Station and customer name can't be empty.";
           msgEl.className = "text-sm min-h-5 mt-2 text-red-300";
           return;
         }
@@ -5037,11 +5199,11 @@
       const startTimeStr = document.getElementById("edit-start-time").value || (isInternal ? "12:00" : "");
       const startDate = startTimeStr ? combineDateAndTime(editBaseDate, startTimeStr) : null;
       const startIso = startDate ? startDate.toISOString() : editTarget.start_time || null;
-      const endIso = startDate ? new Date(startDate.getTime() + duration * 60000).toISOString() : null;
+      const endIso = startDate ? new Date(startDate.getTime() + (isFoodOnly ? 0 : duration) * 60000).toISOString() : null;
 
       // A station can't run two overlapping Active/Booked sessions — check
       // only if this is a physical station (not an internal counter/food sale)
-      if (!isInternal && (editTarget.status === "Active" || editTarget.status === "Booked") && startIso && endIso) {
+      if (!isInternal && !isFoodOnly && (editTarget.status === "Active" || editTarget.status === "Booked") && startIso && endIso) {
         const conflict = findStationTimeOverlap(station, new Date(startIso), new Date(endIso), editTarget.id);
         if (conflict) {
           const conflictWord = conflict.status === "Active" ? "an active" : "a booked";
@@ -5101,6 +5263,9 @@
       if (isInternal && !finalNotes.includes("[Internal Sale]")) {
         finalNotes = finalNotes ? `[Internal Sale] ${finalNotes}` : "[Internal Sale]";
       }
+      if (isFoodOnly && !finalNotes.includes("[Food Only Sale]")) {
+        finalNotes = finalNotes ? `[Food Only Sale] ${finalNotes}` : "[Food Only Sale]";
+      }
       if (isPartial) {
         const partialTag = `[Payment: Partial | Paid: ${paidAmount} | Due: ${dueAmount} | Method: ${paymentMethod}${paymentMethod === "Split" ? ` | Cash: ${cashAmount} | Online: ${onlineAmount}` : ""}]`;
         finalNotes = [finalNotes, partialTag].filter(Boolean).join(" ");
@@ -5114,7 +5279,7 @@
 
       const btn = document.getElementById("edit-session-save");
       btn.disabled = true;
-      const extraStations = collectExtraStations("edit");
+      const extraStations = isFoodOnly ? [] : collectExtraStations("edit");
       // Build combined station string for overlap checks (primary + extras)
       const allStationNames = [station, ...extraStations.map((e) => e.station)].filter(Boolean).join(", ");
 
@@ -5127,9 +5292,9 @@
         customer_name: customerName,
         customer_phone: customerPhone,
         start_time: startIso,
-        end_time: endIso,
-        duration_minutes: duration,
-        rate,
+        end_time: isFoodOnly ? startIso : endIso,
+        duration_minutes: isFoodOnly ? 0 : duration,
+        rate: isFoodOnly ? 0 : rate,
         food_items: foodItems,
         food_total: foodTotal,
         amount: finalAmount,
@@ -5142,9 +5307,9 @@
         notes: finalNotes,
         notified_5min: false,
         extra_stations: extraStations,
-        discount_amount: discount ? discount.amount : 0,
-        discount_type: (discount && discount.amount > 0) ? discount.mode : null,
-        discount_value: (discount && discount.amount > 0) ? discount.value : 0
+        discount_amount: isFoodOnly ? 0 : (discount ? discount.amount : 0),
+        discount_type: (!isFoodOnly && discount && discount.amount > 0) ? discount.mode : null,
+        discount_value: (!isFoodOnly && discount && discount.amount > 0) ? discount.value : 0
       };
 
       if (isPaid || (isPartial && paidAmount > 0)) {
@@ -5398,6 +5563,7 @@
     const isFoodOnly = !!document.getElementById("mr-is-food-only")?.checked;
     const badge = document.getElementById("mr-internal-badge");
     const chips = document.getElementById("mr-internal-chips");
+    const mrBrosWrap = document.getElementById("mr-bros-discount-wrap");
     const stationReq = document.getElementById("mr-station-req");
     const startTimeReq = document.getElementById("mr-start-time-req");
     const custInput = document.getElementById("mr-customer-name");
@@ -5409,6 +5575,7 @@
 
     if (badge) badge.classList.toggle("hidden", !isInternal);
     if (chips) chips.classList.toggle("hidden", !isInternal);
+    if (mrBrosWrap) mrBrosWrap.classList.toggle("hidden", !isInternal);
     if (stationReq) stationReq.classList.toggle("hidden", isInternal || isFoodOnly);
     if (startTimeReq) startTimeReq.classList.toggle("hidden", isInternal || isFoodOnly);
 
@@ -5466,6 +5633,7 @@
       }
     });
 
+    syncBrosInternalDiscountRows("mr-food-rows");
     recalcMissingRecord();
   }
 
@@ -5561,6 +5729,10 @@
     const foodOnlyToggle = document.getElementById("mr-is-food-only");
     if (foodOnlyToggle) {
       foodOnlyToggle.checked = false;
+    }
+    const mrBrosDisc = document.getElementById("mr-bros-internal-discount");
+    if (mrBrosDisc) {
+      mrBrosDisc.checked = true;
     }
     // Show time/discount sections in case they were hidden
     const timeSection = document.getElementById("mr-time-section");
@@ -5663,6 +5835,14 @@
     const foodOnlyToggle = document.getElementById("mr-is-food-only");
     if (foodOnlyToggle) {
       foodOnlyToggle.addEventListener("change", updateMrFoodOnlyState);
+    }
+
+    const mrBrosDiscToggle = document.getElementById("mr-bros-internal-discount");
+    if (mrBrosDiscToggle) {
+      mrBrosDiscToggle.addEventListener("change", () => {
+        syncBrosInternalDiscountRows("mr-food-rows");
+        recalcMissingRecord();
+      });
     }
 
     document.querySelectorAll(".mr-preset-chip").forEach((chip) => {
@@ -6604,6 +6784,13 @@
     return filterRecordByPeriod({ created_at: iso }, period, startDate, endDate);
   }
 
+  function isInternalSaleRecord(record) {
+    if (!record) return false;
+    const name = (record.customer_name || "").toLowerCase();
+    const notes = (record.notes || "");
+    return name.includes("internal") || name.includes("owner use") || name.includes("staff consumption") || notes.includes("[Internal Sale]");
+  }
+
   function computeRecordRevenue(record) {
     const grossAmount = Number(record.amount) || 0;
     const foodTotal = Number(record.food_total) || 0;
@@ -6634,7 +6821,9 @@
       chillpillFood += foodTotal;
     }
 
-    const brosRate = Number(partnerSettings.bros_burger_commission) || 0;
+    const isInternal = isInternalSaleRecord(record);
+    // ChillPill takes 0% commission from Bro's Burger on internal sales (20% discount sent directly to Bro's Burger)
+    const brosRate = isInternal ? 0 : (Number(partnerSettings.bros_burger_commission) || 0);
     const bardaliRate = Number(partnerSettings.bardali_commission) || 0;
 
     const brosCommission = Math.round((brosGross * brosRate) / 100);
