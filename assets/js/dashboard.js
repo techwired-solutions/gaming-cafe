@@ -314,6 +314,9 @@
     document.getElementById("sidebar-backdrop").classList.remove("show");
   }
 
+  function updateStationCards() { if (typeof renderStationsBoard === "function") renderStationsBoard(); }
+  function renderSummary() { if (typeof updateSummary === "function") updateSummary(); }
+
   let isRefreshing = false;
   async function handleSystemRefresh() {
     if (isRefreshing) return;
@@ -324,12 +327,10 @@
     if (icon) icon.classList.add("animate-spin");
     try {
       await loadAll();
-      updateStationCards();
-      renderSummary();
-      renderRecordsList();
-      renderExpenses();
-      renderMenuManage();
-      renderWaitingList();
+      renderAllLists();
+      if (typeof renderWaitingList === "function") renderWaitingList();
+      if (typeof renderMenu === "function") renderMenu();
+      if (typeof renderExpensesTable === "function") renderExpensesTable();
       if (typeof renderRevenue === "function") renderRevenue();
       showToast("Data refreshed successfully!");
     } catch (err) {
@@ -867,7 +868,7 @@
 
           showToast(`Collected ${inr(paidAmount)} from ${group.customerName}!`);
           closeCustomerCollectModal();
-          renderSummary();
+          updateSummary();
           renderRecordsList();
           if (document.getElementById("unpaid-bills-modal")?.classList.contains("show")) {
             renderUnpaidBillsModal();
