@@ -91,6 +91,39 @@
     return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
   };
 
+  const isRecordToday = (r) => {
+    if (!r) return false;
+    return isToday(r.paid_at) || isToday(r.end_time) || isToday(r.start_time) || isToday(r.created_at);
+  };
+
+  function getRecordDates(record) {
+    if (!record) return [];
+    const dates = new Set();
+    const pad = (n) => String(n).padStart(2, "0");
+    const toDateStr = (raw) => {
+      if (!raw) return null;
+      const d = new Date(raw);
+      if (isNaN(d.getTime())) return null;
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    };
+    [record.start_time, record.paid_at, record.end_time, record.created_at].forEach((ts) => {
+      const s = toDateStr(ts);
+      if (s) dates.add(s);
+    });
+    return Array.from(dates);
+  }
+
+  function recordMatchesDateRange(record, startDate, endDate) {
+    if (!startDate && !endDate) return true;
+    const dates = getRecordDates(record);
+    if (dates.length === 0) return false;
+    return dates.some((d) => {
+      if (startDate && d < startDate) return false;
+      if (endDate && d > endDate) return false;
+      return true;
+    });
+  }
+
   const normalizeUsername = (s) => (s || "").trim().toLowerCase();
 
   const randomPassword = (len = 10) => {
@@ -574,6 +607,414 @@
         showUnpaidRecordsInLog();
       });
     }
+  }
+
+  // ---------- Overview KPI Cards Breakdown Modal ----------
+  let currentKpiCategory = null;
+
+  function closeOverviewKpiModal() {
+    const modal = document.getElementById("overview-kpi-modal");
+    if (modal) modal.classList.remove("show");
+    currentKpiCategory = null;
+  }
+
+  function jumpToRecord(recordId) {
+    closeOverviewKpiModal();
+    switchPage("page-records");
+    const rec = records.find((r) => r.id === recordId);
+    if (!rec) return;
+
+    // Reset filters so the record is guaranteed visible
+    recordsFilterStatus = "all";
+    recordsFilterPay = "all";
+    recordsFilterCustomer = "";
+    recordsSearchQuery = "";
+    recordsFilterStartDate = "";
+    recordsFilterEndDate = "";
+    recordsFilterDate = "";
+
+    const statusSel = document.getElementById("records-status-filter");
+    if (statusSel) statusSel.value = "all";
+    const paySel = document.getElementById("records-payment-filter");
+    if (paySel) paySel.value = "all";
+    const custInp = document.getElementById("records-customer-filter");
+    if (custInp) custInp.value = "";
+    const searchInp = document.getElementById("records-search-input");
+    if (searchInp) searchInp.value = "";
+    const dateStart = document.getElementById("records-date-start");
+    if (dateStart) dateStart.value = "";
+    const dateEnd = document.getElementById("records-date-end");
+    if (dateEnd) dateEnd.value = "";
+    const dateClear = document.getElementById("records-date-clear");
+    if (dateClear) dateClear.classList.add("hidden");
+
+    renderRecordsList();
+
+    setTimeout(() => {
+      const card = document.querySelector(`#records-list article[data-record-id="${recordId}"]`);
+      if (card) {
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+        card.classList.add("flash-alert");
+        setTimeout(() => card.classList.remove("flash-alert"), 3500);
+      }
+    }, 150);
+  }
+
+  function openOverviewKpiModal(category) {
+    currentKpiCategory = category;
+    const modal = document.getElementById("overview-kpi-modal");
+    if (!modal) return;
+
+    const titleEl = document.getElementById("overview-kpi-modal-title");
+    const subEl = document.getElementById("overview-kpi-modal-subtitle");
+    const iconEl = document.getElementById("overview-kpi-modal-icon");
+    const iconWrap = document.getElementById("overview-kpi-modal-icon-wrap");
+    const statsEl = document.getElementById("overview-kpi-modal-stats");
+    const listEl = document.getElementById("overview-kpi-modal-list");
+    const emptyEl = document.getElementById("overview-kpi-modal-empty");
+
+    listEl.innerHTML = "";
+    statsEl.innerHTML = "";
+
+    let items = [];
+    let title = "";
+    let subtitle = "";
+    let iconName = "info";
+    let iconColorClass = "text-[#d8ff45] bg-[#d8ff45]/20 border-[#d8ff45]/30";
+
+    if (category === "active") {
+      title = "Active Sessions";
+      subtitle = "Currently running sessions at stations";
+      iconName = "play-circle";
+      iconColorClass = "text-[#d8ff45] bg-[#d8ff45]/20 border-[#d8ff45]/30";
+      items = records.filter((r) => r.status === "Active");
+
+      const totalEst = items.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+      statsEl.innerHTML = `
+        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+          <span class="text-slate-400 block text-[10px]">Active Sessions</span>
+          <span class="mono font-bold text-sm text-[#d8ff45]">${items.length}</span>
+        </div>
+        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+          <span class="text-slate-400 block text-[10px]">Estimated Total</span>
+          <span class="mono font-bold text-sm text-white">${inr(totalEst)}</span>
+        </div>
+      `;
+    } else if (category === "ending-soon") {
+      title = "Sessions Ending Soon";
+      subtitle = "Active sessions with 5 minutes or less remaining";
+      iconName = "alarm-clock";
+      iconColorClass = "text-amber-300 bg-amber-400/20 border-amber-400/30";
+      items = records.filter((r) => r.status === "Active" && r.end_time && new Date(r.end_time) - new Date() > 0 && new Date(r.end_time) - new Date() <= ALERT_MS);
+
+      statsEl.innerHTML = `
+        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+          <span class="text-slate-400 block text-[10px]">Ending Soon</span>
+          <span class="mono font-bold text-sm text-amber-300">${items.length} session${items.length === 1 ? "" : "s"}</span>
+        </div>
+        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+          <span class="text-slate-400 block text-[10px]">Action</span>
+          <span class="text-slate-300 text-xs">Extend or Checkout below</span>
+        </div>
+      `;
+    } else if (category === "completed") {
+      title = "Sessions Completed Today";
+      subtitle = "All sessions completed on today's date";
+      iconName = "check-circle";
+      iconColorClass = "text-sky-300 bg-sky-400/20 border-sky-400/30";
+      items = records.filter((r) => r.status === "Completed" && isRecordToday(r));
+
+      const totalAmt = items.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+      const paidAmt = items.reduce((sum, r) => {
+        const bd = getRecordPaymentBreakdown(r);
+        return sum + bd.paidAmount;
+      }, 0);
+      const dueAmt = Math.max(0, totalAmt - paidAmt);
+
+      statsEl.innerHTML = `
+        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+          <span class="text-slate-400 block text-[10px]">Completed Today</span>
+          <span class="mono font-bold text-sm text-sky-300">${items.length}</span>
+        </div>
+        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+          <span class="text-slate-400 block text-[10px]">Total Value</span>
+          <span class="mono font-bold text-sm text-white">${inr(totalAmt)}</span>
+        </div>
+        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+          <span class="text-slate-400 block text-[10px]">Collected</span>
+          <span class="mono font-bold text-sm text-emerald-400">${inr(paidAmt)}</span>
+        </div>
+        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+          <span class="text-slate-400 block text-[10px]">Unpaid / Due</span>
+          <span class="mono font-bold text-sm ${dueAmt > 0 ? "text-rose-400" : "text-slate-400"}">${inr(dueAmt)}</span>
+        </div>
+      `;
+    } else if (category === "food") {
+      title = "Today's Food Orders";
+      subtitle = "All snacks, drinks & meals ordered in today's sessions";
+      iconName = "sandwich";
+      iconColorClass = "text-orange-300 bg-orange-400/20 border-orange-400/30";
+
+      const todaySessions = records.filter((r) => isRecordToday(r) || r.status === "Active");
+      const orderRows = [];
+      let totalFoodVal = 0;
+      let totalQty = 0;
+      let cpTotal = 0;
+      let partnerTotal = 0;
+
+      todaySessions.forEach((r) => {
+        if (!r.food_items || !Array.isArray(r.food_items)) return;
+        r.food_items.forEach((f) => {
+          if (!f || f.id === "_extra_ctrl" || !f.name || f.name === "Item") return;
+          const qty = Number(f.qty) || 0;
+          if (qty <= 0) return;
+          const price = Number(f.price) || 0;
+          const rowTotal = qty * price;
+          totalQty += qty;
+          totalFoodVal += rowTotal;
+
+          const src = (f.source || "").toLowerCase();
+          if (src.includes("bro") || src.includes("bardali")) partnerTotal += rowTotal;
+          else cpTotal += rowTotal;
+
+          orderRows.push({
+            session: r,
+            item: f,
+            qty,
+            price,
+            rowTotal
+          });
+        });
+      });
+
+      statsEl.innerHTML = `
+        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+          <span class="text-slate-400 block text-[10px]">Total Items</span>
+          <span class="mono font-bold text-sm text-orange-300">${totalQty}</span>
+        </div>
+        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+          <span class="text-slate-400 block text-[10px]">Total Food Sales</span>
+          <span class="mono font-bold text-sm text-white">${inr(totalFoodVal)}</span>
+        </div>
+        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+          <span class="text-slate-400 block text-[10px]">ChillPill Cafe</span>
+          <span class="mono font-bold text-sm text-slate-200">${inr(cpTotal)}</span>
+        </div>
+        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+          <span class="text-slate-400 block text-[10px]">Partner Orders</span>
+          <span class="mono font-bold text-sm text-amber-300">${inr(partnerTotal)}</span>
+        </div>
+      `;
+
+      if (orderRows.length === 0) {
+        emptyEl.classList.remove("hidden");
+      } else {
+        emptyEl.classList.add("hidden");
+        orderRows.forEach(({ session: r, item: f, qty, price, rowTotal }) => {
+          const card = document.createElement("div");
+          card.className = "p-3 rounded-xl border border-slate-700/70 bg-slate-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs";
+          const srcName = f.source || "ChillPill";
+          const srcClass = srcName.toLowerCase().includes("bro")
+            ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+            : srcName.toLowerCase().includes("bardali")
+            ? "border-purple-500/40 bg-purple-500/10 text-purple-300"
+            : "border-slate-600 bg-slate-800 text-slate-300";
+
+          card.innerHTML = `
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-bold text-sm text-white">${escapeHtml(f.name)}</span>
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold border ${srcClass}">${escapeHtml(srcName)}</span>
+                <span class="mono text-slate-400">×${qty}</span>
+              </div>
+              <div class="flex items-center gap-2 text-slate-400 text-[11px] mt-1">
+                <span>Ordered by <strong class="text-slate-200">${escapeHtml(r.customer_name || "Guest")}</strong></span>
+                <span>·</span>
+                <span>${escapeHtml(r.station_name || "Station")}</span>
+                <span>·</span>
+                <span>${r.start_time ? fmtDateTime(r.start_time) : ""}</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 shrink-0 self-end sm:self-center">
+              <span class="mono font-bold text-sm text-orange-300">${inr(rowTotal)}</span>
+              <button type="button" class="kpi-view-session-btn rounded-lg px-2.5 py-1 text-[11px] font-semibold border border-slate-700 bg-slate-800/80 hover:border-[#d8ff45] hover:text-[#d8ff45] text-slate-300 transition cursor-pointer" data-id="${r.id}">
+                View Session
+              </button>
+            </div>
+          `;
+          card.querySelector(".kpi-view-session-btn")?.addEventListener("click", () => jumpToRecord(r.id));
+          listEl.appendChild(card);
+        });
+      }
+    } else if (category === "revenue") {
+      title = "Today's Revenue Breakdown";
+      subtitle = "Detailed breakdown of all income collected on today's date";
+      iconName = "banknote";
+      iconColorClass = "text-[#d8ff45] bg-[#d8ff45]/20 border-[#d8ff45]/30";
+
+      items = records.filter((r) => {
+        const bd = getRecordPaymentBreakdown(r);
+        return (r.paid || bd.paidAmount > 0) && isRecordToday(r);
+      });
+
+      let totalGross = 0;
+      let totalCash = 0;
+      let totalOnline = 0;
+      let totalDue = 0;
+
+      items.forEach((r) => {
+        const bd = getRecordPaymentBreakdown(r);
+        totalGross += (bd.paidAmount > 0 ? bd.paidAmount : (Number(r.amount) || 0));
+        totalCash += bd.cash;
+        totalOnline += bd.online;
+        totalDue += bd.dueAmount;
+      });
+
+      statsEl.innerHTML = `
+        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+          <span class="text-slate-400 block text-[10px]">Today's Revenue</span>
+          <span class="mono font-bold text-sm text-[#d8ff45]">${inr(totalGross)}</span>
+        </div>
+        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+          <span class="text-slate-400 block text-[10px]">Cash</span>
+          <span class="mono font-bold text-sm text-amber-300">${inr(totalCash)}</span>
+        </div>
+        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+          <span class="text-slate-400 block text-[10px]">Online / UPI</span>
+          <span class="mono font-bold text-sm text-sky-300">${inr(totalOnline)}</span>
+        </div>
+        <div class="p-2 rounded-lg bg-black/20 border border-slate-800">
+          <span class="text-slate-400 block text-[10px]">Sessions Count</span>
+          <span class="mono font-bold text-sm text-white">${items.length}</span>
+        </div>
+      `;
+    }
+
+    titleEl.textContent = title;
+    subEl.textContent = subtitle;
+    iconWrap.className = `inline-flex items-center justify-center w-9 h-9 rounded-xl border shrink-0 ${iconColorClass}`;
+    iconEl.setAttribute("data-lucide", iconName);
+
+    if (category !== "food") {
+      if (items.length === 0) {
+        emptyEl.classList.remove("hidden");
+      } else {
+        emptyEl.classList.add("hidden");
+        items.forEach((r) => {
+          const bd = getRecordPaymentBreakdown(r);
+          const card = document.createElement("div");
+          card.className = "p-3 rounded-xl border border-slate-700/70 bg-slate-900/50 flex flex-col gap-2 text-xs";
+
+          const stationStr = r.station_name || "Station";
+          const durStr = `${r.duration_minutes || 0}m`;
+          const timeStr = r.start_time ? fmtDateTime(r.start_time) : (r.created_at ? fmtDateTime(r.created_at) : "");
+          const customerStr = r.customer_name || "Walk-in Guest";
+          const phoneStr = (r.customer_phone && r.customer_phone !== "—") ? r.customer_phone : "";
+
+          const statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold ${r.status === 'Active' ? 'bg-[#d8ff45]/20 text-[#d8ff45]' : r.status === 'Completed' ? 'bg-sky-400/20 text-sky-300' : 'bg-slate-700 text-slate-300'}">${escapeHtml(r.status)}</span>`;
+
+          const payBadge = bd.isPartial
+            ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-400/20 text-amber-300">Partial (${inr(bd.paidAmount)} paid · ${inr(bd.dueAmount)} due)</span>`
+            : r.paid
+            ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-400/20 text-emerald-300">Paid (${bd.method || "Cash"})</span>`
+            : `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300">Unpaid (${inr(bd.dueAmount || r.amount)})</span>`;
+
+          const extraInfo = [];
+          if (r.food_items && Array.isArray(r.food_items) && r.food_items.length > 0) {
+            const count = r.food_items.filter((f) => f && f.id !== "_extra_ctrl" && Number(f.qty) > 0).length;
+            if (count > 0) extraInfo.push(`🍔 ${count} food item${count > 1 ? "s" : ""}`);
+            const ctrl = r.food_items.find((f) => f && f.id === "_extra_ctrl");
+            if (ctrl && Number(ctrl.qty) > 0) extraInfo.push(`🎮 ${ctrl.qty} extra ctrl`);
+          }
+          if (r.notes) {
+            extraInfo.push(`📝 ${r.notes.slice(0, 45)}${r.notes.length > 45 ? "…" : ""}`);
+          }
+
+          card.innerHTML = `
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="font-bold text-sm text-white">${escapeHtml(customerStr)}</span>
+                  ${phoneStr ? `<span class="mono text-[11px] text-slate-400">📱 ${escapeHtml(phoneStr)}</span>` : ""}
+                  ${statusBadge}
+                  ${payBadge}
+                </div>
+                <div class="flex items-center gap-2 text-slate-400 text-[11px] mt-1 flex-wrap">
+                  <span class="font-semibold text-slate-300">${escapeHtml(stationStr)}</span>
+                  <span>·</span>
+                  <span class="mono">${durStr}</span>
+                  <span>·</span>
+                  <span>${timeStr}</span>
+                  ${extraInfo.length > 0 ? `<span>·</span><span class="text-slate-400">${escapeHtml(extraInfo.join(" · "))}</span>` : ""}
+                </div>
+              </div>
+              <div class="text-right shrink-0">
+                <span class="mono font-bold text-base text-[#d8ff45] block">${inr(r.amount)}</span>
+                ${bd.dueAmount > 0 ? `<span class="text-[10px] text-rose-400 font-semibold block">Due: ${inr(bd.dueAmount)}</span>` : ""}
+              </div>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-1 border-t border-slate-800/80">
+              ${r.status === "Active" ? `<button type="button" class="kpi-action-checkout rounded-lg px-2.5 py-1 text-[11px] font-bold bg-[#d8ff45] text-[#10141e] hover:brightness-110 transition cursor-pointer" data-id="${r.id}">Checkout</button>` : ""}
+              ${bd.dueAmount > 0 && r.status === "Completed" ? `<button type="button" class="kpi-action-collect rounded-lg px-2.5 py-1 text-[11px] font-bold bg-rose-500 text-white hover:bg-rose-600 transition cursor-pointer" data-id="${r.id}">Collect Due</button>` : ""}
+              <button type="button" class="kpi-action-view rounded-lg px-2.5 py-1 text-[11px] font-semibold border border-slate-700 bg-slate-800 hover:border-[#d8ff45] hover:text-[#d8ff45] text-slate-300 transition cursor-pointer" data-id="${r.id}">
+                View / Edit in Records
+              </button>
+            </div>
+          `;
+
+          card.querySelector(".kpi-action-view")?.addEventListener("click", () => jumpToRecord(r.id));
+          card.querySelector(".kpi-action-checkout")?.addEventListener("click", () => {
+            closeOverviewKpiModal();
+            openCheckoutModal(r.id);
+          });
+          card.querySelector(".kpi-action-collect")?.addEventListener("click", () => {
+            closeOverviewKpiModal();
+            const groups = getUnpaidCustomersGrouped([r]);
+            if (groups.length > 0) openCustomerCollectModal(groups[0]);
+          });
+
+          listEl.appendChild(card);
+        });
+      }
+    }
+
+    modal.classList.add("show");
+    if (window.lucide) window.lucide.createIcons({ root: modal });
+  }
+
+  function initOverviewKpiModal() {
+    const modal = document.getElementById("overview-kpi-modal");
+    if (!modal) return;
+
+    const closeBtn = document.getElementById("overview-kpi-modal-close");
+    const dismissBtn = document.getElementById("overview-kpi-modal-dismiss-btn");
+    const viewAllBtn = document.getElementById("overview-kpi-modal-view-all-records");
+
+    if (closeBtn) closeBtn.addEventListener("click", closeOverviewKpiModal);
+    if (dismissBtn) dismissBtn.addEventListener("click", closeOverviewKpiModal);
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) closeOverviewKpiModal();
+    });
+
+    if (viewAllBtn) {
+      viewAllBtn.addEventListener("click", () => {
+        closeOverviewKpiModal();
+        setRecordsDateRange(getTodayDateStr(), getTodayDateStr());
+        switchPage("page-records");
+      });
+    }
+
+    const cardActive = document.getElementById("kpi-card-active");
+    const cardEnding = document.getElementById("kpi-card-ending-soon");
+    const cardCompleted = document.getElementById("kpi-card-completed");
+    const cardFood = document.getElementById("kpi-card-food");
+    const cardRevenue = document.getElementById("kpi-card-revenue");
+
+    if (cardActive) cardActive.addEventListener("click", () => openOverviewKpiModal("active"));
+    if (cardEnding) cardEnding.addEventListener("click", () => openOverviewKpiModal("ending-soon"));
+    if (cardCompleted) cardCompleted.addEventListener("click", () => openOverviewKpiModal("completed"));
+    if (cardFood) cardFood.addEventListener("click", () => openOverviewKpiModal("food"));
+    if (cardRevenue) cardRevenue.addEventListener("click", () => openOverviewKpiModal("revenue"));
   }
 
   // ---------- Single Customer Collect Modal & Settlement ----------
@@ -1986,10 +2427,10 @@
   function updateSummary() {
     const activeSessions = records.filter((r) => r.status === "Active");
     const endingSoon = activeSessions.filter((r) => r.end_time && new Date(r.end_time) - new Date() > 0 && new Date(r.end_time) - new Date() <= ALERT_MS);
-    const completedToday = records.filter((r) => r.status === "Completed" && isToday(r.paid_at || r.created_at));
+    const completedToday = records.filter((r) => r.status === "Completed" && isRecordToday(r));
     const todayRevenue = records.reduce((sum, r) => {
       const bd = getRecordPaymentBreakdown(r);
-      if ((r.paid || bd.paidAmount > 0) && isToday(r.paid_at || r.start_time || r.created_at)) {
+      if ((r.paid || bd.paidAmount > 0) && isRecordToday(r)) {
         return sum + (bd.paidAmount > 0 ? bd.paidAmount : (Number(r.amount) || 0));
       }
       return sum;
@@ -1999,7 +2440,7 @@
     document.getElementById("ending-soon-count").textContent = endingSoon.length;
     document.getElementById("completed-count").textContent = completedToday.length;
     document.getElementById("food-count").textContent = records.filter((r) => {
-      if (!r.food_items || !Array.isArray(r.food_items) || !isToday(r.paid_at || r.start_time || r.created_at)) return false;
+      if (!r.food_items || !Array.isArray(r.food_items) || !isRecordToday(r)) return false;
       return r.food_items.some((f) => f && f.id !== "_extra_ctrl" && f.name && f.name !== "Item" && Number(f.qty) > 0);
     }).length;
     document.getElementById("today-revenue").textContent = inr(todayRevenue);
@@ -2574,7 +3015,7 @@
   let recordsSearchQuery = "";
 
   function getRecordLocalDateStr(record) {
-    const raw = record.start_time || record.created_at;
+    const raw = record.start_time || record.created_at || record.paid_at || record.end_time;
     if (!raw) return "";
     const d = new Date(raw);
     if (isNaN(d.getTime())) return "";
@@ -2618,12 +3059,9 @@
         }
 
         if (recordsFilterStartDate || recordsFilterEndDate) {
-          const recDateStr = getRecordLocalDateStr(r);
-          if (recordsFilterStartDate && recDateStr < recordsFilterStartDate) return false;
-          if (recordsFilterEndDate && recDateStr > recordsFilterEndDate) return false;
+          if (!recordMatchesDateRange(r, recordsFilterStartDate, recordsFilterEndDate)) return false;
         } else if (recordsFilterDate) {
-          const recDateStr = getRecordLocalDateStr(r);
-          if (recDateStr !== recordsFilterDate) return false;
+          if (!recordMatchesDateRange(r, recordsFilterDate, recordsFilterDate)) return false;
         }
 
         if (custQ) {
@@ -6078,17 +6516,15 @@
   };
 
   function filterRecordByPeriod(r, period, startDate, endDate) {
-    const iso = r.paid_at || r.created_at;
+    if (period === "range" || (startDate || endDate)) {
+      return recordMatchesDateRange(r, startDate, endDate);
+    }
+    if (period === "today") return isRecordToday(r);
+    const iso = r.paid_at || r.created_at || r.start_time || r.end_time;
     if (!iso) return false;
     const ds = getDateStr(iso);
     if (!ds) return false;
 
-    if (period === "range" || (startDate || endDate)) {
-      if (startDate && ds < startDate) return false;
-      if (endDate && ds > endDate) return false;
-      return true;
-    }
-    if (period === "today") return isToday(iso);
     if (period === "yesterday") return isYesterday(iso);
     if (period === "month") return isThisMonth(iso);
     if (period === "custom") return ds === (startDate || revCustomDate);
@@ -7884,6 +8320,7 @@
     initSidebar();
     initCheckoutModal();
     initUnpaidBillsModal();
+    initOverviewKpiModal();
     initCustomerCollectModal();
     initEditModal();
     initQuickFoodModal();
