@@ -2918,7 +2918,7 @@
       <!-- Payment status selection: Full Paid, Partial, or Unpaid/Due -->
       <div class="mt-4">
         <label class="block text-xs text-slate-400 mb-1.5 font-semibold">Settlement Status</label>
-        <div class="grid grid-cols-3 gap-1.5 mb-2.5">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mb-2.5">
           <button id="checkout-status-btn-paid" type="button" class="checkout-status-btn active rounded-lg border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition" data-status="Paid">
             <i data-lucide="check-circle-2" width="13" height="13"></i> Full Paid
           </button>
@@ -2927,6 +2927,9 @@
           </button>
           <button id="checkout-status-btn-unpaid" type="button" class="checkout-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition" data-status="Unpaid">
             <i data-lucide="clock" width="13" height="13"></i> Leave as Due
+          </button>
+          <button id="checkout-status-btn-waived" type="button" class="checkout-status-btn rounded-lg border border-purple-500/50 bg-purple-500/10 text-purple-300 hover:border-purple-400 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition" data-status="Waived" title="Waive due without payment (for partners/internal sessions)">
+            <i data-lucide="shield-check" width="13" height="13"></i> Waive / Partner
           </button>
         </div>
       </div>
@@ -3307,6 +3310,7 @@
               <option value="Paid">Paid (Settled)</option>
               <option value="Partial">Partial Payment (Paid + Due)</option>
               <option value="Unpaid">Unpaid / Due</option>
+              <option value="Waived">👑 Waived / Partner Session (No Charge)</option>
             </select>
           </div>
           <div>
@@ -3655,6 +3659,7 @@
                 <option value="Paid" selected>Paid (Settled)</option>
                 <option value="Partial">Partial Payment (Paid + Due)</option>
                 <option value="Unpaid">Unpaid / Credit</option>
+                <option value="Waived">👑 Waived / Partner Session (No Charge)</option>
               </select>
             </div>
             <div>
@@ -4022,13 +4027,31 @@
       <!-- Settlement Status selection -->
       <div class="mb-3.5">
         <label class="block text-xs text-slate-400 mb-1.5 font-semibold">Settlement Action</label>
-        <div class="grid grid-cols-2 gap-2">
-          <button id="cust-collect-status-full" type="button" class="cust-collect-status-btn active rounded-lg border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] py-2 px-2 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition">
-            <i data-lucide="check-circle-2" width="14" height="14"></i> Full Settlement
+        <div class="grid grid-cols-3 gap-1.5">
+          <button id="cust-collect-status-full" type="button" class="cust-collect-status-btn active rounded-lg border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition">
+            <i data-lucide="check-circle-2" width="13" height="13"></i> Full Settle
           </button>
-          <button id="cust-collect-status-partial" type="button" class="cust-collect-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-2 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition">
-            <i data-lucide="pie-chart" width="14" height="14"></i> Partial / Edit
+          <button id="cust-collect-status-partial" type="button" class="cust-collect-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition">
+            <i data-lucide="pie-chart" width="13" height="13"></i> Partial / Edit
           </button>
+          <button id="cust-collect-status-waive" type="button" class="cust-collect-status-btn rounded-lg border border-purple-500/50 bg-purple-500/10 text-purple-300 hover:border-purple-400 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition" title="Clear due without collecting payment (e.g. partner / internal gaming session)">
+            <i data-lucide="shield-check" width="13" height="13"></i> Waive Due
+          </button>
+        </div>
+      </div>
+
+      <!-- Waive / Partner Clear Card (visible only when Waive Due is selected) -->
+      <div id="cust-collect-waive-card" class="hidden rounded-xl p-3 bg-purple-500/10 border border-purple-500/30 space-y-2 mb-4">
+        <div class="flex items-start gap-2">
+          <span class="text-purple-300 text-sm">👑</span>
+          <div class="min-w-0">
+            <span class="text-xs font-bold text-purple-200">Clear As Partner / Internal Session (Rs. 0 Charged)</span>
+            <p class="text-[11px] text-slate-400 mt-0.5">Clears this customer's records from Unpaid/Due list without taking cash/online payment. Records remain in Lounge Log with the note.</p>
+          </div>
+        </div>
+        <div>
+          <label for="cust-collect-waive-note" class="block text-xs font-semibold text-slate-300 mb-1">Clearance Reason / Staff Note</label>
+          <input id="cust-collect-waive-note" type="text" class="form-control text-xs py-1.5" placeholder="e.g. Partner gaming session - Prakash Dai (waived)">
         </div>
       </div>
 
@@ -4044,8 +4067,8 @@
         </div>
       </div>
 
-      <!-- Payment Method -->
-      <div class="mb-4">
+      <!-- Payment Method Wrap -->
+      <div id="cust-collect-methods-wrap" class="mb-4">
         <label class="block text-xs text-slate-400 mb-1.5 font-semibold">Payment Method</label>
         <div class="grid grid-cols-3 gap-2">
           <button id="cust-collect-method-cash" type="button" class="cust-collect-method-btn rounded-xl py-2 px-2 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] flex items-center justify-center gap-1 cursor-pointer transition">

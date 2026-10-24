@@ -447,7 +447,7 @@
     const unpaidRecords = pool.filter((r) => {
       if (r.status === "Cancelled") return false;
       const bd = getRecordPaymentBreakdown(r);
-      return !r.paid || bd.isPartial || bd.dueAmount > 0;
+      return (!r.paid || bd.isPartial || bd.dueAmount > 0) && !bd.isWaived;
     });
 
     const groups = new Map();
@@ -534,13 +534,16 @@
           </div>
           ${g.customerPhone ? `<p class="text-xs text-slate-400 mt-0.5 mono">📱 ${escapeHtml(g.customerPhone)}</p>` : ""}
         </div>
-        <div class="flex items-center gap-3 shrink-0">
-          <div class="text-right">
+        <div class="flex items-center gap-2 shrink-0">
+          <div class="text-right mr-1">
             <span class="text-[11px] text-slate-400 block font-medium">Total Outstanding</span>
             <span class="mono font-bold text-lg text-[#ff6875]">${inr(g.totalDue)}</span>
           </div>
-          <button type="button" class="btn-customer-collect px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-500 hover:bg-rose-600 text-white shadow transition cursor-pointer flex items-center gap-1.5 shrink-0">
+          <button type="button" class="btn-customer-collect px-3 py-2 rounded-xl text-xs font-bold bg-rose-500 hover:bg-rose-600 text-white shadow transition cursor-pointer flex items-center gap-1.5 shrink-0">
             <i data-lucide="wallet" width="14" height="14"></i> Collect ${inr(g.totalDue)}
+          </button>
+          <button type="button" class="btn-customer-waive px-2.5 py-2 rounded-xl text-xs font-bold border border-purple-500/40 bg-purple-500/15 text-purple-300 hover:bg-purple-500/25 transition cursor-pointer flex items-center gap-1 shrink-0" title="Clear/waive due without taking payment (for partners/internal sessions)">
+            <i data-lucide="shield-check" width="14" height="14"></i> Waive
           </button>
         </div>
       `;
@@ -574,8 +577,16 @@
 
       card.querySelector(".btn-customer-collect").addEventListener("click", () => {
         closeUnpaidBillsModal();
-        openCustomerCollectModal(g);
+        openCustomerCollectModal(g, "full");
       });
+
+      const waiveBtn = card.querySelector(".btn-customer-waive");
+      if (waiveBtn) {
+        waiveBtn.addEventListener("click", () => {
+          closeUnpaidBillsModal();
+          openCustomerCollectModal(g, "waive");
+        });
+      }
 
       listEl.appendChild(card);
     });
@@ -1022,11 +1033,11 @@
   let activeCollectMethod = "Cash";
   let activeCollectStatus = "full"; // "full" or "partial"
 
-  function openCustomerCollectModal(group) {
+  function openCustomerCollectModal(group, initialAction = "full") {
     if (!group || !group.records || !group.records.length) return;
     activeCollectGroup = group;
     activeCollectMethod = "Cash";
-    activeCollectStatus = "full";
+    activeCollectStatus = initialAction || "full";
 
     const modal = document.getElementById("customer-collect-modal");
     if (!modal) return;
@@ -1038,6 +1049,16 @@
     }
     document.getElementById("cust-collect-total-due").textContent = inr(group.totalDue);
     document.getElementById("cust-collect-session-count").textContent = `${group.records.length} unpaid session${group.records.length > 1 ? "s" : ""}`;
+
+    // Prefill waive note
+    const waiveNoteInput = document.getElementById("cust-collect-waive-note");
+    if (waiveNoteInput) {
+      const lower = (group.customerName || "").toLowerCase();
+      const isPartner = lower.includes("prakash") || lower.includes("internal") || lower.includes("partner") || lower.includes("owner");
+      waiveNoteInput.value = isPartner
+        ? `Partner session waived — ${group.customerName}`
+        : `Due waived — ${group.customerName}`;
+    }
 
     // Render included sessions list
     const sessionsList = document.getElementById("cust-collect-sessions-list");
@@ -1069,7 +1090,7 @@
     if (dueInput) dueInput.value = 0;
 
     // Reset status & method buttons
-    updateCustCollectStatusUI("full");
+    updateCustCollectStatusUI(activeCollectStatus);
     updateCustCollectMethodUI("Cash");
 
     modal.classList.add("show");
@@ -1085,28 +1106,59 @@
   function updateCustCollectStatusUI(status) {
     activeCollectStatus = status;
     const isFull = status === "full";
+    const isPartial = status === "partial";
+    const isWaive = status === "waive";
+
     const fullBtn = document.getElementById("cust-collect-status-full");
     const partialBtn = document.getElementById("cust-collect-status-partial");
+    const waiveBtn = document.getElementById("cust-collect-status-waive");
+
     if (fullBtn) {
       fullBtn.classList.toggle("active", isFull);
       fullBtn.className = isFull
-        ? "cust-collect-status-btn active rounded-lg border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] py-2 px-2 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition"
-        : "cust-collect-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-2 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition";
+        ? "cust-collect-status-btn active rounded-lg border border-[#d8ff45] bg-[#d8ff45]/20 text-[#d8ff45] py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition"
+        : "cust-collect-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition";
     }
     if (partialBtn) {
-      const isPartial = status === "partial";
       partialBtn.classList.toggle("active", isPartial);
       partialBtn.className = isPartial
-        ? "cust-collect-status-btn active rounded-lg border border-amber-400 bg-amber-400/20 text-amber-300 py-2 px-2 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition"
-        : "cust-collect-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-2 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition";
+        ? "cust-collect-status-btn active rounded-lg border border-amber-400 bg-amber-400/20 text-amber-300 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition"
+        : "cust-collect-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition";
+    }
+    if (waiveBtn) {
+      waiveBtn.classList.toggle("active", isWaive);
+      waiveBtn.className = isWaive
+        ? "cust-collect-status-btn active rounded-lg border border-purple-400 bg-purple-500/25 text-purple-200 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition"
+        : "cust-collect-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition";
     }
 
     const dueWrap = document.getElementById("cust-collect-due-wrap");
     const amountsGrid = document.getElementById("cust-collect-amounts-grid");
-    if (dueWrap) dueWrap.classList.toggle("hidden", isFull);
-    if (amountsGrid) {
-      amountsGrid.classList.toggle("grid-cols-2", !isFull);
-      amountsGrid.classList.toggle("grid-cols-1", isFull);
+    const waiveCard = document.getElementById("cust-collect-waive-card");
+    const methodsWrap = document.getElementById("cust-collect-methods-wrap");
+    const confirmBtn = document.getElementById("cust-collect-confirm-btn");
+
+    if (waiveCard) waiveCard.classList.toggle("hidden", !isWaive);
+    if (amountsGrid) amountsGrid.classList.toggle("hidden", isWaive);
+    if (methodsWrap) methodsWrap.classList.toggle("hidden", isWaive);
+
+    if (!isWaive) {
+      if (dueWrap) dueWrap.classList.toggle("hidden", isFull);
+      if (amountsGrid) {
+        amountsGrid.classList.toggle("grid-cols-2", !isFull);
+        amountsGrid.classList.toggle("grid-cols-1", isFull);
+      }
+      if (confirmBtn) {
+        confirmBtn.innerHTML = '<i data-lucide="check" width="16" height="16"></i> Confirm Collection';
+        confirmBtn.className = "w-full rounded-xl py-2.5 font-bold text-sm flex items-center justify-center gap-2 bg-rose-500 hover:bg-rose-600 text-white shadow transition cursor-pointer";
+        if (window.lucide) window.lucide.createIcons({ root: confirmBtn });
+      }
+    } else {
+      if (confirmBtn) {
+        confirmBtn.innerHTML = '<i data-lucide="shield-check" width="16" height="16"></i> Clear &amp; Waive Due (No Payment)';
+        confirmBtn.className = "w-full rounded-xl py-2.5 font-bold text-sm flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 text-white shadow transition cursor-pointer";
+        if (window.lucide) window.lucide.createIcons({ root: confirmBtn });
+      }
     }
 
     if (activeCollectGroup) {
@@ -1168,8 +1220,10 @@
     // Settlement status buttons
     const fullBtn = document.getElementById("cust-collect-status-full");
     const partialBtn = document.getElementById("cust-collect-status-partial");
+    const waiveBtn = document.getElementById("cust-collect-status-waive");
     if (fullBtn) fullBtn.addEventListener("click", () => updateCustCollectStatusUI("full"));
     if (partialBtn) partialBtn.addEventListener("click", () => updateCustCollectStatusUI("partial"));
+    if (waiveBtn) waiveBtn.addEventListener("click", () => updateCustCollectStatusUI("waive"));
 
     // Payment method buttons
     const cashBtn = document.getElementById("cust-collect-method-cash");
@@ -1209,6 +1263,72 @@
       confirmBtn.addEventListener("click", async () => {
         if (!activeCollectGroup || !activeCollectGroup.records.length) return;
         const group = activeCollectGroup;
+
+        // If Waiving Due (no payment collected)
+        if (activeCollectStatus === "waive") {
+          const waiveNote = (document.getElementById("cust-collect-waive-note")?.value || "").trim() || `Partner session waived - ${group.customerName}`;
+          const confirmMsg = `Clear and waive all outstanding due (${inr(group.totalDue)}) for ${group.customerName}?\n• Note: ${waiveNote}\n• Amount to Collect: रु 0 (No payment collected)`;
+          if (!confirm(confirmMsg)) return;
+
+          confirmBtn.disabled = true;
+          try {
+            for (let i = 0; i < group.records.length; i++) {
+              const item = group.records[i];
+              const rec = item.record;
+              const prevPaid = Number(item.breakdown.paidAmount) || 0;
+              const rawNotes = (rec.notes || "").replace(/\[Payment:\s*(?:Split|Partial|Unpaid|Waived)[^\]]*\]/gi, "").trim();
+              const waivedTag = `[Payment: Waived | Reason: ${waiveNote}]`;
+              const finalNotes = [rawNotes, waivedTag].filter(Boolean).join(" ");
+
+              const updatePayload = {
+                status: "Completed",
+                paid: true,
+                payment_method: rec.payment_method || "Cash",
+                paid_amount: prevPaid,
+                due_amount: 0,
+                cash_amount: Number(item.breakdown.cash) || 0,
+                online_amount: Number(item.breakdown.online) || 0,
+                paid_at: rec.paid_at || new Date().toISOString(),
+                notes: finalNotes
+              };
+
+              let { error } = await window.sb.from("sessions").update(updatePayload).eq("id", rec.id);
+              if (error && (error.message.includes("cash_amount") || error.message.includes("online_amount") || error.message.includes("paid_amount") || error.message.includes("due_amount"))) {
+                delete updatePayload.cash_amount;
+                delete updatePayload.online_amount;
+                delete updatePayload.paid_amount;
+                delete updatePayload.due_amount;
+                await window.sb.from("sessions").update(updatePayload).eq("id", rec.id);
+              }
+
+              // Update in-memory records cache
+              const idx = records.findIndex((r) => r.id === rec.id);
+              if (idx !== -1) {
+                records[idx] = {
+                  ...records[idx],
+                  ...updatePayload,
+                  paid: true,
+                  due_amount: 0
+                };
+              }
+            }
+
+            showToast(`🎉 Cleared & waived due for ${group.customerName}!`);
+            closeCustomerCollectModal();
+            updateSummary();
+            renderRecordsList();
+            if (document.getElementById("unpaid-bills-modal")?.classList.contains("show")) {
+              renderUnpaidBillsModal();
+            }
+          } catch (err) {
+            console.error("Waive error:", err);
+            showToast("Failed to waive due: " + (err.message || "Unknown error"));
+          } finally {
+            confirmBtn.disabled = false;
+          }
+          return;
+        }
+
         const paidAmount = Math.max(0, Number(paidInput?.value) || 0);
         const dueAmount = Math.max(0, Number(dueInput?.value) || 0);
 
@@ -2661,10 +2781,14 @@
     let paidAmount = r.paid_amount != null ? Number(r.paid_amount) : (r.paid ? total : (cash + online));
     let dueAmount = r.due_amount != null ? Number(r.due_amount) : (r.paid ? 0 : Math.max(0, total - paidAmount));
 
+    let isWaived = false;
+    let waiveReason = "";
+
     // Check if encoded in notes:
     // [Payment: Split | Cash: 200 | Online: 300]
     // [Payment: Partial | Paid: 200 | Due: 300 | Method: Cash | Cash: 200 | Online: 0]
     // [Payment: Unpaid | Due: 300]
+    // [Payment: Waived | Reason: Partner Prakash Dai]
     if (r.notes) {
       const splitMatch = String(r.notes).match(/\[Payment:\s*Split\s*\|\s*Cash:\s*(\d+(?:\.\d+)?)\s*\|\s*Online:\s*(\d+(?:\.\d+)?)\]/i);
       if (splitMatch) {
@@ -2686,10 +2810,22 @@
         dueAmount = Number(unpaidMatch[1]) || total;
         method = "Unpaid";
       }
+      const waivedMatch = String(r.notes).match(/\[Payment:\s*Waived(?:\s*\|\s*Reason:\s*([^\]]+))?\]/i) ||
+                          String(r.notes).match(/\[Waived(?::|\s*)([^\]]*)\]/i);
+      if (waivedMatch || r.payment_method === "Waived") {
+        isWaived = true;
+        waiveReason = waivedMatch && waivedMatch[1] ? waivedMatch[1].trim() : "";
+        method = "Waived";
+        dueAmount = 0;
+      }
+    } else if (r.payment_method === "Waived") {
+      isWaived = true;
+      method = "Waived";
+      dueAmount = 0;
     }
 
-    const isPartial = (dueAmount > 0 && paidAmount > 0);
-    const isUnpaid = !r.paid && (paidAmount === 0 || dueAmount >= total);
+    const isPartial = !isWaived && (dueAmount > 0 && paidAmount > 0);
+    const isUnpaid = !isWaived && !r.paid && (paidAmount === 0 || dueAmount >= total);
 
     if (method === "Split") {
       const splitTarget = isPartial ? paidAmount : total;
@@ -2703,8 +2839,11 @@
     } else if (method === "Online") {
       cash = 0;
       online = isPartial ? paidAmount : (r.paid ? total : 0);
+    } else if (method === "Waived") {
+      cash = 0;
+      online = 0;
     }
-    return { method, cash, online, total, paidAmount, dueAmount, isPartial, isUnpaid, isSplit: method === "Split", isOnline: method === "Online" };
+    return { method, cash, online, total, paidAmount, dueAmount, isPartial, isUnpaid, isWaived, waiveReason, isSplit: method === "Split", isOnline: method === "Online" };
   }
 
   function wireClickableTimeInputs() {
@@ -2904,7 +3043,11 @@
 
     const paymentEl = card.querySelector(".record-payment");
     const bd = getRecordPaymentBreakdown(record);
-    if (bd.isPartial) {
+    if (bd.isWaived) {
+      paymentEl.textContent = bd.waiveReason ? `👑 Waived (${bd.waiveReason})` : "👑 Waived (Partner/Internal)";
+      paymentEl.className = "record-payment rounded-full px-2 py-0.5 font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[11px]";
+      paymentEl.classList.remove("hidden");
+    } else if (bd.isPartial) {
       paymentEl.textContent = `Partial (Paid: ${inr(bd.paidAmount)} · Due: ${inr(bd.dueAmount)})`;
       paymentEl.className = "record-payment rounded-full px-2 py-0.5 font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px]";
       paymentEl.classList.remove("hidden");
@@ -2945,7 +3088,7 @@
     const printBtn = card.querySelector(".print-bill-btn");
     const isRunning = record.status === "Active" || record.status === "Booked";
     const isCompleted = record.status === "Completed";
-    const isDue = isCompleted && (!record.paid || (bd && bd.dueAmount > 0));
+    const isDue = isCompleted && (!record.paid || (bd && bd.dueAmount > 0)) && !bd.isWaived;
 
     if (isRunning || isCompleted) {
       actions.classList.remove("hidden");
@@ -3394,6 +3537,9 @@
               <button type="button" class="records-summary-collect-btn px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500 hover:bg-rose-600 text-white cursor-pointer transition shadow-sm whitespace-nowrap" data-idx="${idx}">
                 Collect
               </button>
+              <button type="button" class="records-summary-waive-btn px-2 py-1 rounded-lg text-xs font-bold border border-purple-500/40 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 cursor-pointer transition whitespace-nowrap" data-idx="${idx}" title="Clear due without collecting payment">
+                Waive
+              </button>
             </div>
           </div>
         `).join("")}
@@ -3409,7 +3555,14 @@
     summaryContainer.querySelectorAll(".records-summary-collect-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         const idx = Number(btn.dataset.idx);
-        if (groups[idx]) openCustomerCollectModal(groups[idx]);
+        if (groups[idx]) openCustomerCollectModal(groups[idx], "full");
+      });
+    });
+
+    summaryContainer.querySelectorAll(".records-summary-waive-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idx = Number(btn.dataset.idx);
+        if (groups[idx]) openCustomerCollectModal(groups[idx], "waive");
       });
     });
   }
@@ -3970,6 +4123,7 @@
       const paidBtn = document.getElementById("checkout-status-btn-paid");
       const partialBtn = document.getElementById("checkout-status-btn-partial");
       const unpaidBtn = document.getElementById("checkout-status-btn-unpaid");
+      const waivedBtn = document.getElementById("checkout-status-btn-waived");
       const partialFields = document.getElementById("checkout-partial-fields");
       const methodHeading = document.getElementById("checkout-method-heading");
       const methodBtns = modal.querySelectorAll(".checkout-method-btn");
@@ -3990,17 +4144,22 @@
           ? "checkout-status-btn active rounded-lg border border-rose-500 bg-rose-500/20 text-rose-300 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition"
           : "checkout-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition";
       }
+      if (waivedBtn) {
+        waivedBtn.className = status === "Waived"
+          ? "checkout-status-btn active rounded-lg border border-purple-400 bg-purple-500/25 text-purple-200 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition"
+          : "checkout-status-btn rounded-lg border border-slate-600 bg-slate-800/80 text-slate-400 py-2 px-1 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition";
+      }
 
       if (partialFields) partialFields.classList.toggle("hidden", status !== "Partial");
 
-      const isUnpaid = status === "Unpaid";
+      const isNoMethod = status === "Unpaid" || status === "Waived";
       methodBtns.forEach((b) => {
-        b.disabled = isUnpaid;
-        b.classList.toggle("opacity-40", isUnpaid);
-        b.classList.toggle("pointer-events-none", isUnpaid);
+        b.disabled = isNoMethod;
+        b.classList.toggle("opacity-40", isNoMethod);
+        b.classList.toggle("pointer-events-none", isNoMethod);
       });
-      if (methodHeading) methodHeading.classList.toggle("opacity-40", isUnpaid);
-      if (splitFields && isUnpaid) splitFields.classList.add("hidden");
+      if (methodHeading) methodHeading.classList.toggle("opacity-40", isNoMethod);
+      if (splitFields && isNoMethod) splitFields.classList.add("hidden");
 
       const record = records.find((r) => r.id === modal.dataset.recordId);
       if (record) {
@@ -4239,13 +4398,17 @@
       if (!record) return;
       const { overtime, discount, grandTotal } = renderCheckoutBreakdown(record);
 
-      const isPaid = selectedPaymentStatus === "Paid";
+      const isWaived = selectedPaymentStatus === "Waived";
+      const isPaid = selectedPaymentStatus === "Paid" || isWaived;
       const isPartial = selectedPaymentStatus === "Partial";
       const isUnpaid = selectedPaymentStatus === "Unpaid";
 
       let paidAmount = 0;
       let dueAmount = 0;
-      if (isPaid) {
+      if (isWaived) {
+        paidAmount = 0;
+        dueAmount = 0;
+      } else if (isPaid) {
         paidAmount = grandTotal;
         dueAmount = 0;
       } else if (isPartial) {
@@ -4259,10 +4422,10 @@
 
       let cashAmount = 0;
       let onlineAmount = 0;
-      let dbPaymentMethod = isUnpaid ? null : selectedPaymentMethod;
+      let dbPaymentMethod = isUnpaid ? null : (isWaived ? "Cash" : selectedPaymentMethod);
       const targetPayAmount = isPartial ? paidAmount : grandTotal;
 
-      if (!isUnpaid) {
+      if (!isUnpaid && !isWaived) {
         if (selectedPaymentMethod === "Split") {
           cashAmount = Math.max(0, Number(document.getElementById("checkout-cash-amount")?.value) || 0);
           onlineAmount = Math.max(0, Number(document.getElementById("checkout-online-amount")?.value) || 0);
@@ -4279,8 +4442,8 @@
         }
       }
 
-      let methodDisplay = isUnpaid ? "Unpaid / Due" : selectedPaymentMethod;
-      if (selectedPaymentMethod === "Split" && !isUnpaid) {
+      let methodDisplay = isWaived ? "Waived / Partner Session (Rs. 0)" : isUnpaid ? "Unpaid / Due" : selectedPaymentMethod;
+      if (selectedPaymentMethod === "Split" && !isUnpaid && !isWaived) {
         methodDisplay = `Split (Cash: ${inr(cashAmount)} + Online: ${inr(onlineAmount)})`;
       }
       if (isPartial) {
@@ -4298,10 +4461,12 @@
 
       let finalNotes = record.notes || "";
       // Strip old payment tags
-      finalNotes = finalNotes.replace(/\[Payment:\s*(?:Split|Partial|Unpaid)[^\]]*\]/gi, "").trim();
+      finalNotes = finalNotes.replace(/\[Payment:\s*(?:Split|Partial|Unpaid|Waived)[^\]]*\]/gi, "").trim();
 
       let paymentTag = "";
-      if (isPartial) {
+      if (isWaived) {
+        paymentTag = `[Payment: Waived | Reason: Partner / Internal Session]`;
+      } else if (isPartial) {
         paymentTag = `[Payment: Partial | Paid: ${paidAmount} | Due: ${dueAmount} | Method: ${selectedPaymentMethod}${selectedPaymentMethod === "Split" ? ` | Cash: ${cashAmount} | Online: ${onlineAmount}` : ""}]`;
       } else if (selectedPaymentMethod === "Split" && !isUnpaid) {
         paymentTag = `[Payment: Split | Cash: ${cashAmount} | Online: ${onlineAmount}]`;
@@ -4317,13 +4482,13 @@
 
       const updatePayload = {
         status: "Completed",
-        paid: (dueAmount <= 0 && paidAmount > 0),
+        paid: (dueAmount <= 0 && (paidAmount > 0 || isWaived)),
         payment_method: dbPaymentMethod,
         cash_amount: cashAmount,
         online_amount: onlineAmount,
         paid_amount: paidAmount,
         due_amount: dueAmount,
-        paid_at: (paidAmount > 0 ? new Date().toISOString() : null),
+        paid_at: (paidAmount > 0 || isWaived ? new Date().toISOString() : null),
         amount: grandTotal,
         overtime_amount: overtime.amount,
         discount_amount: discount.amount,
@@ -4956,11 +5121,11 @@
       const payMethodEl = document.getElementById("edit-payment-method");
       const bd = getRecordPaymentBreakdown(record);
       if (payStatusEl) {
-        payStatusEl.value = bd.isPartial ? "Partial" : (record.paid ? "Paid" : "Unpaid");
+        payStatusEl.value = bd.isWaived ? "Waived" : bd.isPartial ? "Partial" : (record.paid ? "Paid" : "Unpaid");
       }
       if (payMethodEl) {
         payMethodEl.value = (record.payment_method === "Split" || bd.isSplit) ? "Split" : (record.payment_method === "Online" || bd.isOnline) ? "Online" : "Cash";
-        payMethodEl.disabled = (!record.paid && !bd.isPartial);
+        payMethodEl.disabled = (!record.paid && !bd.isPartial) || bd.isWaived;
       }
 
       const editPaidInput = document.getElementById("edit-paid-amount");
@@ -5129,7 +5294,7 @@
     const editPayMethod = document.getElementById("edit-payment-method");
     if (editPayStatus && editPayMethod) {
       editPayStatus.addEventListener("change", () => {
-        editPayMethod.disabled = editPayStatus.value === "Unpaid";
+        editPayMethod.disabled = editPayStatus.value === "Unpaid" || editPayStatus.value === "Waived";
         recalcEditModal();
       });
       editPayMethod.addEventListener("change", () => {
@@ -5214,10 +5379,11 @@
       }
 
       const payStatusVal = editPayStatus ? editPayStatus.value : (editTarget.paid ? "Paid" : "Unpaid");
+      const isWaived = payStatusVal === "Waived";
       const isPartial = payStatusVal === "Partial";
-      const isPaid = payStatusVal === "Paid";
+      const isPaid = (payStatusVal === "Paid") || isWaived;
       const isUnpaid = payStatusVal === "Unpaid";
-      const paymentMethod = isUnpaid ? null : (editPayMethod ? editPayMethod.value : "Cash");
+      const paymentMethod = isUnpaid ? null : (isWaived ? "Cash" : (editPayMethod ? editPayMethod.value : "Cash"));
 
       // Check if user specified a manual bill override (e.g. waived overtime, custom charge)
       const customBillVal = document.getElementById("edit-custom-bill")?.value;
@@ -5225,7 +5391,10 @@
 
       let paidAmount = 0;
       let dueAmount = 0;
-      if (isPaid) {
+      if (isWaived) {
+        paidAmount = 0;
+        dueAmount = 0;
+      } else if (isPaid) {
         paidAmount = finalAmount;
         dueAmount = 0;
       } else if (isPartial) {
@@ -5241,7 +5410,7 @@
       // DB check constraint only allows Cash/Online/null — Split is stored in notes
       let dbPaymentMethod = paymentMethod;
       const splitTarget = isPartial ? paidAmount : finalAmount;
-      if (paymentMethod === "Split") {
+      if (!isWaived && paymentMethod === "Split") {
         cashAmount = Math.max(0, Number(document.getElementById("edit-cash-amount")?.value) || 0);
         onlineAmount = Math.max(0, Number(document.getElementById("edit-online-amount")?.value) || 0);
         if (cashAmount + onlineAmount !== splitTarget && splitTarget > 0) {
@@ -5249,24 +5418,27 @@
         }
         // Store as "Cash" in DB (the constraint won't accept "Split")
         dbPaymentMethod = "Cash";
-      } else if (paymentMethod === "Cash") {
+      } else if (!isWaived && paymentMethod === "Cash") {
         cashAmount = splitTarget;
         onlineAmount = 0;
-      } else if (paymentMethod === "Online") {
+      } else if (!isWaived && paymentMethod === "Online") {
         cashAmount = 0;
         onlineAmount = splitTarget;
       }
 
       const rawNotes = document.getElementById("edit-notes").value.trim();
       // Strip any old payment tags before re-writing
-      let finalNotes = rawNotes.replace(/\[Payment:\s*(?:Split|Partial|Unpaid)[^\]]*\]/gi, "").trim();
+      let finalNotes = rawNotes.replace(/\[Payment:\s*(?:Split|Partial|Unpaid|Waived)[^\]]*\]/gi, "").trim();
       if (isInternal && !finalNotes.includes("[Internal Sale]")) {
         finalNotes = finalNotes ? `[Internal Sale] ${finalNotes}` : "[Internal Sale]";
       }
       if (isFoodOnly && !finalNotes.includes("[Food Only Sale]")) {
         finalNotes = finalNotes ? `[Food Only Sale] ${finalNotes}` : "[Food Only Sale]";
       }
-      if (isPartial) {
+      if (isWaived) {
+        const waivedTag = `[Payment: Waived | Reason: ${rawNotes || "Partner/Internal Session"}]`;
+        finalNotes = [finalNotes, waivedTag].filter(Boolean).join(" ");
+      } else if (isPartial) {
         const partialTag = `[Payment: Partial | Paid: ${paidAmount} | Due: ${dueAmount} | Method: ${paymentMethod}${paymentMethod === "Split" ? ` | Cash: ${cashAmount} | Online: ${onlineAmount}` : ""}]`;
         finalNotes = [finalNotes, partialTag].filter(Boolean).join(" ");
       } else if (paymentMethod === "Split") {
@@ -6792,6 +6964,24 @@
   }
 
   function computeRecordRevenue(record) {
+    const bd = getRecordPaymentBreakdown(record);
+    if (bd.isWaived && bd.paidAmount === 0) {
+      return {
+        grossAmount: 0,
+        timeRevenue: 0,
+        foodTotal: 0,
+        chillpillFood: 0,
+        brosGross: 0,
+        brosCommission: 0,
+        brosPayable: 0,
+        bardaliGross: 0,
+        bardaliCommission: 0,
+        bardaliPayable: 0,
+        netFoodRevenue: 0,
+        netRevenue: 0
+      };
+    }
+
     const grossAmount = Number(record.amount) || 0;
     const foodTotal = Number(record.food_total) || 0;
     const timeRevenue = Math.max(0, grossAmount - foodTotal);
