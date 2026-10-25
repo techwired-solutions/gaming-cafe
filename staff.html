@@ -516,14 +516,108 @@
       border-color: rgba(217, 119, 6, 0.4) !important;
       background: #fdf6ec !important;
     }
+    /* ===== LIGHT THEME: SESSION PAUSE MODAL ===== */
     [data-theme="light"] #session-pause-modal .panel {
       background: #ffffff !important;
       border-color: #c8d6ec !important;
       color: #10141e !important;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.12) !important;
     }
+    [data-theme="light"] #session-pause-modal h3,
+    [data-theme="light"] #session-pause-modal #pause-modal-title,
+    [data-theme="light"] #session-pause-modal .text-slate-100,
+    [data-theme="light"] #session-pause-modal .text-white {
+      color: #0f172a !important;
+    }
+    [data-theme="light"] #session-pause-modal #pause-modal-subtitle,
+    [data-theme="light"] #session-pause-modal .text-slate-400 {
+      color: #64748b !important;
+    }
+    [data-theme="light"] #session-pause-modal label,
+    [data-theme="light"] #session-pause-modal .text-slate-300 {
+      color: #334155 !important;
+    }
+    [data-theme="light"] #session-pause-modal .border-slate-700\/60,
+    [data-theme="light"] #session-pause-modal .border-slate-800 {
+      border-color: #e2e8f0 !important;
+    }
+    /* Info box inside pause modal */
     [data-theme="light"] #session-pause-modal .bg-\[\#0f1520\] {
       background: #f8fafc !important;
       border-color: #e2e8f0 !important;
+      color: #1e293b !important;
+    }
+    [data-theme="light"] #session-pause-modal .bg-\[\#0f1520\] .text-slate-400 {
+      color: #64748b !important;
+    }
+    [data-theme="light"] #session-pause-modal .bg-\[\#0f1520\] .text-amber-300 {
+      color: #b45309 !important;
+    }
+    [data-theme="light"] #session-pause-modal #pause-modal-remaining {
+      color: #0f172a !important;
+    }
+    [data-theme="light"] #session-pause-modal .text-slate-500 {
+      color: #64748b !important;
+    }
+    /* Quick presets in light mode */
+    [data-theme="light"] #session-pause-modal .pause-preset-btn {
+      background-color: #f8fafc !important;
+      border-color: #cbd5e1 !important;
+      color: #1e293b !important;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+    }
+    [data-theme="light"] #session-pause-modal .pause-preset-btn:hover {
+      background-color: #fef3c7 !important;
+      border-color: #f59e0b !important;
+      color: #92400e !important;
+    }
+    /* Close & Cancel buttons */
+    [data-theme="light"] #session-pause-modal #pause-modal-close {
+      color: #64748b !important;
+    }
+    [data-theme="light"] #session-pause-modal #pause-modal-close:hover {
+      background-color: #f1f5f9 !important;
+      color: #0f172a !important;
+    }
+    [data-theme="light"] #session-pause-modal #pause-modal-cancel {
+      background-color: #f1f5f9 !important;
+      border-color: #cbd5e1 !important;
+      color: #334155 !important;
+    }
+    [data-theme="light"] #session-pause-modal #pause-modal-cancel:hover {
+      background-color: #e2e8f0 !important;
+      color: #0f172a !important;
+    }
+    /* Pause icon emblem in light mode */
+    [data-theme="light"] #session-pause-modal .bg-amber-500\/15 {
+      background-color: #fef3c7 !important;
+      border-color: #fde68a !important;
+      color: #b45309 !important;
+    }
+
+    /* Checkout & Edit Modal Paused Banners in light mode */
+    [data-theme="light"] #checkout-paused-banner {
+      background-color: #fffbeb !important;
+      border-color: #fde68a !important;
+      color: #92400e !important;
+    }
+    [data-theme="light"] #checkout-paused-banner .text-slate-300,
+    [data-theme="light"] #checkout-paused-banner .text-slate-400 {
+      color: #78350f !important;
+    }
+    [data-theme="light"] #checkout-paused-banner #checkout-paused-played-text {
+      color: #92400e !important;
+    }
+    [data-theme="light"] #edit-pause-bar {
+      background-color: #fffbeb !important;
+      border-color: #fde68a !important;
+      color: #92400e !important;
+    }
+    [data-theme="light"] #edit-pause-bar #edit-pause-title {
+      color: #92400e !important;
+    }
+    [data-theme="light"] #edit-pause-bar #edit-pause-sub {
+      color: #78350f !important;
     }
 
     /* ===== LIGHT THEME: OVERVIEW KPI DETAIL MODAL ===== */
@@ -3074,7 +3168,7 @@
         <div class="flex items-center gap-2">
           <span class="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-300 text-sm font-bold">⏸</span>
           <div>
-            <h3 class="font-bold text-base text-slate-100">Pause Game Time</h3>
+            <h3 id="pause-modal-title" class="font-bold text-base text-slate-100">Pause Game Time</h3>
             <p id="pause-modal-subtitle" class="text-xs text-slate-400 mt-0.5 mono">Station · Customer</p>
           </div>
         </div>
