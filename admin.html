@@ -3214,6 +3214,12 @@
         <p class="text-[11px] text-slate-500 pt-1 border-t border-slate-800">When resumed, remaining time will be restored so no game time is lost.</p>
       </div>
 
+      <!-- Multi-Station Selector (visible if session uses multiple stations) -->
+      <div id="pause-modal-station-selector-wrap" class="hidden mb-3">
+        <label class="block text-xs text-slate-300 font-semibold mb-1.5">Station to Pause</label>
+        <div id="pause-modal-station-options" class="space-y-1.5"></div>
+      </div>
+
       <div class="mb-3">
         <label class="block text-xs text-slate-300 font-semibold mb-1.5">Reason for Pause</label>
         <div class="grid grid-cols-2 gap-1.5 mb-2">
@@ -5185,7 +5191,7 @@
   <script src="assets/js/config.local.js" onerror="console.info('[ChillPill] No config.local.js override found — using assets/js/config.js placeholders.')"></script>
   <script src="assets/js/supabaseClient.js"></script>
   <script src="assets/js/passwordHash.js"></script>
-  <script src="assets/js/dashboard.js?v=20261025_05"></script>
+  <script src="assets/js/dashboard.js?v=20261025_06"></script>
   <script src="assets/js/tournament.js?v=20260930"></script>
 </body>
 </html>

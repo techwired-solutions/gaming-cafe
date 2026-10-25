@@ -3135,6 +3135,43 @@
 
   // ---------- Session Pause & Resume System ----------
   let pauseTarget = null;
+  let pauseTargetStation = "all";
+
+  // Extracts all stations utilized in a session (primary + extra stations)
+  function getRecordStations(record) {
+    if (!record) return [];
+    const list = [];
+    if (record.station_name) {
+      splitStationNames(record.station_name).forEach((sn, idx) => {
+        const match = stations.find((s) => s.name.trim().toLowerCase() === sn) || { name: sn, rate: record.rate };
+        list.push({
+          name: match.name || sn,
+          isPrimary: idx === 0,
+          rate: Number(record.rate) || 0,
+          duration_minutes: Number(record.duration_minutes) || 60,
+          start_time: record.start_time,
+          end_time: record.end_time
+        });
+      });
+    }
+    if (Array.isArray(record.extra_stations)) {
+      record.extra_stations.forEach((es) => {
+        const esName = (es.station || es.station_name || "").trim();
+        if (!esName) return;
+        if (list.some((item) => item.name.toLowerCase() === esName.toLowerCase())) return;
+        list.push({
+          name: esName,
+          isPrimary: false,
+          rate: Number(es.rate) || 0,
+          duration_minutes: Number(es.duration_minutes) || 60,
+          start_time: es.start_time || record.start_time,
+          end_time: es.end_time || record.end_time,
+          extraObj: es
+        });
+      });
+    }
+    return list;
+  }
 
   function isSessionPaused(record) {
     if (!record) return false;
@@ -3143,9 +3180,58 @@
     return false;
   }
 
+  function isStationPaused(record, stationName = null) {
+    if (!record) return false;
+    const fullPause = isSessionPaused(record);
+    if (!stationName) return fullPause;
+
+    const target = String(stationName).trim().toLowerCase();
+
+    // 1. Specific station pause in notes: [Station Paused: <Name> | ...]
+    if (record.notes) {
+      const rx = new RegExp(`\[Station Paused:\s*([^|\]]+)`, "gi");
+      let m;
+      while ((m = rx.exec(record.notes)) !== null) {
+        if (m[1].trim().toLowerCase() === target) return true;
+      }
+    }
+
+    // 2. Extra stations array check
+    if (Array.isArray(record.extra_stations)) {
+      const match = record.extra_stations.find((es) => (es.station || es.station_name || "").trim().toLowerCase() === target);
+      if (match && (match.is_paused === true || match.is_paused === "true")) return true;
+    }
+
+    // 3. Fallback to whole-session pause
+    if (fullPause) {
+      const info = getSessionPauseInfo(record);
+      if (!info.targetStation || info.targetStation.toLowerCase() === "all" || info.targetStation.toLowerCase() === target) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  function isAnyStationPaused(record) {
+    if (!record) return false;
+    if (isSessionPaused(record)) return true;
+    if (record.notes && /\[Station Paused:/i.test(record.notes)) return true;
+    if (Array.isArray(record.extra_stations) && record.extra_stations.some((es) => es.is_paused)) return true;
+    return false;
+  }
+
+  function isAllStationsPaused(record) {
+    if (!record) return false;
+    if (isSessionPaused(record)) return true;
+    const stns = getRecordStations(record);
+    if (stns.length <= 1) return isSessionPaused(record);
+    return stns.every((s) => isStationPaused(record, s.name));
+  }
+
   function getSessionPauseInfo(record) {
     if (!record) return { isPaused: false };
-    const isPaused = isSessionPaused(record);
+    const isPaused = isSessionPaused(record) || isAnyStationPaused(record);
     if (!isPaused) return { isPaused: false };
 
     let pausedAt = record.paused_at ? new Date(record.paused_at) : null;
@@ -3175,90 +3261,205 @@
     };
   }
 
-  async function pauseSession(record, reason = "Game time paused") {
+  function getStationPauseInfo(record, stationName = null) {
+    if (!record) return { isPaused: false };
+    const isPaused = isStationPaused(record, stationName);
+    if (!isPaused) return { isPaused: false };
+
+    const target = stationName ? String(stationName).trim().toLowerCase() : "";
+    let pausedAt = null;
+    let remainingMs = null;
+    let reason = "";
+
+    if (record.notes && target) {
+      const rx = new RegExp(`\[Station Paused:\s*([^|\]]+)(?:\|\s*At:\s*([^|\]]+))?(?:\|\s*RemainingMs:\s*(\d+))?(?:\|\s*Reason:\s*([^\]]+))?\]`, "gi");
+      let m;
+      while ((m = rx.exec(record.notes)) !== null) {
+        if (m[1].trim().toLowerCase() === target) {
+          if (m[2]) pausedAt = new Date(m[2].trim());
+          if (m[3]) remainingMs = Number(m[3].trim());
+          if (m[4]) reason = m[4].trim();
+          break;
+        }
+      }
+    }
+
+    if (Array.isArray(record.extra_stations) && target) {
+      const match = record.extra_stations.find((es) => (es.station || es.station_name || "").trim().toLowerCase() === target);
+      if (match && match.is_paused) {
+        if (!pausedAt && match.paused_at) pausedAt = new Date(match.paused_at);
+        if (remainingMs == null && match.paused_remaining_ms != null) remainingMs = Number(match.paused_remaining_ms);
+        if (!reason && match.pause_reason) reason = match.pause_reason;
+      }
+    }
+
+    const sessionInfo = getSessionPauseInfo(record);
+    if (!pausedAt) pausedAt = sessionInfo.pausedAt || new Date();
+    if (remainingMs == null) remainingMs = sessionInfo.remainingMs;
+    if (!reason) reason = sessionInfo.reason || "Paused";
+    if (!pausedAt || isNaN(pausedAt.getTime())) pausedAt = new Date();
+
+    return {
+      isPaused: true,
+      pausedAt,
+      remainingMs: Math.max(0, remainingMs || 0),
+      reason: reason || "Paused",
+      targetStation: stationName || "all"
+    };
+  }
+
+  async function pauseStation(record, stationName = "all", reason = "Game time paused") {
     if (!record || record.status !== "Active") return;
     const now = new Date();
-    const remainingMs = Math.max(0, (record.end_time ? new Date(record.end_time) : now) - now);
+    const stns = getRecordStations(record);
+    const target = (stationName || "all").trim();
+
+    if (target.toLowerCase() === "all" || stns.length <= 1) {
+      const remainingMs = Math.max(0, (record.end_time ? new Date(record.end_time) : now) - now);
+      const remainingMins = Math.round(remainingMs / 60000);
+
+      let cleanNotes = (record.notes || "").replace(/\[Session:\s*(?:Paused|Resumed)[^\]]*\]/gi, "").trim();
+      const pauseTag = `[Session: Paused | At: ${now.toISOString()} | RemainingMs: ${remainingMs} | Reason: ${reason}]`;
+      const finalNotes = [cleanNotes, pauseTag].filter(Boolean).join(" ");
+
+      record.is_paused = true;
+      record.paused_at = now.toISOString();
+      record.paused_remaining_ms = remainingMs;
+      record.pause_reason = reason;
+      record.notes = finalNotes;
+
+      closePauseModal();
+      renderAllLists();
+      updateStationCards();
+      showToast(`⏸ Session PAUSED for ${record.customer_name || "Customer"} (${remainingMins}m frozen)`);
+
+      if (sdkReady && window.sb) {
+        await window.sb.from("sessions").update({ notes: finalNotes }).eq("id", record.id);
+      }
+      return;
+    }
+
+    // Specific station pause in multi-station booking
+    const matchedStn = stns.find((s) => s.name.toLowerCase() === target.toLowerCase()) || { name: target };
+    const stnEnd = matchedStn.end_time ? new Date(matchedStn.end_time) : (record.end_time ? new Date(record.end_time) : now);
+    const remainingMs = Math.max(0, stnEnd - now);
     const remainingMins = Math.round(remainingMs / 60000);
 
-    let cleanNotes = (record.notes || "").replace(/\[Session:\s*(?:Paused|Resumed)[^\]]*\]/gi, "").trim();
-    const pauseTag = `[Session: Paused | At: ${now.toISOString()} | RemainingMs: ${remainingMs} | Reason: ${reason}]`;
+    const escaped = matchedStn.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    let cleanNotes = (record.notes || "").replace(new RegExp(`\\\[Station (?:Paused|Resumed):\\s*${escaped}[^\\\]]*\\\]`, "gi"), "").trim();
+    const pauseTag = `[Station Paused: ${matchedStn.name} | At: ${now.toISOString()} | RemainingMs: ${remainingMs} | Reason: ${reason}]`;
     const finalNotes = [cleanNotes, pauseTag].filter(Boolean).join(" ");
 
-    const updatePayload = {
-      is_paused: true,
-      paused_at: now.toISOString(),
-      notes: finalNotes
-    };
+    if (Array.isArray(record.extra_stations)) {
+      const matchExtra = record.extra_stations.find((es) => (es.station || es.station_name || "").toLowerCase() === target.toLowerCase());
+      if (matchExtra) {
+        matchExtra.is_paused = true;
+        matchExtra.paused_at = now.toISOString();
+        matchExtra.paused_remaining_ms = remainingMs;
+        matchExtra.pause_reason = reason;
+      }
+    }
 
-    record.is_paused = true;
-    record.paused_at = now.toISOString();
-    record.paused_remaining_ms = remainingMs;
-    record.pause_reason = reason;
     record.notes = finalNotes;
-
     closePauseModal();
     renderAllLists();
-    showToast(`⏸ Session PAUSED for ${record.customer_name || "Customer"} (${remainingMins}m frozen)`);
+    updateStationCards();
+    showToast(`⏸ ${matchedStn.name} PAUSED for ${record.customer_name || "Customer"} (${remainingMins}m frozen)`);
 
     if (sdkReady && window.sb) {
-      let { error } = await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
-      if (error) {
-        delete updatePayload.is_paused;
-        delete updatePayload.paused_at;
-        await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
-      }
+      const updatePayload = { notes: finalNotes };
+      if (Array.isArray(record.extra_stations)) updatePayload.extra_stations = record.extra_stations;
+      await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
     }
   }
 
-  async function resumeSession(record) {
+  async function pauseSession(record, reason = "Game time paused") {
+    return pauseStation(record, "all", reason);
+  }
+
+  async function resumeStation(record, stationName = "all") {
     if (!record || record.status !== "Active") return;
-    const pauseInfo = getSessionPauseInfo(record);
+    const stns = getRecordStations(record);
+    const target = (stationName || "all").trim();
+
+    if (target.toLowerCase() === "all" || stns.length <= 1) {
+      const pauseInfo = getSessionPauseInfo(record);
+      if (!pauseInfo.isPaused) return;
+
+      const now = new Date();
+      const pausedDurationMs = Math.max(0, now - pauseInfo.pausedAt);
+      const pausedDurationMins = Math.round(pausedDurationMs / 60000);
+      const newEndTime = new Date(now.getTime() + pauseInfo.remainingMs);
+
+      let cleanNotes = (record.notes || "").replace(/\[Session:\s*(?:Paused|Resumed)[^\]]*\]/gi, "").trim();
+      const resumeTag = `[Session: Resumed | PausedDuration: ${pausedDurationMins}m | Reason: ${pauseInfo.reason}]`;
+      const finalNotes = [cleanNotes, resumeTag].filter(Boolean).join(" ");
+
+      record.is_paused = false;
+      record.paused_at = null;
+      record.paused_remaining_ms = null;
+      record.end_time = newEndTime.toISOString();
+      record.notes = finalNotes;
+      overdueToasted.delete(record.id);
+
+      renderAllLists();
+      updateStationCards();
+      const remainingMins = Math.round(pauseInfo.remainingMs / 60000);
+      showToast(`▶ Session RESUMED for ${record.customer_name || "Customer"} (${remainingMins}m running)`);
+
+      if (sdkReady && window.sb) {
+        await window.sb.from("sessions").update({ notes: finalNotes, end_time: newEndTime.toISOString() }).eq("id", record.id);
+      }
+      return;
+    }
+
+    const matchedStn = stns.find((s) => s.name.toLowerCase() === target.toLowerCase()) || { name: target };
+    const pauseInfo = getStationPauseInfo(record, matchedStn.name);
     if (!pauseInfo.isPaused) return;
 
     const now = new Date();
     const pausedDurationMs = Math.max(0, now - pauseInfo.pausedAt);
     const pausedDurationMins = Math.round(pausedDurationMs / 60000);
-
-    // Push end_time forward by exactly the remaining game time preserved at pause
     const newEndTime = new Date(now.getTime() + pauseInfo.remainingMs);
 
-    let cleanNotes = (record.notes || "").replace(/\[Session:\s*(?:Paused|Resumed)[^\]]*\]/gi, "").trim();
-    const resumeTag = `[Session: Resumed | PausedDuration: ${pausedDurationMins}m | Reason: ${pauseInfo.reason}]`;
+    const escaped = matchedStn.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    let cleanNotes = (record.notes || "").replace(new RegExp(`\\\[Station (?:Paused|Resumed):\\s*${escaped}[^\\\]]*\\\]`, "gi"), "").trim();
+    const resumeTag = `[Station Resumed: ${matchedStn.name} | PausedDuration: ${pausedDurationMins}m | Reason: ${pauseInfo.reason}]`;
     const finalNotes = [cleanNotes, resumeTag].filter(Boolean).join(" ");
 
-    const updatePayload = {
-      is_paused: false,
-      paused_at: null,
-      end_time: newEndTime.toISOString(),
-      notified_5min: false,
-      notes: finalNotes
-    };
+    if (Array.isArray(record.extra_stations)) {
+      const matchExtra = record.extra_stations.find((es) => (es.station || es.station_name || "").toLowerCase() === target.toLowerCase());
+      if (matchExtra) {
+        matchExtra.is_paused = false;
+        matchExtra.paused_at = null;
+        matchExtra.paused_remaining_ms = null;
+        matchExtra.end_time = newEndTime.toISOString();
+      }
+    } else if (matchedStn.isPrimary) {
+      record.end_time = newEndTime.toISOString();
+    }
 
-    record.is_paused = false;
-    record.paused_at = null;
-    record.paused_remaining_ms = null;
-    record.end_time = newEndTime.toISOString();
-    record.notified_5min = false;
     record.notes = finalNotes;
-    overdueToasted.delete(record.id);
-
     renderAllLists();
+    updateStationCards();
     const remainingMins = Math.round(pauseInfo.remainingMs / 60000);
-    showToast(`▶ Session RESUMED for ${record.customer_name || "Customer"} (${remainingMins}m running)`);
+    showToast(`▶ ${matchedStn.name} RESUMED for ${record.customer_name || "Customer"} (${remainingMins}m running)`);
 
     if (sdkReady && window.sb) {
-      let { error } = await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
-      if (error) {
-        delete updatePayload.is_paused;
-        delete updatePayload.paused_at;
-        await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
-      }
+      const updatePayload = { notes: finalNotes };
+      if (Array.isArray(record.extra_stations)) updatePayload.extra_stations = record.extra_stations;
+      if (matchedStn.isPrimary) updatePayload.end_time = newEndTime.toISOString();
+      await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
     }
   }
 
-  function openPauseModal(record) {
+  async function resumeSession(record) {
+    return resumeStation(record, "all");
+  }
+
+  function openPauseModal(record, preselectedStation = null) {
     pauseTarget = record;
+    pauseTargetStation = preselectedStation || "all";
     const modal = document.getElementById("session-pause-modal");
     if (!modal) return;
 
@@ -3273,6 +3474,36 @@
     const input = document.getElementById("pause-reason-input");
     if (input) input.value = "";
 
+    // Multi-station selector support
+    const stns = getRecordStations(record);
+    const selectorWrap = document.getElementById("pause-modal-station-selector-wrap");
+    const optionsContainer = document.getElementById("pause-modal-station-options");
+    if (selectorWrap && optionsContainer) {
+      if (stns.length > 1) {
+        selectorWrap.classList.remove("hidden");
+        const optionsHtml = [
+          `<label class="flex items-center gap-2 p-2 rounded-lg border border-slate-700 bg-slate-900/60 cursor-pointer hover:border-amber-400/50 transition">
+            <input type="radio" name="pause-station-choice" value="all" ${pauseTargetStation === "all" ? "checked" : ""} class="accent-amber-400">
+            <span class="text-xs text-white font-bold">All Stations (${stns.map((s) => s.name).join(", ")})</span>
+          </label>`,
+          ...stns.map((s) => {
+            const isPaused = isStationPaused(record, s.name);
+            return `<label class="flex items-center gap-2 p-2 rounded-lg border ${isPaused ? "border-amber-500/40 bg-amber-950/20" : "border-slate-700 bg-slate-900/60"} cursor-pointer hover:border-amber-400/50 transition">
+              <input type="radio" name="pause-station-choice" value="${s.name}" ${pauseTargetStation.toLowerCase() === s.name.toLowerCase() ? "checked" : ""} class="accent-amber-400">
+              <div class="flex-1 flex items-center justify-between text-xs">
+                <span class="text-slate-200 font-semibold">${s.name} ${s.isPrimary ? "(Primary)" : "(Extra)"}</span>
+                <span class="mono ${isPaused ? "text-amber-400" : "text-emerald-400"}">${isPaused ? "Already Paused" : "Active"}</span>
+              </div>
+            </label>`;
+          })
+        ].join("");
+        optionsContainer.innerHTML = optionsHtml;
+      } else {
+        selectorWrap.classList.add("hidden");
+        pauseTargetStation = "all";
+      }
+    }
+
     modal.classList.add("show");
   }
 
@@ -3280,6 +3511,7 @@
     const modal = document.getElementById("session-pause-modal");
     if (modal) modal.classList.remove("show");
     pauseTarget = null;
+    pauseTargetStation = "all";
   }
 
   function initPauseModal() {
@@ -3300,7 +3532,9 @@
         const reason = btn.dataset.reason || "Paused";
         if (reasonInput) reasonInput.value = reason;
         if (pauseTarget) {
-          pauseSession(pauseTarget, reason);
+          const selectedRadio = modal.querySelector('input[name="pause-station-choice"]:checked');
+          const targetStation = selectedRadio ? selectedRadio.value : (pauseTargetStation || "all");
+          pauseStation(pauseTarget, targetStation, reason);
         }
       });
     });
@@ -3309,18 +3543,16 @@
       confirmBtn.addEventListener("click", () => {
         if (!pauseTarget) return;
         const reason = (reasonInput && reasonInput.value.trim()) || "Game time paused";
-        pauseSession(pauseTarget, reason);
+        const selectedRadio = modal.querySelector('input[name="pause-station-choice"]:checked');
+        const targetStation = selectedRadio ? selectedRadio.value : (pauseTargetStation || "all");
+        pauseStation(pauseTarget, targetStation, reason);
       });
     }
   }
 
-  // Grace period after end_time before overtime starts accruing. Once past
-  // it, the charge covers every minute since end_time (not just the
-  // minutes past the grace window) — e.g. 8 minutes overdue with a 5-minute
-  // grace period bills all 8 minutes, not just 3.
-  function computeOvertimeCharge(record) {
+  function computeOvertimeCharge(record, stationName = null) {
     if (!record || record.status !== "Active" || !record.end_time) return { minutes: 0, amount: 0 };
-    const pauseInfo = getSessionPauseInfo(record);
+    const pauseInfo = getStationPauseInfo(record, stationName);
     const effectiveNow = pauseInfo.isPaused ? pauseInfo.pausedAt : new Date();
     const overdueMinutes = Math.floor((effectiveNow - new Date(record.end_time)) / 60000);
     if (overdueMinutes <= OVERTIME_GRACE_MINUTES) return { minutes: 0, amount: 0 };
@@ -3328,21 +3560,23 @@
     return { minutes: overdueMinutes, amount: Math.round(overdueMinutes * perMinuteRate) };
   }
 
-  function timeRemainingText(record) {
+  function timeRemainingText(record, stationName = null) {
     if (!record.end_time) return "";
-    const pauseInfo = getSessionPauseInfo(record);
-    if (pauseInfo.isPaused) {
+    const isPaused = isStationPaused(record, stationName);
+    if (isPaused) {
+      const pauseInfo = getStationPauseInfo(record, stationName);
       const remMins = Math.round(pauseInfo.remainingMs / 60000);
       const h = Math.floor(remMins / 60), m = remMins % 60;
       const remStr = remMins > 0 ? `${h ? h + "h " : ""}${m}m left` : "0m left";
       const timeStr = fmtTime(pauseInfo.pausedAt);
       const reasonStr = pauseInfo.reason ? ` · ${pauseInfo.reason}` : "";
-      return `⏸ PAUSED (${remStr} frozen at ${timeStr}${reasonStr})`;
+      const stnPrefix = (stationName && stationName !== "all") ? `${stationName}: ` : "";
+      return `⏸ ${stnPrefix}PAUSED (${remStr} frozen at ${timeStr}${reasonStr})`;
     }
     const diffMs = new Date(record.end_time) - new Date();
     const mins = Math.round(Math.abs(diffMs) / 60000);
     if (diffMs <= 0) {
-      const overtime = computeOvertimeCharge(record);
+      const overtime = computeOvertimeCharge(record, stationName);
       return overtime.amount > 0 ? `⏰ OVERDUE by ${mins} min (+${inr(overtime.amount)} overtime)` : `⏰ OVERDUE by ${mins} min`;
     }
     const h = Math.floor(mins / 60), m = mins % 60;
@@ -3352,14 +3586,22 @@
   function updateCard(card, record) {
     card.dataset.recordId = record.id;
     const isActive = record.status === "Active";
+    const stns = getRecordStations(record);
+    const anyPaused = isAnyStationPaused(record);
+    const allPaused = isAllStationsPaused(record);
     const pauseInfo = getSessionPauseInfo(record);
-    card.classList.toggle("is-paused", isActive && pauseInfo.isPaused);
-    card.classList.toggle("is-running", isActive && !pauseInfo.isPaused);
-    if (isActive && pauseInfo.isPaused) {
+
+    card.classList.toggle("is-paused", isActive && anyPaused);
+    card.classList.toggle("is-running", isActive && !anyPaused);
+    if (isActive && allPaused) {
       card.style.borderColor = "#ef4444";
       card.style.borderLeftColor = "#ef4444";
       card.style.borderLeftWidth = "6px";
-    } else if (isActive && !pauseInfo.isPaused) {
+    } else if (isActive && anyPaused) {
+      card.style.borderColor = "#f59e0b";
+      card.style.borderLeftColor = "#f59e0b";
+      card.style.borderLeftWidth = "6px";
+    } else if (isActive && !anyPaused) {
       card.style.borderColor = "#10b981";
       card.style.borderLeftColor = "#10b981";
       card.style.borderLeftWidth = "6px";
@@ -3375,14 +3617,27 @@
       custEl.classList.add("cursor-pointer", "hover:text-[#d8ff45]", "transition");
       custEl.title = "Click to filter records by this customer";
     }
-    card.querySelector(".record-station").textContent = (record.station_name || "—") + " · " + (record.type || "—");
+    const stationEl = card.querySelector(".record-station");
+    if (stationEl) {
+      if (stns.length > 1) {
+        stationEl.innerHTML = stns.map((s) => {
+          const p = isStationPaused(record, s.name);
+          return `<span class="inline-flex items-center gap-1 ${p ? "text-rose-400 font-bold" : "text-slate-300"}">${s.name}${p ? " (⏸ Paused)" : ""}</span>`;
+        }).join('<span class="text-slate-600 mx-1">+</span>') + ` · <span class="text-slate-400">${record.type || "Walk-in"}</span>`;
+      } else {
+        stationEl.textContent = (record.station_name || "—") + " · " + (record.type || "—");
+      }
+    }
     card.querySelector(".record-duration").textContent = (Number(record.duration_minutes) || 0) + " min";
     card.querySelector(".record-amount").textContent = inr(record.amount);
 
     const status = card.querySelector(".record-status");
-    if (isActive && pauseInfo.isPaused) {
+    if (isActive && allPaused) {
       status.textContent = "⏸ PAUSED";
       status.className = "record-status rounded-full px-2 py-0.5 text-[11px] font-black whitespace-nowrap bg-rose-500/25 text-rose-300 border border-rose-500/60 shadow-sm";
+    } else if (isActive && anyPaused) {
+      status.textContent = "⏸ PARTIAL PAUSE";
+      status.className = "record-status rounded-full px-2 py-0.5 text-[11px] font-black whitespace-nowrap bg-amber-500/25 text-amber-300 border border-amber-500/60 shadow-sm";
     } else {
       status.textContent = record.status || "Completed";
       status.className =
@@ -3486,14 +3741,18 @@
       if (pauseBtn) {
         if (isActive) {
           pauseBtn.classList.remove("hidden");
-          if (pauseInfo.isPaused) {
+          if (allPaused) {
             pauseBtn.className = "toggle-pause-btn rounded-lg border border-emerald-500/60 bg-emerald-500/25 text-emerald-300 hover:bg-emerald-500/40 px-2 py-1 text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-sm shrink-0";
             pauseBtn.innerHTML = '<i data-lucide="play" width="13" height="13"></i> <span class="pause-btn-text">Resume</span>';
-            pauseBtn.title = `Resume game time for ${record.customer_name || "session"}`;
+            pauseBtn.title = `Resume all game time for ${record.customer_name || "session"}`;
+          } else if (anyPaused) {
+            pauseBtn.className = "toggle-pause-btn rounded-lg border border-amber-500/60 bg-amber-500/25 text-amber-300 hover:bg-amber-500/40 px-2 py-1 text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-sm shrink-0";
+            pauseBtn.innerHTML = '<i data-lucide="pause" width="13" height="13"></i> <span class="pause-btn-text">Manage Pause...</span>';
+            pauseBtn.title = `Manage station pause states`;
           } else {
             pauseBtn.className = "toggle-pause-btn rounded-lg border border-rose-500/50 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25 px-2 py-1 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer shrink-0";
             pauseBtn.innerHTML = '<i data-lucide="pause" width="13" height="13"></i> <span class="pause-btn-text">Pause</span>';
-            pauseBtn.title = `Pause game time (power cut, error, or stopped playing)`;
+            pauseBtn.title = `Pause game time`;
           }
           if (window.lucide) window.lucide.createIcons({ root: pauseBtn });
         } else {
@@ -4231,7 +4490,39 @@
 
   function renderCheckoutBreakdown(record) {
     const isCompleted = record && record.status === "Completed";
-    const timeCost = ((Number(record.duration_minutes) || 0) / 60) * (Number(record.rate) || 0);
+
+    // Primary station cost calculation
+    let primaryMins = Number(record.duration_minutes) || 0;
+    const primaryPaused = isStationPaused(record, record.station_name);
+    if (primaryPaused && !isCompleted) {
+      const pInfo = getStationPauseInfo(record, record.station_name);
+      const start = record.start_time ? new Date(record.start_time) : new Date();
+      const playedMs = Math.max(0, pInfo.pausedAt - start);
+      primaryMins = Math.max(1, Math.min(primaryMins, Math.round(playedMs / 60000)));
+    }
+    const primaryRate = Number(record.rate) || 0;
+    const timeCost = Math.round((primaryMins / 60) * primaryRate);
+
+    // Extra stations cost calculation
+    const extraStns = Array.isArray(record.extra_stations) ? record.extra_stations : [];
+    let extraCost = 0;
+    const extraLines = [];
+    extraStns.forEach((es) => {
+      const esName = es.station || es.station_name || "Extra Station";
+      let esMins = Number(es.duration_minutes) || 0;
+      const esPaused = isStationPaused(record, esName);
+      if (esPaused && !isCompleted) {
+        const esInfo = getStationPauseInfo(record, esName);
+        const start = es.start_time ? new Date(es.start_time) : (record.start_time ? new Date(record.start_time) : new Date());
+        const playedMs = Math.max(0, esInfo.pausedAt - start);
+        esMins = Math.max(1, Math.min(esMins, Math.round(playedMs / 60000)));
+      }
+      const esRate = Number(es.rate) || 0;
+      const cost = Math.round((esMins / 60) * esRate);
+      extraCost += cost;
+      extraLines.push(`${esName}: ${esMins} min${esPaused ? " (paused)" : ""} @ ${inr(esRate)}/hr — ${inr(cost)}`);
+    });
+
     let overtime = isCompleted ? { minutes: 0, amount: 0 } : computeOvertimeCharge(record);
 
     const waiveCheckbox = document.getElementById("checkout-waive-overtime");
@@ -4251,15 +4542,17 @@
       overtime = { minutes: overtime.minutes, amount: 0, waived: true };
     }
 
-    const subtotal = Math.round((Number(record.amount) || 0) + (isCompleted ? 0 : overtime.amount));
+    const foodTotal = (record.food_items || []).reduce((sum, f) => sum + (Number(f.price) || 0) * (Number(f.qty) || 0), 0);
+    const subtotal = isCompleted ? (Number(record.amount) || 0) : Math.round(timeCost + extraCost + foodTotal + overtime.amount);
 
     const rawValue = document.getElementById("checkout-discount-value").value;
     const discount = computeDiscount(record, checkoutDiscountMode, rawValue);
     if (String(discount.value) !== String(rawValue)) document.getElementById("checkout-discount-value").value = discount.value;
-    document.getElementById("checkout-discount-cap").textContent = discountCapLabel(checkoutDiscountMode, timeCost, record.duration_minutes || 0);
+    document.getElementById("checkout-discount-cap").textContent = discountCapLabel(checkoutDiscountMode, timeCost + extraCost, primaryMins);
 
     const foodLines = (record.food_items || []).map((f) => `${f.name} ×${f.qty} — ${inr(f.price * f.qty)}`);
-    const lines = [`Time: ${record.duration_minutes || 0} min @ ${inr(record.rate || 0)}/hr — ${inr(timeCost)}`, ...foodLines];
+    const primaryLabel = `${record.station_name || "Primary Station"}: ${primaryMins} min${primaryPaused ? " (paused)" : ""} @ ${inr(primaryRate)}/hr — ${inr(timeCost)}`;
+    const lines = [primaryLabel, ...extraLines, ...foodLines];
     if (overtime.amount > 0) {
       lines.push(`Overtime: ${overtime.minutes} min past end time (after a ${OVERTIME_GRACE_MINUTES}-min grace period) — ${inr(overtime.amount)}`);
     } else if (overtime.waived) {
@@ -4277,7 +4570,7 @@
     if (window._syncCheckoutPayment) window._syncCheckoutPayment(grandTotal);
     else if (window._syncCheckoutSplit) window._syncCheckoutSplit(grandTotal);
 
-    return { overtime, discount, grandTotal };
+    return { overtime, discount, grandTotal, timeCost, extraCost };
   }
 
   function setCheckoutDiscountMode(mode) {
@@ -4961,10 +5254,20 @@
         finalNotes = [finalNotes, "[Overtime Waived]"].filter(Boolean).join(" ");
       }
 
-      if (isSessionPaused(record)) {
+      if (isSessionPaused(record) || isAnyStationPaused(record)) {
         finalNotes = finalNotes.replace(/\[Session:\s*Paused[^\]]*\]/gi, "").trim();
+        finalNotes = finalNotes.replace(/\[Station Paused:\s*([^|\]]+)[^\]]*\]/gi, "[Station Ended from Paused: $1]").trim();
         const pauseInfo = getSessionPauseInfo(record);
-        finalNotes = [finalNotes, `[Session: Ended from Paused (${pauseInfo.reason || "Paused"})]`].filter(Boolean).join(" ");
+        if (!finalNotes.includes("[Session: Ended from Paused")) {
+          finalNotes = [finalNotes, `[Session: Ended from Paused (${pauseInfo.reason || "Paused"})]`].filter(Boolean).join(" ");
+        }
+      }
+      if (Array.isArray(record.extra_stations)) {
+        record.extra_stations.forEach((es) => {
+          es.is_paused = false;
+          es.paused_at = null;
+          es.paused_remaining_ms = null;
+        });
       }
 
       // When overtime is waived, staff forgot to stop the session and ends it later/next day.
@@ -7334,30 +7637,39 @@
         let bodyHtml;
         if (status.state === "occupied" || status.state === "paused") {
           const r = status.session;
-          const isPaused = status.state === "paused";
+          const isPaused = isStationPaused(r, station.name);
           const overdue = !isPaused && r.end_time && new Date(r.end_time) < new Date();
           bodyHtml = `
-            <p class="text-xs text-slate-300 mt-2 truncate">${r.customer_name || "—"}${r.game ? " · " + r.game : ""}</p>
-            <p class="mono text-xs mt-1 ${isPaused ? "text-amber-300 font-semibold" : overdue ? "text-[#ff6875]" : "text-amber-300"}">${timeRemainingText(r)}</p>`;
+            <p class="text-xs text-slate-300 mt-2 truncate font-semibold">${r.customer_name || "—"}${r.game ? " · " + r.game : ""}</p>
+            <p class="mono text-xs mt-1 ${isPaused ? "text-rose-400 font-bold" : overdue ? "text-[#ff6875]" : "text-amber-300"}">${timeRemainingText(r, station.name)}</p>
+            <div class="mt-3 pt-2.5 border-t border-slate-700/60 flex items-center justify-between gap-1.5">
+              <button type="button" class="stn-pause-btn px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0 ${isPaused ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30" : "bg-rose-500/15 text-rose-300 border border-rose-500/40 hover:bg-rose-500/25"}" data-record-id="${r.id}" data-station-name="${station.name}">
+                <i data-lucide="${isPaused ? "play" : "pause"}" width="12" height="12"></i> <span>${isPaused ? "Resume" : "Pause"}</span>
+              </button>
+              <button type="button" class="stn-checkout-btn px-2.5 py-1 rounded-lg text-xs font-bold bg-[#d8ff45]/20 text-[#d8ff45] border border-[#d8ff45]/40 hover:bg-[#d8ff45]/30 transition flex items-center gap-1 cursor-pointer shrink-0" data-record-id="${r.id}">
+                <i data-lucide="check-circle" width="12" height="12"></i> <span>Checkout</span>
+              </button>
+            </div>`;
         } else if (status.nextBooking) {
           bodyHtml = `<p class="text-xs text-slate-400 mt-2">Available now</p><p class="text-xs text-slate-500 mt-1">Next: ${status.nextBooking.customer_name} at ${fmtDateTime(status.nextBooking.start_time)}</p>`;
         } else {
           bodyHtml = `<p class="text-xs text-slate-400 mt-2">Available now</p>`;
         }
-        const cardStyle = status.state === "paused"
-          ? "border-amber-500/40 bg-[#251f15]"
+        const isStnPaused = status.state === "paused";
+        const cardStyle = isStnPaused
+          ? "border-rose-500/80 bg-[#251419] shadow-md shadow-rose-950/30"
           : status.state === "occupied"
-          ? "border-[#ff6875]/40 bg-[#241419]"
+          ? "border-emerald-500/40 bg-[#14231b]"
           : "border-[#d8ff45]/30 bg-[#15201a]";
-        const badgeStyle = status.state === "paused"
-          ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+        const badgeStyle = isStnPaused
+          ? "bg-rose-500/25 text-rose-300 border border-rose-500/60 font-black"
           : status.state === "occupied"
-          ? "status-cancelled"
+          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
           : "status-active";
-        const badgeText = status.state === "paused" ? "⏸ Paused" : status.state === "occupied" ? "Occupied" : "Available";
+        const badgeText = isStnPaused ? "⏸ Paused" : status.state === "occupied" ? "Occupied" : "Available";
 
         return `
-        <article class="rounded-xl border p-4 ${cardStyle}">
+        <article class="rounded-xl border p-4 transition-all ${cardStyle}">
           <div class="flex items-center justify-between gap-2">
             <p class="font-semibold truncate">${station.name}</p>
             <span class="rounded-full px-2 py-0.5 text-xs font-bold whitespace-nowrap ${badgeStyle}">${badgeText}</span>
@@ -7367,6 +7679,30 @@
         </article>`;
       })
       .join("");
+
+    if (window.lucide) window.lucide.createIcons({ root: board });
+
+    board.querySelectorAll(".stn-pause-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const recordId = btn.dataset.recordId;
+        const stationName = btn.dataset.stationName;
+        const record = records.find((r) => String(r.id) === String(recordId));
+        if (!record) return;
+        if (isStationPaused(record, stationName)) {
+          resumeStation(record, stationName);
+        } else {
+          openPauseModal(record, stationName);
+        }
+      });
+    });
+
+    board.querySelectorAll(".stn-checkout-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const recordId = btn.dataset.recordId;
+        const record = records.find((r) => String(r.id) === String(recordId));
+        if (record) openCheckoutModal(record);
+      });
+    });
   }
 
   // Generic admin CRUD list with inline rename/edit, shared by Stations and
