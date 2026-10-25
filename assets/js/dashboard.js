@@ -85,6 +85,13 @@
   const fmtDateTime = (iso) =>
     iso ? new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso)) : "";
 
+  const fmtTime = (dateOrIso) => {
+    if (!dateOrIso) return "";
+    const d = dateOrIso instanceof Date ? dateOrIso : new Date(dateOrIso);
+    if (isNaN(d.getTime())) return "";
+    return new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", hour12: true }).format(d);
+  };
+
   const isToday = (iso) => {
     if (!iso) return false;
     const d = new Date(iso), n = new Date();
@@ -4993,8 +5000,6 @@
         discount_amount: discount.amount,
         discount_type: discount.amount > 0 ? discount.mode : null,
         discount_value: discount.amount > 0 ? discount.value : 0,
-        is_paused: false,
-        paused_at: null,
         notes: finalNotes
       };
 
@@ -5003,17 +5008,25 @@
         .update(updatePayload)
         .eq("id", recordId);
 
-      // Resilient fallback if cash_amount / online_amount / paid_amount / due_amount not present in PostgREST schema cache
-      if (error && (error.message.includes("cash_amount") || error.message.includes("online_amount") || error.message.includes("paid_amount") || error.message.includes("due_amount") || error.message.includes("is_paused") || error.message.includes("paused_at") || error.code === "PGRST204")) {
+      // Resilient fallback if any optional billing columns are not present in PostgREST schema cache
+      if (error) {
         delete updatePayload.cash_amount;
         delete updatePayload.online_amount;
         delete updatePayload.paid_amount;
         delete updatePayload.due_amount;
-        delete updatePayload.is_paused;
-        delete updatePayload.paused_at;
+        delete updatePayload.overtime_amount;
+        delete updatePayload.discount_amount;
+        delete updatePayload.discount_type;
+        delete updatePayload.discount_value;
         const retry = await window.sb.from("sessions").update(updatePayload).eq("id", recordId);
         error = retry.error;
       }
+
+      record.status = "Completed";
+      record.is_paused = false;
+      record.paused_at = null;
+      record.paused_remaining_ms = null;
+      record.notes = finalNotes;
 
       if (btn) btn.disabled = false;
 
