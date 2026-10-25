@@ -1122,6 +1122,47 @@
               </div>
               <p id="station-conflict-warning" class="hidden text-xs text-amber-300 mt-3"></p>
 
+              <!-- Internal Sale Toggle Card -->
+              <div class="rounded-xl border border-purple-500/30 bg-purple-500/5 p-3.5 mt-3 mb-2">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="flex items-center gap-2.5">
+                    <span class="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400 text-sm font-bold">🏢</span>
+                    <div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold text-slate-200">Internal / Staff / Owner Sale</span>
+                        <span id="ns-internal-badge" class="hidden text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 uppercase tracking-wider">Internal</span>
+                      </div>
+                      <p class="text-[11px] text-slate-400 mt-0.5">Staff consumption, owner use, partner session. 0% cafe commission on Bro's Burger orders.</p>
+                    </div>
+                  </div>
+                  <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input type="checkbox" id="ns-is-internal-sale" class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#d8ff45]"></div>
+                  </label>
+                </div>
+
+                <!-- Quick Owner/Internal Chips -->
+                <div id="ns-internal-chips" class="hidden flex flex-wrap items-center gap-1.5 mt-3 pt-2.5 border-t border-slate-700/60">
+                  <span class="text-[11px] text-slate-400 font-medium">Quick presets:</span>
+                  <button type="button" class="ns-preset-chip rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] cursor-pointer" data-name="Internal Sale (Owner)">👑 Owner Use</button>
+                  <button type="button" class="ns-preset-chip rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] cursor-pointer" data-name="Internal Sale (Staff)">👤 Staff Consumption</button>
+                  <button type="button" class="ns-preset-chip rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] cursor-pointer" data-name="Internal Sale (Testing/Demo)">🎮 Testing/Demo</button>
+                  <button type="button" class="ns-preset-chip rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-xs text-slate-300 hover:border-[#d8ff45] hover:text-[#d8ff45] cursor-pointer" data-name="Internal Sale">🏢 General Internal</button>
+                </div>
+
+                <!-- Bro's Burger 20% internal discount option -->
+                <div id="ns-bros-discount-wrap" class="hidden flex items-center justify-between pt-2 mt-2.5 border-t border-slate-700/60 text-xs">
+                  <div class="flex items-center gap-2">
+                    <span class="text-amber-400 font-bold">🍔 Bro's Burger 20% Staff Discount</span>
+                    <span class="text-[10px] text-slate-400">(0% cafe commission — pay only Bro's Burger cost price)</span>
+                  </div>
+                  <label class="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white">
+                    <input type="checkbox" id="ns-bros-internal-discount" class="rounded accent-[#d8ff45]" checked>
+                    <span class="text-xs font-semibold">Apply 20% off</span>
+                  </label>
+                </div>
+              </div>
+
               <!-- ===== STATIONS SECTION (primary + additional, unified) ===== -->
               <div class="border-t border-slate-700/80 mt-6 pt-5" id="ns-stations-section">
                 <div class="flex items-center justify-between mb-3">
@@ -3027,6 +3068,18 @@
         </button>
       </div>
 
+      <!-- Bro's Burger 20% Staff Discount Option -->
+      <div id="qf-bros-discount-wrap" class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 mt-3 flex items-center justify-between text-xs">
+        <div class="flex items-center gap-2">
+          <span class="text-amber-400 font-bold">🍔 Bro's Burger 20% Staff Discount</span>
+          <span class="text-[10px] text-slate-400">(0% cafe commission)</span>
+        </div>
+        <label class="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white">
+          <input type="checkbox" id="qf-bros-internal-discount" class="rounded accent-[#d8ff45]">
+          <span class="text-xs font-semibold">Apply 20% off</span>
+        </label>
+      </div>
+
       <div class="rounded-xl bg-[#0f1520] border border-slate-700 p-3 mt-4 flex items-center justify-between">
         <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Updated bill</span>
         <span id="quick-food-new-total" class="mono text-xl text-[#d8ff45] font-bold">रु 0</span>
@@ -4053,6 +4106,23 @@
           <label for="cust-collect-waive-note" class="block text-xs font-semibold text-slate-300 mb-1">Clearance Reason / Staff Note</label>
           <input id="cust-collect-waive-note" type="text" class="form-control text-xs py-1.5" placeholder="e.g. Partner gaming session - Prakash Dai (waived)">
         </div>
+      </div>
+
+      <!-- Bro's Burger 20% Staff Discount Option -->
+      <div id="cust-collect-bros-discount-card" class="hidden rounded-xl p-3 border border-amber-500/30 bg-amber-500/10 mb-4 space-y-1.5">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="text-amber-400 text-xs font-bold">🍔 Bro's Burger 20% Staff Discount</span>
+            <span class="text-[10px] text-slate-400">(0% cafe commission)</span>
+          </div>
+          <label class="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white">
+            <input type="checkbox" id="cust-collect-bros-discount" class="rounded accent-[#d8ff45]">
+            <span class="text-xs font-semibold">Apply 20% off</span>
+          </label>
+        </div>
+        <p id="cust-collect-bros-note" class="text-[11px] text-slate-400">
+          Deduct ChillPill's 20% commission on Bro's Burger food so staff/owner only pays Bro's Burger cost price.
+        </p>
       </div>
 
       <!-- Paid & Due Editable Fields -->

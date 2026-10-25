@@ -93,7 +93,7 @@
 
   const isRecordToday = (r) => {
     if (!r) return false;
-    return isToday(r.paid_at) || isToday(r.end_time) || isToday(r.start_time) || isToday(r.created_at);
+    return isToday(r.start_time) || isToday(r.end_time) || (!r.start_time && (isToday(r.created_at) || isToday(r.paid_at)));
   };
 
   function getRecordDates(record) {
@@ -106,7 +106,10 @@
       if (isNaN(d.getTime())) return null;
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     };
-    [record.start_time, record.paid_at, record.end_time, record.created_at].forEach((ts) => {
+    // Prioritize gameplay time (start_time and end_time, then created_at). Only fallback to paid_at if no session time exists.
+    const primaryTimestamps = [record.start_time, record.end_time, record.created_at].filter(Boolean);
+    const tsList = primaryTimestamps.length > 0 ? primaryTimestamps : [record.paid_at].filter(Boolean);
+    tsList.forEach((ts) => {
       const s = toDateStr(ts);
       if (s) dates.add(s);
     });
@@ -524,6 +527,18 @@
       const card = document.createElement("div");
       card.className = "unpaid-customer-card rounded-xl border border-rose-500/30 bg-[#161c28] p-3.5 space-y-2.5 transition hover:border-rose-500/50";
 
+      let gBrosGross = 0;
+      (g.records || []).forEach(({ record: r }) => {
+        (r.food_items || []).forEach((fi) => {
+          const sup = fi.supplier || (menuItems.find((m) => m.id === fi.id)?.supplier);
+          if (sup === "bros_burger") gBrosGross += (Number(fi.price) || 0) * (Number(fi.qty) || 1);
+        });
+      });
+      const gBrosDisc = Math.round(gBrosGross * 0.20);
+      const brosBadge = gBrosDisc > 0
+        ? `<span class="rounded-full px-2 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0" title="Internal staff/owner discount available (saves ${inr(gBrosDisc)})">🍔 Bro's 20% Off Available (-${inr(gBrosDisc)})</span>`
+        : "";
+
       const header = document.createElement("div");
       header.className = "flex items-center justify-between gap-3 flex-wrap border-b border-slate-700/60 pb-2.5";
       header.innerHTML = `
@@ -531,6 +546,7 @@
           <div class="flex items-center gap-2 flex-wrap">
             <h4 class="font-bold text-base truncate">${escapeHtml(g.customerName)}</h4>
             <span class="rounded-full px-2 py-0.5 text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 shrink-0">${g.records.length} session${g.records.length > 1 ? "s" : ""}</span>
+            ${brosBadge}
           </div>
           ${g.customerPhone ? `<p class="text-xs text-slate-400 mt-0.5 mono">📱 ${escapeHtml(g.customerPhone)}</p>` : ""}
         </div>
@@ -1033,6 +1049,41 @@
   let activeCollectMethod = "Cash";
   let activeCollectStatus = "full"; // "full" or "partial"
 
+  function recalcCustCollectTotals() {
+    if (!activeCollectGroup) return { effectiveTotalDue: 0, discountAmt: 0, applyBrosDiscount: false, brosTotalGross: 0 };
+    const brosCheckbox = document.getElementById("cust-collect-bros-discount");
+    const applyBrosDiscount = !!(brosCheckbox && brosCheckbox.checked);
+
+    let brosTotalGross = 0;
+    (activeCollectGroup.records || []).forEach(({ record: r }) => {
+      (r.food_items || []).forEach((fi) => {
+        const sup = fi.supplier || (menuItems.find((m) => m.id === fi.id)?.supplier);
+        if (sup === "bros_burger") {
+          const line = (Number(fi.price) || 0) * (Number(fi.qty) || 1);
+          brosTotalGross += line;
+        }
+      });
+    });
+
+    const discountAmt = applyBrosDiscount ? Math.round(brosTotalGross * 0.20) : 0;
+    const effectiveTotalDue = Math.max(0, activeCollectGroup.totalDue - discountAmt);
+
+    const totalDueEl = document.getElementById("cust-collect-total-due");
+    if (totalDueEl) totalDueEl.textContent = inr(effectiveTotalDue);
+
+    const paidInput = document.getElementById("cust-collect-paid-amount");
+    const dueInput = document.getElementById("cust-collect-due-amount");
+
+    if (activeCollectStatus === "full") {
+      if (paidInput) paidInput.value = effectiveTotalDue;
+      if (dueInput) dueInput.value = 0;
+    } else if (activeCollectStatus === "partial") {
+      const currentPaid = Math.max(0, Number(paidInput?.value) || 0);
+      if (dueInput) dueInput.value = Math.max(0, effectiveTotalDue - currentPaid);
+    }
+    return { effectiveTotalDue, discountAmt, applyBrosDiscount, brosTotalGross };
+  }
+
   function openCustomerCollectModal(group, initialAction = "full") {
     if (!group || !group.records || !group.records.length) return;
     activeCollectGroup = group;
@@ -1060,6 +1111,41 @@
         : `Due waived — ${group.customerName}`;
     }
 
+    // Check Bro's Burger food items across records
+    let brosTotalGross = 0;
+    (group.records || []).forEach(({ record: r }) => {
+      (r.food_items || []).forEach((fi) => {
+        const sup = fi.supplier || (menuItems.find((m) => m.id === fi.id)?.supplier);
+        if (sup === "bros_burger") {
+          const line = (Number(fi.price) || 0) * (Number(fi.qty) || 1);
+          brosTotalGross += line;
+        }
+      });
+    });
+    const brosDiscountAvailable = Math.round(brosTotalGross * 0.20);
+    const isInternal = (group.records && group.records.some((item) => isInternalSaleRecord(item.record))) ||
+                       /internal|owner|staff|prakash/i.test(group.customerName || "");
+
+    const brosCard = document.getElementById("cust-collect-bros-discount-card");
+    const brosCheckbox = document.getElementById("cust-collect-bros-discount");
+    const brosNote = document.getElementById("cust-collect-bros-note");
+
+    if (brosCard && brosCheckbox) {
+      if (brosDiscountAvailable > 0 || isInternal) {
+        brosCard.classList.remove("hidden");
+        // Auto-check if customer is internal/staff/owner and has Bro's burger items
+        brosCheckbox.checked = isInternal && brosDiscountAvailable > 0;
+        if (brosNote) {
+          brosNote.textContent = brosDiscountAvailable > 0
+            ? `Bro's Burger food: ${inr(brosTotalGross)}. 20% discount saves ${inr(brosDiscountAvailable)} (0% ChillPill commission). Staff/owner pays Bro's cost price only.`
+            : `Deduct ChillPill's 20% commission on Bro's Burger food so staff/owner pays only Bro's cost price.`;
+        }
+      } else {
+        brosCard.classList.add("hidden");
+        brosCheckbox.checked = false;
+      }
+    }
+
     // Render included sessions list
     const sessionsList = document.getElementById("cust-collect-sessions-list");
     if (sessionsList) {
@@ -1083,11 +1169,8 @@
       }).join("");
     }
 
-    // Set initial amounts: Paid = totalDue, Due = 0
-    const paidInput = document.getElementById("cust-collect-paid-amount");
-    const dueInput = document.getElementById("cust-collect-due-amount");
-    if (paidInput) paidInput.value = group.totalDue;
-    if (dueInput) dueInput.value = 0;
+    // Set initial amounts and update UI
+    recalcCustCollectTotals();
 
     // Reset status & method buttons
     updateCustCollectStatusUI(activeCollectStatus);
@@ -1162,11 +1245,8 @@
     }
 
     if (activeCollectGroup) {
-      const paidInput = document.getElementById("cust-collect-paid-amount");
-      const dueInput = document.getElementById("cust-collect-due-amount");
       if (status === "full") {
-        if (paidInput) paidInput.value = activeCollectGroup.totalDue;
-        if (dueInput) dueInput.value = 0;
+        recalcCustCollectTotals();
       }
     }
   }
@@ -1233,6 +1313,14 @@
     if (onlineBtn) onlineBtn.addEventListener("click", () => updateCustCollectMethodUI("Online"));
     if (splitBtn) splitBtn.addEventListener("click", () => updateCustCollectMethodUI("Split"));
 
+    // Bro's Burger 20% staff discount checkbox
+    const brosCheckbox = document.getElementById("cust-collect-bros-discount");
+    if (brosCheckbox) {
+      brosCheckbox.addEventListener("change", () => {
+        recalcCustCollectTotals();
+      });
+    }
+
     // Two-way sync for Paid Amount & Due Amount inputs
     const paidInput = document.getElementById("cust-collect-paid-amount");
     const dueInput = document.getElementById("cust-collect-due-amount");
@@ -1240,8 +1328,9 @@
     if (paidInput && dueInput) {
       paidInput.addEventListener("input", () => {
         if (!activeCollectGroup) return;
+        const { effectiveTotalDue } = recalcCustCollectTotals();
         const paid = Math.max(0, Number(paidInput.value) || 0);
-        const due = Math.max(0, activeCollectGroup.totalDue - paid);
+        const due = Math.max(0, effectiveTotalDue - paid);
         dueInput.value = due;
         if (due > 0 && activeCollectStatus !== "partial") updateCustCollectStatusUI("partial");
         else if (due === 0 && activeCollectStatus !== "full") updateCustCollectStatusUI("full");
@@ -1249,8 +1338,9 @@
 
       dueInput.addEventListener("input", () => {
         if (!activeCollectGroup) return;
+        const { effectiveTotalDue } = recalcCustCollectTotals();
         const due = Math.max(0, Number(dueInput.value) || 0);
-        const paid = Math.max(0, activeCollectGroup.totalDue - due);
+        const paid = Math.max(0, effectiveTotalDue - due);
         paidInput.value = paid;
         if (due > 0 && activeCollectStatus !== "partial") updateCustCollectStatusUI("partial");
         else if (due === 0 && activeCollectStatus !== "full") updateCustCollectStatusUI("full");
@@ -1329,6 +1419,7 @@
           return;
         }
 
+        const { effectiveTotalDue, discountAmt, applyBrosDiscount } = recalcCustCollectTotals();
         const paidAmount = Math.max(0, Number(paidInput?.value) || 0);
         const dueAmount = Math.max(0, Number(dueInput?.value) || 0);
 
@@ -1347,8 +1438,9 @@
           onlineAmount = paidAmount;
         }
 
+        const discLine = applyBrosDiscount && discountAmt > 0 ? `\n• Bro's 20% Staff Discount: -${inr(discountAmt)}` : "";
         const dueLine = dueAmount > 0 ? `\n• Remaining Due: ${inr(dueAmount)}` : "";
-        const confirmMsg = `Collect payment for ${group.customerName}?\n• Amount Paid: ${inr(paidAmount)}${dueLine}\n• Method: ${activeCollectMethod}`;
+        const confirmMsg = `Collect payment for ${group.customerName}?\n• Amount Paid: ${inr(paidAmount)}${discLine}${dueLine}\n• Method: ${activeCollectMethod}`;
         if (!confirm(confirmMsg)) return;
 
         confirmBtn.disabled = true;
@@ -1360,20 +1452,32 @@
           for (let i = 0; i < group.records.length; i++) {
             const item = group.records[i];
             const rec = item.record;
-            const recDue = item.due;
+            let recDue = item.due;
+
+            // If Bro's discount was applied, calculate this session's portion
+            let recBrosDisc = 0;
+            if (applyBrosDiscount) {
+              let recBrosGross = 0;
+              (rec.food_items || []).forEach((fi) => {
+                const sup = fi.supplier || (menuItems.find((m) => m.id === fi.id)?.supplier);
+                if (sup === "bros_burger") recBrosGross += (Number(fi.price) || 0) * (Number(fi.qty) || 1);
+              });
+              recBrosDisc = Math.round(recBrosGross * 0.20);
+            }
+            const effectiveRecDue = Math.max(0, recDue - recBrosDisc);
 
             let payForRec = 0;
-            if (i === group.records.length - 1 && remainingPayment > recDue) {
+            if (i === group.records.length - 1 && remainingPayment > effectiveRecDue) {
               payForRec = remainingPayment;
             } else {
-              payForRec = Math.min(remainingPayment, recDue);
+              payForRec = Math.min(remainingPayment, effectiveRecDue);
             }
             remainingPayment = Math.max(0, remainingPayment - payForRec);
 
             const prevPaid = Number(item.breakdown.paidAmount) || 0;
             const newTotalPaid = prevPaid + payForRec;
-            const newRecDue = Math.max(0, (Number(rec.amount) || 0) - newTotalPaid);
-            const isFullyPaid = newRecDue <= 0 && newTotalPaid > 0;
+            const newRecDue = Math.max(0, effectiveRecDue - payForRec);
+            const isFullyPaid = newRecDue <= 0 && (newTotalPaid > 0 || effectiveRecDue === 0);
 
             let recCash = 0;
             let recOnline = 0;
@@ -1383,6 +1487,9 @@
             }
 
             let finalNotes = (rec.notes || "").replace(/\[Payment:\s*(?:Split|Partial|Unpaid)[^\]]*\]/gi, "").trim();
+            if (recBrosDisc > 0 && !finalNotes.includes("Bro's Burger 20% Staff Discount")) {
+              finalNotes = [finalNotes, `[Internal Sale] [Bro's Burger 20% Staff Discount: -${inr(recBrosDisc)}]`].filter(Boolean).join(" ");
+            }
             let paymentTag = "";
             if (!isFullyPaid && newTotalPaid > 0) {
               paymentTag = `[Payment: Partial | Paid: ${newTotalPaid} | Due: ${newRecDue} | Method: ${activeCollectMethod}]`;
@@ -1393,6 +1500,9 @@
             }
             if (paymentTag) finalNotes = [finalNotes, paymentTag].filter(Boolean).join(" ");
 
+            const newRecordAmount = recBrosDisc > 0 ? Math.max(0, (Number(rec.amount) || 0) - recBrosDisc) : Number(rec.amount);
+            const newDiscountAmount = (Number(rec.discount_amount) || 0) + recBrosDisc;
+
             const updatePayload = {
               status: "Completed",
               paid: isFullyPaid,
@@ -1401,7 +1511,9 @@
               due_amount: newRecDue,
               cash_amount: recCash,
               online_amount: recOnline,
-              paid_at: (payForRec > 0 ? new Date().toISOString() : rec.paid_at),
+              paid_at: (payForRec > 0 ? (rec.paid_at || rec.end_time || rec.start_time || new Date().toISOString()) : rec.paid_at),
+              amount: newRecordAmount,
+              discount_amount: newDiscountAmount,
               notes: finalNotes
             };
 
@@ -1662,6 +1774,14 @@
       const isInternal = !!document.getElementById("mr-is-internal-sale")?.checked;
       const isDisc = !!document.getElementById("mr-bros-internal-discount")?.checked;
       return isInternal && isDisc;
+    }
+    if (containerId === "food-order-list" || containerId === "ns") {
+      const isInternal = !!document.getElementById("ns-is-internal-sale")?.checked;
+      const isDisc = !!document.getElementById("ns-bros-internal-discount")?.checked;
+      return isInternal && isDisc;
+    }
+    if (containerId === "quick-food-rows" || containerId === "quick" || containerId === "qf") {
+      return !!document.getElementById("qf-bros-internal-discount")?.checked;
     }
     return false;
   }
@@ -2021,6 +2141,26 @@
         }
       });
     });
+  }
+
+  function updateNsInternalSaleState() {
+    const isInternal = !!document.getElementById("ns-is-internal-sale")?.checked;
+    const badge = document.getElementById("ns-internal-badge");
+    const chips = document.getElementById("ns-internal-chips");
+    const brosWrap = document.getElementById("ns-bros-discount-wrap");
+    const custInput = document.getElementById("customer-name");
+
+    if (badge) badge.classList.toggle("hidden", !isInternal);
+    if (chips) chips.classList.toggle("hidden", !isInternal);
+    if (brosWrap) brosWrap.classList.toggle("hidden", !isInternal);
+
+    if (isInternal) {
+      if (custInput && (!custInput.value || !custInput.value.toLowerCase().includes("internal"))) {
+        custInput.value = "Internal Sale";
+      }
+    }
+    syncBrosInternalDiscountRows("food-order-list");
+    calculateAmount();
   }
 
   const CTRL_RATE = 50; // रु per extra controller
@@ -3245,7 +3385,7 @@
   let recordsSearchQuery = "";
 
   function getRecordLocalDateStr(record) {
-    const raw = record.start_time || record.created_at || record.paid_at || record.end_time;
+    const raw = record.start_time || record.end_time || record.created_at || record.paid_at;
     if (!raw) return "";
     const d = new Date(raw);
     if (isNaN(d.getTime())) return "";
@@ -3541,12 +3681,28 @@
         </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-        ${groups.map((g, idx) => `
+        ${groups.map((g, idx) => {
+          let gBrosGross = 0;
+          (g.records || []).forEach(({ record: r }) => {
+            (r.food_items || []).forEach((fi) => {
+              const sup = fi.supplier || (menuItems.find((m) => m.id === fi.id)?.supplier);
+              if (sup === "bros_burger") gBrosGross += (Number(fi.price) || 0) * (Number(fi.qty) || 1);
+            });
+          });
+          const gBrosDisc = Math.round(gBrosGross * 0.20);
+          const brosBadge = gBrosDisc > 0
+            ? `<span class="inline-block rounded px-1.5 py-0.2 text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30" title="Bro's 20% staff discount available (saves ${inr(gBrosDisc)})">🍔 -${inr(gBrosDisc)}</span>`
+            : "";
+
+          return `
           <div class="p-2.5 rounded-lg bg-[#141a26] border border-rose-500/20 flex items-center justify-between gap-2 hover:border-rose-500/40 transition">
             <div class="min-w-0">
-              <button type="button" class="font-bold text-xs text-white hover:text-[#d8ff45] text-left truncate block records-summary-cust-btn cursor-pointer" data-cust="${escapeHtml(g.customerName)}" title="Click to filter by ${escapeHtml(g.customerName)}">
-                ${escapeHtml(g.customerName)}
-              </button>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <button type="button" class="font-bold text-xs text-white hover:text-[#d8ff45] text-left truncate block records-summary-cust-btn cursor-pointer" data-cust="${escapeHtml(g.customerName)}" title="Click to filter by ${escapeHtml(g.customerName)}">
+                  ${escapeHtml(g.customerName)}
+                </button>
+                ${brosBadge}
+              </div>
               <p class="text-[11px] text-slate-400 mono">${g.records.length} session${g.records.length > 1 ? "s" : ""} ${g.customerPhone ? `· ${escapeHtml(g.customerPhone)}` : ""}</p>
             </div>
             <div class="flex items-center gap-2 shrink-0">
@@ -3561,7 +3717,8 @@
               </button>
             </div>
           </div>
-        `).join("")}
+        `;
+        }).join("")}
       </div>
     `;
 
@@ -4499,15 +4656,34 @@
         finalNotes = [finalNotes, "[Overtime Waived]"].filter(Boolean).join(" ");
       }
 
+      // When overtime is waived, staff forgot to stop the session and ends it later/next day.
+      // Set end_time to the scheduled finish time and keep paid_at on the session date
+      let sessionEndTime = record.end_time;
+      let sessionPaidAt = new Date().toISOString();
+      if (overtime.waived) {
+        if (record.start_time) {
+          const scheduledEnd = new Date(new Date(record.start_time).getTime() + (Number(record.duration_minutes) || 60) * 60000);
+          sessionEndTime = scheduledEnd.toISOString();
+          sessionPaidAt = sessionEndTime;
+        }
+      } else if (overtime.amount > 0) {
+        sessionEndTime = new Date().toISOString();
+        sessionPaidAt = sessionEndTime;
+      } else if (record.end_time && new Date(record.end_time) < new Date()) {
+        // If normal checkout occurred after session end time, keep paid_at aligned with session end
+        sessionPaidAt = record.end_time;
+      }
+
       const updatePayload = {
         status: "Completed",
+        end_time: sessionEndTime || record.end_time,
         paid: (dueAmount <= 0 && (paidAmount > 0 || isWaived)),
         payment_method: dbPaymentMethod,
         cash_amount: cashAmount,
         online_amount: onlineAmount,
         paid_amount: paidAmount,
         due_amount: dueAmount,
-        paid_at: (paidAmount > 0 || isWaived ? new Date().toISOString() : null),
+        paid_at: (paidAmount > 0 || isWaived ? sessionPaidAt : null),
         amount: grandTotal,
         overtime_amount: overtime.amount,
         discount_amount: discount.amount,
@@ -5165,15 +5341,50 @@
         else delete onlineInput.dataset.userEdited;
       }
 
-      const customBillInput = document.getElementById("edit-custom-bill");
-      if (customBillInput) {
-        customBillInput.value = record.amount != null ? record.amount : 0;
-        delete customBillInput.dataset.userEdited;
+      // Resolve discount state robustly
+      let dMode = record.discount_type || null;
+      let dVal = Number(record.discount_value) || 0;
+      let dAmt = Number(record.discount_amount) || 0;
+
+      // Check notes if discount was recorded there
+      if (record.notes) {
+        const discMatch = String(record.notes).match(/\[Discount:\s*(\d+(?:\.\d+)?)\s*(%|mins?|min|amount|rs)?\]/i);
+        if (discMatch) {
+          const matchedVal = Number(discMatch[1]) || 0;
+          const matchedUnit = (discMatch[2] || "").toLowerCase();
+          if (matchedVal > 0) {
+            dVal = dVal || matchedVal;
+            if (!dMode) {
+              dMode = matchedUnit.startsWith("%") ? "percent" : (matchedUnit.startsWith("m") ? "minutes" : "amount");
+            }
+          }
+        }
       }
 
-      // Pre-load discount state
-      editDiscountMode = (record.discount_type && ["percent","amount","minutes"].includes(record.discount_type))
-        ? record.discount_type : "percent";
+      // If discount_amount is present but discount_value was 0 or missing
+      if (dAmt > 0 && dVal === 0) {
+        dMode = dMode || "amount";
+        dVal = dAmt;
+      }
+
+      // If both discount_amount and discount_value are missing/0, but record.amount is lower than expected undiscounted bill
+      const timeCost = Math.round(((Number(record.duration_minutes) || 0) / 60) * (Number(record.rate) || 0));
+      const foodTotal = frTotal("edit-food-rows");
+      const extraCost = calcExtraStationsCost("edit");
+      const ctrlCost = ctrlItem ? (ctrlItem.qty || 0) * CTRL_RATE : 0;
+      const expectedTotal = timeCost + foodTotal + extraCost + ctrlCost;
+
+      if (dAmt === 0 && dVal === 0 && record.amount != null && Number(record.amount) < expectedTotal) {
+        const implied = expectedTotal - Number(record.amount);
+        if (implied > 0) {
+          dMode = "amount";
+          dVal = implied;
+          dAmt = implied;
+        }
+      }
+
+      editDiscountMode = (dMode && ["percent", "amount", "minutes"].includes(dMode)) ? dMode : (dAmt > 0 ? "amount" : "percent");
+
       document.querySelectorAll(".edit-discount-mode-btn").forEach((b) => {
         const active = b.dataset.mode === editDiscountMode;
         b.className = `edit-discount-mode-btn rounded-lg border px-2 py-1 text-xs font-bold flex items-center gap-1 cursor-pointer transition ${
@@ -5181,7 +5392,13 @@
         }`;
       });
       const editDiscValInput = document.getElementById("edit-discount-value");
-      if (editDiscValInput) editDiscValInput.value = record.discount_value || 0;
+      if (editDiscValInput) editDiscValInput.value = dVal;
+
+      const customBillInput = document.getElementById("edit-custom-bill");
+      if (customBillInput) {
+        customBillInput.value = record.amount != null ? record.amount : (expectedTotal - dAmt);
+        delete customBillInput.dataset.userEdited;
+      }
 
       renderStationChips("edit-station-chips-container", "edit-station");
       recalcEditModal();
@@ -6471,11 +6688,18 @@
     document.getElementById("quick-food-station").textContent = record.station_name || "";
     document.getElementById("quick-food-message").textContent = "";
 
+    const isInternal = isInternalSaleRecord(record);
+    const qfBrosToggle = document.getElementById("qf-bros-internal-discount");
+    if (qfBrosToggle) {
+      qfBrosToggle.checked = isInternal;
+    }
+
     clearFrContainer("quick-food-rows");
     document.getElementById("quick-food-menu-empty").classList.toggle("hidden", menuItems.length > 0);
     (record.food_items || []).forEach((item) => addFrRow("quick-food-rows", item.id, item.qty));
     if (!record.food_items || !record.food_items.length) addFrRow("quick-food-rows");
 
+    syncBrosInternalDiscountRows("quick-food-rows");
     recalcQuickFood();
     document.getElementById("quick-food-modal").classList.add("show");
     setTimeout(() => {
@@ -6494,6 +6718,14 @@
     document.getElementById("quick-food-add-row").addEventListener("click", () => addFrRow("quick-food-rows"));
     document.getElementById("quick-food-cancel").addEventListener("click", closeQuickFoodModal);
     modal.addEventListener("click", (event) => { if (event.target === modal) closeQuickFoodModal(); });
+
+    const qfBrosToggle = document.getElementById("qf-bros-internal-discount");
+    if (qfBrosToggle) {
+      qfBrosToggle.addEventListener("change", () => {
+        syncBrosInternalDiscountRows("quick-food-rows");
+        recalcQuickFood();
+      });
+    }
 
     const qfWaBros = document.getElementById("quick-food-wa-bros");
     if (qfWaBros) {
@@ -6891,7 +7123,7 @@
       return recordMatchesDateRange(r, startDate, endDate);
     }
     if (period === "today") return isRecordToday(r);
-    const iso = r.paid_at || r.created_at || r.start_time || r.end_time;
+    const iso = r.start_time || r.end_time || r.created_at || r.paid_at;
     if (!iso) return false;
     const ds = getDateStr(iso);
     if (!ds) return false;
@@ -9678,6 +9910,16 @@ Here is the menu image:`;
       const endIso = startDate ? new Date(startDate.getTime() + duration * 60000).toISOString() : null;
 
       const extraStations = collectExtraStations("ns");
+      const isInternal = !!document.getElementById("ns-is-internal-sale")?.checked;
+      const isBrosDisc = !!document.getElementById("ns-bros-internal-discount")?.checked;
+      let sessionNotes = document.getElementById("notes").value.trim();
+      if (isInternal && !sessionNotes.includes("[Internal Sale]")) {
+        sessionNotes = ["[Internal Sale]", sessionNotes].filter(Boolean).join(" ");
+      }
+      if (isInternal && isBrosDisc && !sessionNotes.includes("Bro's Burger 20% Staff Discount")) {
+        sessionNotes = [sessionNotes, "[Bro's Burger 20% Staff Discount]"].filter(Boolean).join(" ");
+      }
+
       const { error } = await window.sb.from("sessions").insert({
         type: status === "Booked" ? "Booked" : "Walk-in",
         station_name: station,
@@ -9692,7 +9934,7 @@ Here is the menu image:`;
         food_total: foodTotal,
         amount: total,
         status,
-        notes: document.getElementById("notes").value.trim(),
+        notes: sessionNotes,
         notified_5min: false,
         staff_id: currentStaff ? currentStaff.id : null,
         staff_name: currentStaff ? currentStaff.name : null,
@@ -9709,6 +9951,9 @@ Here is the menu image:`;
           await window.sb.from("waiting_list").update({ status: "Seated" }).eq("id", waitingId);
         }
         event.target.reset();
+        const nsInternalToggle = document.getElementById("ns-is-internal-sale");
+        if (nsInternalToggle) nsInternalToggle.checked = false;
+        updateNsInternalSaleState();
         document.getElementById("duration-minutes").value = 60;
         document.getElementById("rate").value = document.getElementById("admin-rate").value;
         document.getElementById("start-time").value = timeInputValue(new Date());
@@ -10027,6 +10272,47 @@ Here is the menu image:`;
     wireCtrlStepper("edit-ctrl-dec", "edit-ctrl-inc", "edit-extra-controllers", recalcEditModal);
 
     calculateAmount();
+
+    // ---- New Session Internal Sale wiring ----
+    const nsInternalToggle = document.getElementById("ns-is-internal-sale");
+    const nsBrosToggle = document.getElementById("ns-bros-internal-discount");
+    if (nsInternalToggle) {
+      nsInternalToggle.addEventListener("change", () => {
+        updateNsInternalSaleState();
+      });
+    }
+    if (nsBrosToggle) {
+      nsBrosToggle.addEventListener("change", () => {
+        syncBrosInternalDiscountRows("food-order-list");
+        calculateAmount();
+      });
+    }
+
+    // Customer name preset chips for new session
+    document.querySelectorAll(".ns-preset-chip").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const custInput = document.getElementById("customer-name");
+        if (custInput) {
+          custInput.value = btn.dataset.name || "Internal Sale";
+        }
+        if (nsInternalToggle && !nsInternalToggle.checked) {
+          nsInternalToggle.checked = true;
+          updateNsInternalSaleState();
+        }
+      });
+    });
+
+    // Auto-detect typing internal / staff / owner in customer name
+    const nsCustInput = document.getElementById("customer-name");
+    if (nsCustInput) {
+      nsCustInput.addEventListener("input", () => {
+        const val = nsCustInput.value.toLowerCase();
+        if ((val.includes("internal") || val.includes("owner") || val.includes("staff") || val.includes("prakash")) && nsInternalToggle && !nsInternalToggle.checked) {
+          nsInternalToggle.checked = true;
+          updateNsInternalSaleState();
+        }
+      });
+    }
 
     updateClock();
     setInterval(updateClock, 1000);
