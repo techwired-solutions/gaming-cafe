@@ -508,23 +508,38 @@
       border-color: #c0cfe8 !important;
       color: #10141e !important;
     }
-    .session-card.is-paused {
+    .session-card.is-paused,
+    [data-theme="light"] .session-card.is-paused {
       border: 2px solid #ef4444 !important;
+      border-left: 6px solid #ef4444 !important;
+      border-color: #ef4444 !important;
+      border-left-color: #ef4444 !important;
       background: #231215 !important;
-      box-shadow: 0 0 16px rgba(239, 68, 68, 0.25) !important;
+      box-shadow: 0 0 20px rgba(239, 68, 68, 0.35) !important;
     }
     [data-theme="light"] .session-card.is-paused {
-      border: 2px solid #dc2626 !important;
       background: #fef2f2 !important;
-      box-shadow: 0 0 14px rgba(220, 38, 38, 0.15) !important;
+      border-color: #dc2626 !important;
+      border-left-color: #dc2626 !important;
+      box-shadow: 0 0 16px rgba(220, 38, 38, 0.25) !important;
     }
-    .session-card.is-running {
+    .session-card.is-running,
+    [data-theme="light"] .session-card.is-running {
       border: 2px solid #10b981 !important;
-      box-shadow: 0 0 14px rgba(16, 185, 129, 0.2) !important;
+      border-left: 6px solid #10b981 !important;
+      border-color: #10b981 !important;
+      border-left-color: #10b981 !important;
+      box-shadow: 0 0 16px rgba(16, 185, 129, 0.25) !important;
     }
     [data-theme="light"] .session-card.is-running {
-      border: 2px solid #059669 !important;
-      box-shadow: 0 0 12px rgba(5, 150, 105, 0.15) !important;
+      border-color: #059669 !important;
+      border-left-color: #059669 !important;
+      box-shadow: 0 0 14px rgba(5, 150, 105, 0.2) !important;
+    }
+    [data-theme="light"] .record-notes {
+      background-color: #f1f5f9 !important;
+      border-color: #cbd5e1 !important;
+      color: #1e293b !important;
     }
     /* ===== LIGHT THEME: SESSION PAUSE MODAL ===== */
     [data-theme="light"] #session-pause-modal .panel {
@@ -3024,7 +3039,7 @@
     </div>
   </div>
 
-  <div id="toast" class="fixed bottom-5 right-5 max-w-sm rounded-xl border border-slate-600 bg-[#202939] px-4 py-3 shadow-2xl opacity-0 translate-y-3 transition-all duration-200 text-sm z-[9999] pointer-events-none" role="status" aria-live="polite"></div>
+  <div id="toast" class="fixed top-5 right-5 max-w-sm rounded-xl border border-slate-600 bg-[#202939] px-4 py-3 shadow-2xl opacity-0 -translate-y-3 transition-all duration-200 text-sm z-[9999] pointer-events-none" role="status" aria-live="polite"></div>
 
   <!-- ===================== CHECKOUT MODAL ===================== -->
   <div id="checkout-modal" class="modal-overlay">
@@ -4415,7 +4430,7 @@
 
       <p class="record-countdown mono mt-1 text-xs hidden"></p>
       <p class="record-food mt-1 text-xs text-amber-300/90 hidden truncate"></p>
-      <p class="record-notes mt-1 text-xs text-slate-400 hidden truncate"></p>
+      <p class="record-notes mt-1.5 text-xs text-slate-300 hidden whitespace-pre-line break-words leading-relaxed p-2 rounded-lg bg-slate-900/50 border border-slate-700/60"></p>
 
       <!-- Active / Running & Completed Actions -->
       <div class="record-actions hidden mt-2.5 pt-2 border-t border-slate-700/60 flex flex-wrap items-center gap-1.5">
@@ -5170,7 +5185,7 @@
   <script src="assets/js/config.local.js" onerror="console.info('[ChillPill] No config.local.js override found — using assets/js/config.js placeholders.')"></script>
   <script src="assets/js/supabaseClient.js"></script>
   <script src="assets/js/passwordHash.js"></script>
-  <script src="assets/js/dashboard.js?v=20260916"></script>
+  <script src="assets/js/dashboard.js?v=20261025_04"></script>
   <script src="assets/js/tournament.js?v=20260930"></script>
 </body>
 </html>

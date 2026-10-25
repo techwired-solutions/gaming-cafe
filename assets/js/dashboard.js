@@ -3196,7 +3196,7 @@
 
     if (sdkReady && window.sb) {
       let { error } = await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
-      if (error && (error.message.includes("is_paused") || error.message.includes("paused_at"))) {
+      if (error) {
         delete updatePayload.is_paused;
         delete updatePayload.paused_at;
         await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
@@ -3242,7 +3242,7 @@
 
     if (sdkReady && window.sb) {
       let { error } = await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
-      if (error && (error.message.includes("is_paused") || error.message.includes("paused_at"))) {
+      if (error) {
         delete updatePayload.is_paused;
         delete updatePayload.paused_at;
         await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
@@ -3348,6 +3348,19 @@
     const pauseInfo = getSessionPauseInfo(record);
     card.classList.toggle("is-paused", isActive && pauseInfo.isPaused);
     card.classList.toggle("is-running", isActive && !pauseInfo.isPaused);
+    if (isActive && pauseInfo.isPaused) {
+      card.style.borderColor = "#ef4444";
+      card.style.borderLeftColor = "#ef4444";
+      card.style.borderLeftWidth = "6px";
+    } else if (isActive && !pauseInfo.isPaused) {
+      card.style.borderColor = "#10b981";
+      card.style.borderLeftColor = "#10b981";
+      card.style.borderLeftWidth = "6px";
+    } else {
+      card.style.borderColor = "";
+      card.style.borderLeftColor = "";
+      card.style.borderLeftWidth = "";
+    }
 
     const custEl = card.querySelector(".record-customer");
     if (custEl) {
@@ -3390,7 +3403,8 @@
         displayNote = rawNotes.replace(/\[Payment:[^\]]*\]/gi, "").trim();
       }
       if (displayNote) {
-        notesEl.textContent = "📝 " + displayNote;
+        const formattedNote = displayNote.replace(/\s*(\[(?:Session|Payment|Waive):)/gi, "\n$1").trim();
+        notesEl.textContent = "📝 " + formattedNote;
         notesEl.title = displayNote;
         notesEl.classList.remove("hidden");
       } else {
