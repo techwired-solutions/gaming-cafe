@@ -509,12 +509,22 @@
       color: #10141e !important;
     }
     .session-card.is-paused {
-      border-color: rgba(245, 158, 11, 0.45) !important;
-      background: #231c14 !important;
+      border: 2px solid #ef4444 !important;
+      background: #231215 !important;
+      box-shadow: 0 0 16px rgba(239, 68, 68, 0.25) !important;
     }
     [data-theme="light"] .session-card.is-paused {
-      border-color: rgba(217, 119, 6, 0.4) !important;
-      background: #fdf6ec !important;
+      border: 2px solid #dc2626 !important;
+      background: #fef2f2 !important;
+      box-shadow: 0 0 14px rgba(220, 38, 38, 0.15) !important;
+    }
+    .session-card.is-running {
+      border: 2px solid #10b981 !important;
+      box-shadow: 0 0 14px rgba(16, 185, 129, 0.2) !important;
+    }
+    [data-theme="light"] .session-card.is-running {
+      border: 2px solid #059669 !important;
+      box-shadow: 0 0 12px rgba(5, 150, 105, 0.15) !important;
     }
     /* ===== LIGHT THEME: SESSION PAUSE MODAL ===== */
     [data-theme="light"] #session-pause-modal .panel {
@@ -3014,7 +3024,7 @@
     </div>
   </div>
 
-  <div id="toast" class="fixed bottom-5 right-5 max-w-sm rounded-xl border border-slate-600 bg-[#202939] px-4 py-3 shadow-2xl opacity-0 translate-y-3 transition-all duration-200 text-sm z-50" role="status" aria-live="polite"></div>
+  <div id="toast" class="fixed bottom-5 right-5 max-w-sm rounded-xl border border-slate-600 bg-[#202939] px-4 py-3 shadow-2xl opacity-0 translate-y-3 transition-all duration-200 text-sm z-[9999] pointer-events-none" role="status" aria-live="polite"></div>
 
   <!-- ===================== CHECKOUT MODAL ===================== -->
   <div id="checkout-modal" class="modal-overlay">
@@ -4376,7 +4386,7 @@
   </div>
 
   <template id="record-template">
-    <article class="session-card rounded-xl border border-slate-700 bg-[#202838] p-3 sm:p-3.5 transition-all">
+    <article class="session-card rounded-xl border border-slate-700 bg-[#202838] p-3 sm:p-3.5 transition-all w-full max-w-full overflow-hidden">
       <!-- Top Row: Customer & Station on left, Bill & Status on right -->
       <div class="flex items-center justify-between gap-2">
         <div class="min-w-0 flex-1">
@@ -4408,35 +4418,33 @@
       <p class="record-notes mt-1 text-xs text-slate-400 hidden truncate"></p>
 
       <!-- Active / Running & Completed Actions -->
-      <div class="record-actions hidden mt-2 pt-2 border-t border-slate-700/60 flex flex-col gap-1.5">
-        <div class="flex flex-wrap items-center gap-1.5">
-          <button type="button" class="open-checkout hidden rounded-lg bg-[#d8ff45] hover:brightness-110 px-2.5 py-1.5 text-xs font-bold text-[#10141e] flex items-center justify-center gap-1 transition cursor-pointer">
-            <i data-lucide="check-circle" width="13" height="13"></i> Checkout
+      <div class="record-actions hidden mt-2.5 pt-2 border-t border-slate-700/60 flex flex-wrap items-center gap-1.5">
+        <button type="button" class="open-checkout hidden rounded-lg bg-[#d8ff45] hover:brightness-110 px-2.5 py-1 text-xs font-bold text-[#10141e] flex items-center justify-center gap-1 transition cursor-pointer shrink-0">
+          <i data-lucide="check-circle" width="13" height="13"></i> <span>Checkout</span>
+        </button>
+        <button type="button" class="toggle-pause-btn hidden rounded-lg border border-rose-500/50 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25 px-2 py-1 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer shrink-0" title="Pause or Resume game time">
+          <i data-lucide="pause" width="13" height="13"></i> <span class="pause-btn-text">Pause</span>
+        </button>
+        <button type="button" class="open-add-food rounded-lg border border-slate-600 bg-slate-800/80 hover:bg-slate-700 px-2 py-1 text-xs font-semibold text-slate-200 flex items-center justify-center gap-1 transition cursor-pointer shrink-0">
+          <i data-lucide="sandwich" width="13" height="13"></i> <span>+ Food</span>
+        </button>
+        <div class="extend-time-group flex gap-0.5 items-center shrink-0">
+          <input type="number" min="1" value="15" aria-label="Minutes to add" class="extend-minutes-input form-control w-11 text-center text-xs py-0.5 px-1 h-7 rounded-l-lg rounded-r-none" style="min-height:28px;">
+          <button type="button" class="extend-apply rounded-r-lg rounded-l-none border border-[#d8ff45] bg-[#d8ff45]/10 hover:bg-[#d8ff45]/20 text-xs font-bold text-[#d8ff45] h-7 px-1.5 transition whitespace-nowrap cursor-pointer">+Min</button>
+        </div>
+        <button type="button" class="open-edit rounded-lg border border-slate-600 bg-slate-800/80 hover:bg-slate-700 px-2 py-1 text-xs font-semibold text-slate-200 flex items-center justify-center gap-1 transition cursor-pointer shrink-0" title="Edit Session">
+          <i data-lucide="pencil" width="13" height="13"></i> <span>Edit</span>
+        </button>
+        <button type="button" class="print-bill-btn rounded-lg border border-slate-600 bg-slate-800/80 hover:border-[#d8ff45] hover:text-[#d8ff45] px-2 py-1 text-xs font-semibold text-slate-200 transition flex items-center justify-center gap-1 cursor-pointer shrink-0" title="Print PAN Bill">
+          <i data-lucide="printer" width="13" height="13"></i> <span>Print</span>
+        </button>
+        <div class="delete-wrap hidden shrink-0 ml-auto">
+          <button type="button" class="delete-trigger rounded-lg border border-slate-700 bg-slate-800/60 p-1 text-slate-400 hover:text-[#ff6875] hover:border-[#ff6875] transition cursor-pointer" title="Delete record">
+            <i data-lucide="trash-2" width="13" height="13"></i>
           </button>
-          <button type="button" class="toggle-pause-btn hidden rounded-lg border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1.5 text-xs font-semibold text-amber-300 flex items-center justify-center gap-1 transition cursor-pointer" title="Pause or Resume game time">
-            <i data-lucide="pause" width="13" height="13"></i> <span class="pause-btn-text">Pause</span>
-          </button>
-          <button type="button" class="open-add-food rounded-lg border border-slate-600 bg-slate-800/80 hover:bg-slate-700 px-2 py-1.5 text-xs font-semibold text-slate-200 flex items-center justify-center gap-1 transition cursor-pointer">
-            <i data-lucide="sandwich" width="13" height="13"></i> + Food
-          </button>
-          <div class="extend-time-group flex gap-1 items-center">
-            <input type="number" min="1" value="15" aria-label="Minutes to add" class="extend-minutes-input form-control w-12 text-center text-xs py-1 px-1 h-8" style="min-height:30px;">
-            <button type="button" class="extend-apply rounded-lg border border-[#d8ff45] bg-[#d8ff45]/10 hover:bg-[#d8ff45]/20 text-xs font-bold text-[#d8ff45] h-8 px-2 transition whitespace-nowrap cursor-pointer">+ Min</button>
-          </div>
-          <button type="button" class="open-edit rounded-lg border border-slate-600 bg-slate-800/80 hover:bg-slate-700 px-2.5 py-1.5 text-xs font-semibold text-slate-200 flex items-center justify-center gap-1 transition cursor-pointer" title="Edit Session">
-            <i data-lucide="pencil" width="13" height="13"></i> <span>Edit</span>
-          </button>
-          <button type="button" class="print-bill-btn rounded-lg border border-slate-600 bg-slate-800/80 hover:border-[#d8ff45] hover:text-[#d8ff45] px-2.5 py-1.5 text-xs font-semibold text-slate-200 transition flex items-center justify-center gap-1 cursor-pointer" title="Print PAN Bill">
-            <i data-lucide="printer" width="13" height="13"></i> <span>Print</span>
-          </button>
-          <div class="delete-wrap hidden ml-auto">
-            <button type="button" class="delete-trigger rounded-lg border border-slate-700 bg-slate-800/60 p-1.5 text-slate-400 hover:text-[#ff6875] hover:border-[#ff6875] transition cursor-pointer" title="Delete record">
-              <i data-lucide="trash-2" width="13" height="13"></i>
-            </button>
-            <div class="delete-confirm hidden items-center gap-1">
-              <button type="button" class="delete-yes rounded-lg bg-[#ff6875] px-2 py-1 text-xs font-bold text-[#10141e] cursor-pointer">Confirm</button>
-              <button type="button" class="delete-no rounded-lg border border-slate-600 px-2 py-1 text-xs text-slate-300 cursor-pointer">Cancel</button>
-            </div>
+          <div class="delete-confirm hidden items-center gap-1">
+            <button type="button" class="delete-yes rounded-lg bg-[#ff6875] px-2 py-1 text-xs font-bold text-[#10141e] cursor-pointer">Confirm</button>
+            <button type="button" class="delete-no rounded-lg border border-slate-600 px-2 py-1 text-xs text-slate-300 cursor-pointer">Cancel</button>
           </div>
         </div>
       </div>

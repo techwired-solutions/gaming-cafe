@@ -448,7 +448,7 @@
   function getUnpaidCustomersGrouped(customRecords = null) {
     const pool = customRecords || records;
     const unpaidRecords = pool.filter((r) => {
-      if (r.status === "Cancelled") return false;
+      if (r.status !== "Completed") return false;
       const bd = getRecordPaymentBreakdown(r);
       return (!r.paid || bd.isPartial || bd.dueAmount > 0) && !bd.isWaived;
     });
@@ -3190,9 +3190,9 @@
     record.pause_reason = reason;
     record.notes = finalNotes;
 
-    renderAllLists();
     closePauseModal();
-    showToast(`⏸ Paused session for ${record.customer_name || "Customer"} (${remainingMins}m remaining frozen).`);
+    renderAllLists();
+    showToast(`⏸ Session PAUSED for ${record.customer_name || "Customer"} (${remainingMins}m frozen)`);
 
     if (sdkReady && window.sb) {
       let { error } = await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
@@ -3238,7 +3238,7 @@
 
     renderAllLists();
     const remainingMins = Math.round(pauseInfo.remainingMs / 60000);
-    showToast(`▶ Resumed session for ${record.customer_name || "Customer"}! ${remainingMins}m remaining.`);
+    showToast(`▶ Session RESUMED for ${record.customer_name || "Customer"} (${remainingMins}m running)`);
 
     if (sdkReady && window.sb) {
       let { error } = await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
@@ -3344,8 +3344,10 @@
 
   function updateCard(card, record) {
     card.dataset.recordId = record.id;
+    const isActive = record.status === "Active";
     const pauseInfo = getSessionPauseInfo(record);
-    card.classList.toggle("is-paused", pauseInfo.isPaused);
+    card.classList.toggle("is-paused", isActive && pauseInfo.isPaused);
+    card.classList.toggle("is-running", isActive && !pauseInfo.isPaused);
 
     const custEl = card.querySelector(".record-customer");
     if (custEl) {
@@ -3358,13 +3360,13 @@
     card.querySelector(".record-amount").textContent = inr(record.amount);
 
     const status = card.querySelector(".record-status");
-    if (pauseInfo.isPaused) {
-      status.textContent = "⏸ Paused";
-      status.className = "record-status rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap bg-amber-500/20 text-amber-300 border border-amber-500/40";
+    if (isActive && pauseInfo.isPaused) {
+      status.textContent = "⏸ PAUSED";
+      status.className = "record-status rounded-full px-2 py-0.5 text-[11px] font-black whitespace-nowrap bg-rose-500/25 text-rose-300 border border-rose-500/60 shadow-sm";
     } else {
       status.textContent = record.status || "Completed";
       status.className =
-        "record-status rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap " +
+        "record-status rounded-full px-2.5 py-0.5 text-[11px] font-bold whitespace-nowrap " +
         (record.status === "Active" ? "status-active" : record.status === "Booked" ? "status-booked" : record.status === "Cancelled" ? "status-cancelled" : "status-completed");
     }
 
@@ -3463,16 +3465,16 @@
       if (pauseBtn) {
         if (isActive) {
           pauseBtn.classList.remove("hidden");
-          const pauseText = pauseBtn.querySelector(".pause-btn-text");
           if (pauseInfo.isPaused) {
-            pauseBtn.className = "toggle-pause-btn rounded-lg border border-emerald-500/50 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 px-2.5 py-1.5 text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-sm";
-            if (pauseText) pauseText.textContent = "Resume";
+            pauseBtn.className = "toggle-pause-btn rounded-lg border border-emerald-500/60 bg-emerald-500/25 text-emerald-300 hover:bg-emerald-500/40 px-2 py-1 text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-sm shrink-0";
+            pauseBtn.innerHTML = '<i data-lucide="play" width="13" height="13"></i> <span class="pause-btn-text">Resume</span>';
             pauseBtn.title = `Resume game time for ${record.customer_name || "session"}`;
           } else {
-            pauseBtn.className = "toggle-pause-btn rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 px-2.5 py-1.5 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer";
-            if (pauseText) pauseText.textContent = "Pause";
+            pauseBtn.className = "toggle-pause-btn rounded-lg border border-rose-500/50 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25 px-2 py-1 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer shrink-0";
+            pauseBtn.innerHTML = '<i data-lucide="pause" width="13" height="13"></i> <span class="pause-btn-text">Pause</span>';
             pauseBtn.title = `Pause game time (power cut, error, or stopped playing)`;
           }
+          if (window.lucide) window.lucide.createIcons({ root: pauseBtn });
         } else {
           pauseBtn.classList.add("hidden");
         }
@@ -3654,7 +3656,8 @@
         if (recordsFilterPay !== "all") {
           const bd = getRecordPaymentBreakdown(r);
           if (recordsFilterPay === "unpaid") {
-            // Show records that have an outstanding balance
+            // Show completed records that have an outstanding balance
+            if (r.status !== "Completed") return false;
             if (r.paid && !bd.isPartial && bd.dueAmount <= 0) return false;
             if (!bd.isPartial && !bd.isUnpaid && bd.dueAmount <= 0) return false;
           } else if (recordsFilterPay === "partial") {
