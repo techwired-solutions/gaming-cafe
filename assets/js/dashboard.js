@@ -3126,13 +3126,196 @@
   }
 
 
+  // ---------- Session Pause & Resume System ----------
+  let pauseTarget = null;
+
+  function isSessionPaused(record) {
+    if (!record) return false;
+    if (record.is_paused === true || record.is_paused === "true") return true;
+    if (record.notes && /\[Session:\s*Paused/i.test(record.notes)) return true;
+    return false;
+  }
+
+  function getSessionPauseInfo(record) {
+    if (!record) return { isPaused: false };
+    const isPaused = isSessionPaused(record);
+    if (!isPaused) return { isPaused: false };
+
+    let pausedAt = record.paused_at ? new Date(record.paused_at) : null;
+    let remainingMs = Number(record.paused_remaining_ms);
+    if (isNaN(remainingMs)) remainingMs = null;
+    let reason = record.pause_reason || "";
+
+    if (record.notes) {
+      const match = record.notes.match(/\[Session:\s*Paused\s*(?:\|\s*At:\s*([^\]|]+))?(?:\|\s*RemainingMs:\s*(\d+))?(?:\|\s*Reason:\s*([^\]]+))?\]/i);
+      if (match) {
+        if (!pausedAt && match[1]) pausedAt = new Date(match[1].trim());
+        if (remainingMs == null && match[2]) remainingMs = Number(match[2].trim());
+        if (!reason && match[3]) reason = match[3].trim();
+      }
+    }
+
+    if (!pausedAt || isNaN(pausedAt.getTime())) pausedAt = new Date();
+    if (remainingMs == null && record.end_time) {
+      remainingMs = Math.max(0, new Date(record.end_time) - pausedAt);
+    }
+
+    return {
+      isPaused: true,
+      pausedAt,
+      remainingMs: Math.max(0, remainingMs || 0),
+      reason: reason || "Game time paused"
+    };
+  }
+
+  async function pauseSession(record, reason = "Game time paused") {
+    if (!record || record.status !== "Active") return;
+    const now = new Date();
+    const remainingMs = Math.max(0, (record.end_time ? new Date(record.end_time) : now) - now);
+    const remainingMins = Math.round(remainingMs / 60000);
+
+    let cleanNotes = (record.notes || "").replace(/\[Session:\s*(?:Paused|Resumed)[^\]]*\]/gi, "").trim();
+    const pauseTag = `[Session: Paused | At: ${now.toISOString()} | RemainingMs: ${remainingMs} | Reason: ${reason}]`;
+    const finalNotes = [cleanNotes, pauseTag].filter(Boolean).join(" ");
+
+    const updatePayload = {
+      is_paused: true,
+      paused_at: now.toISOString(),
+      notes: finalNotes
+    };
+
+    record.is_paused = true;
+    record.paused_at = now.toISOString();
+    record.paused_remaining_ms = remainingMs;
+    record.pause_reason = reason;
+    record.notes = finalNotes;
+
+    renderAllLists();
+    closePauseModal();
+    showToast(`⏸ Paused session for ${record.customer_name || "Customer"} (${remainingMins}m remaining frozen).`);
+
+    if (sdkReady && window.sb) {
+      let { error } = await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
+      if (error && (error.message.includes("is_paused") || error.message.includes("paused_at"))) {
+        delete updatePayload.is_paused;
+        delete updatePayload.paused_at;
+        await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
+      }
+    }
+  }
+
+  async function resumeSession(record) {
+    if (!record || record.status !== "Active") return;
+    const pauseInfo = getSessionPauseInfo(record);
+    if (!pauseInfo.isPaused) return;
+
+    const now = new Date();
+    const pausedDurationMs = Math.max(0, now - pauseInfo.pausedAt);
+    const pausedDurationMins = Math.round(pausedDurationMs / 60000);
+
+    // Push end_time forward by exactly the remaining game time preserved at pause
+    const newEndTime = new Date(now.getTime() + pauseInfo.remainingMs);
+
+    let cleanNotes = (record.notes || "").replace(/\[Session:\s*(?:Paused|Resumed)[^\]]*\]/gi, "").trim();
+    const resumeTag = `[Session: Resumed | PausedDuration: ${pausedDurationMins}m | Reason: ${pauseInfo.reason}]`;
+    const finalNotes = [cleanNotes, resumeTag].filter(Boolean).join(" ");
+
+    const updatePayload = {
+      is_paused: false,
+      paused_at: null,
+      end_time: newEndTime.toISOString(),
+      notified_5min: false,
+      notes: finalNotes
+    };
+
+    record.is_paused = false;
+    record.paused_at = null;
+    record.paused_remaining_ms = null;
+    record.end_time = newEndTime.toISOString();
+    record.notified_5min = false;
+    record.notes = finalNotes;
+    overdueToasted.delete(record.id);
+
+    renderAllLists();
+    const remainingMins = Math.round(pauseInfo.remainingMs / 60000);
+    showToast(`▶ Resumed session for ${record.customer_name || "Customer"}! ${remainingMins}m remaining.`);
+
+    if (sdkReady && window.sb) {
+      let { error } = await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
+      if (error && (error.message.includes("is_paused") || error.message.includes("paused_at"))) {
+        delete updatePayload.is_paused;
+        delete updatePayload.paused_at;
+        await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
+      }
+    }
+  }
+
+  function openPauseModal(record) {
+    pauseTarget = record;
+    const modal = document.getElementById("session-pause-modal");
+    if (!modal) return;
+
+    const subEl = document.getElementById("pause-modal-subtitle");
+    if (subEl) subEl.textContent = `${record.station_name || "Station"} · ${record.customer_name || "Customer"}`;
+
+    const remEl = document.getElementById("pause-modal-remaining");
+    const diffMs = Math.max(0, (record.end_time ? new Date(record.end_time) : new Date()) - new Date());
+    const remMins = Math.round(diffMs / 60000);
+    if (remEl) remEl.textContent = `${remMins} min remaining`;
+
+    const input = document.getElementById("pause-reason-input");
+    if (input) input.value = "";
+
+    modal.classList.add("show");
+  }
+
+  function closePauseModal() {
+    const modal = document.getElementById("session-pause-modal");
+    if (modal) modal.classList.remove("show");
+    pauseTarget = null;
+  }
+
+  function initPauseModal() {
+    const modal = document.getElementById("session-pause-modal");
+    if (!modal) return;
+
+    const closeBtn = document.getElementById("pause-modal-close");
+    const cancelBtn = document.getElementById("pause-modal-cancel");
+    const confirmBtn = document.getElementById("pause-modal-confirm");
+    const reasonInput = document.getElementById("pause-reason-input");
+
+    if (closeBtn) closeBtn.addEventListener("click", closePauseModal);
+    if (cancelBtn) cancelBtn.addEventListener("click", closePauseModal);
+    modal.addEventListener("click", (e) => { if (e.target === modal) closePauseModal(); });
+
+    modal.querySelectorAll(".pause-preset-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const reason = btn.dataset.reason || "Paused";
+        if (reasonInput) reasonInput.value = reason;
+        if (pauseTarget) {
+          pauseSession(pauseTarget, reason);
+        }
+      });
+    });
+
+    if (confirmBtn) {
+      confirmBtn.addEventListener("click", () => {
+        if (!pauseTarget) return;
+        const reason = (reasonInput && reasonInput.value.trim()) || "Game time paused";
+        pauseSession(pauseTarget, reason);
+      });
+    }
+  }
+
   // Grace period after end_time before overtime starts accruing. Once past
   // it, the charge covers every minute since end_time (not just the
   // minutes past the grace window) — e.g. 8 minutes overdue with a 5-minute
   // grace period bills all 8 minutes, not just 3.
   function computeOvertimeCharge(record) {
     if (!record || record.status !== "Active" || !record.end_time) return { minutes: 0, amount: 0 };
-    const overdueMinutes = Math.floor((new Date() - new Date(record.end_time)) / 60000);
+    const pauseInfo = getSessionPauseInfo(record);
+    const effectiveNow = pauseInfo.isPaused ? pauseInfo.pausedAt : new Date();
+    const overdueMinutes = Math.floor((effectiveNow - new Date(record.end_time)) / 60000);
     if (overdueMinutes <= OVERTIME_GRACE_MINUTES) return { minutes: 0, amount: 0 };
     const perMinuteRate = (Number(record.rate) || 0) / 60;
     return { minutes: overdueMinutes, amount: Math.round(overdueMinutes * perMinuteRate) };
@@ -3140,6 +3323,15 @@
 
   function timeRemainingText(record) {
     if (!record.end_time) return "";
+    const pauseInfo = getSessionPauseInfo(record);
+    if (pauseInfo.isPaused) {
+      const remMins = Math.round(pauseInfo.remainingMs / 60000);
+      const h = Math.floor(remMins / 60), m = remMins % 60;
+      const remStr = remMins > 0 ? `${h ? h + "h " : ""}${m}m left` : "0m left";
+      const timeStr = fmtTime(pauseInfo.pausedAt);
+      const reasonStr = pauseInfo.reason ? ` · ${pauseInfo.reason}` : "";
+      return `⏸ PAUSED (${remStr} frozen at ${timeStr}${reasonStr})`;
+    }
     const diffMs = new Date(record.end_time) - new Date();
     const mins = Math.round(Math.abs(diffMs) / 60000);
     if (diffMs <= 0) {
@@ -3152,6 +3344,9 @@
 
   function updateCard(card, record) {
     card.dataset.recordId = record.id;
+    const pauseInfo = getSessionPauseInfo(record);
+    card.classList.toggle("is-paused", pauseInfo.isPaused);
+
     const custEl = card.querySelector(".record-customer");
     if (custEl) {
       custEl.textContent = record.customer_name || "—";
@@ -3163,10 +3358,15 @@
     card.querySelector(".record-amount").textContent = inr(record.amount);
 
     const status = card.querySelector(".record-status");
-    status.textContent = record.status || "Completed";
-    status.className =
-      "record-status rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap " +
-      (record.status === "Active" ? "status-active" : record.status === "Booked" ? "status-booked" : record.status === "Cancelled" ? "status-cancelled" : "status-completed");
+    if (pauseInfo.isPaused) {
+      status.textContent = "⏸ Paused";
+      status.className = "record-status rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap bg-amber-500/20 text-amber-300 border border-amber-500/40";
+    } else {
+      status.textContent = record.status || "Completed";
+      status.className =
+        "record-status rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap " +
+        (record.status === "Active" ? "status-active" : record.status === "Booked" ? "status-booked" : record.status === "Cancelled" ? "status-cancelled" : "status-completed");
+    }
 
     const gameEl = card.querySelector(".record-game");
     if (record.game) { gameEl.textContent = "🎮 " + record.game; gameEl.classList.remove("hidden"); }
@@ -3229,17 +3429,22 @@
     const actions = card.querySelector(".record-actions");
     const extendGroup = card.querySelector(".extend-time-group");
     const checkoutBtn = card.querySelector(".open-checkout");
+    const pauseBtn = card.querySelector(".toggle-pause-btn");
     const addFoodBtn = card.querySelector(".open-add-food");
     const editBtn = card.querySelector(".open-edit");
     card.classList.remove("overdue", "ending-soon");
 
     if (record.status === "Active" && record.end_time) {
-      const diffMs = new Date(record.end_time) - new Date();
       countdown.textContent = timeRemainingText(record);
       countdown.classList.remove("hidden");
-      countdown.className = "record-countdown mono mt-2 text-xs " + (diffMs <= 0 ? "text-[#ff6875]" : diffMs <= ALERT_MS ? "text-amber-300" : "text-slate-400");
-      if (diffMs <= 0) card.classList.add("overdue");
-      else if (diffMs <= ALERT_MS) card.classList.add("ending-soon");
+      if (pauseInfo.isPaused) {
+        countdown.className = "record-countdown mono mt-2 text-xs text-amber-300 font-semibold";
+      } else {
+        const diffMs = new Date(record.end_time) - new Date();
+        countdown.className = "record-countdown mono mt-2 text-xs " + (diffMs <= 0 ? "text-[#ff6875]" : diffMs <= ALERT_MS ? "text-amber-300" : "text-slate-400");
+        if (diffMs <= 0) card.classList.add("overdue");
+        else if (diffMs <= ALERT_MS) card.classList.add("ending-soon");
+      }
     } else {
       countdown.classList.add("hidden");
     }
@@ -3253,7 +3458,25 @@
       actions.classList.remove("hidden");
       actions.classList.add("flex");
       const isActive = record.status === "Active";
-      extendGroup.classList.toggle("hidden", !isActive);
+      extendGroup.classList.toggle("hidden", !isActive || pauseInfo.isPaused);
+
+      if (pauseBtn) {
+        if (isActive) {
+          pauseBtn.classList.remove("hidden");
+          const pauseText = pauseBtn.querySelector(".pause-btn-text");
+          if (pauseInfo.isPaused) {
+            pauseBtn.className = "toggle-pause-btn rounded-lg border border-emerald-500/50 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 px-2.5 py-1.5 text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-sm";
+            if (pauseText) pauseText.textContent = "Resume";
+            pauseBtn.title = `Resume game time for ${record.customer_name || "session"}`;
+          } else {
+            pauseBtn.className = "toggle-pause-btn rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 px-2.5 py-1.5 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer";
+            if (pauseText) pauseText.textContent = "Pause";
+            pauseBtn.title = `Pause game time (power cut, error, or stopped playing)`;
+          }
+        } else {
+          pauseBtn.classList.add("hidden");
+        }
+      }
 
       if (isActive) {
         checkoutBtn.textContent = "Checkout";
@@ -3308,6 +3531,20 @@
       const { error } = await window.sb.from("sessions").delete().eq("id", item.id);
       if (error) { button.disabled = false; showToast("Could not remove this record."); }
     });
+
+    const pauseBtn = card.querySelector(".toggle-pause-btn");
+    if (pauseBtn) {
+      pauseBtn.addEventListener("click", () => {
+        const item = records.find((row) => String(row.id) === String(card.dataset.recordId)) || record;
+        if (!item) return;
+        const pauseInfo = getSessionPauseInfo(item);
+        if (pauseInfo.isPaused) {
+          resumeSession(item);
+        } else {
+          openPauseModal(item);
+        }
+      });
+    }
 
     card.querySelector(".extend-apply").addEventListener("click", async () => {
       const item = records.find((row) => row.id === card.dataset.recordId);
@@ -4233,6 +4470,50 @@
     document.getElementById("checkout-station").textContent = `${record.station_name || ""} · ${record.duration_minutes || 0} min`;
     if (window._resetCheckoutMethod) window._resetCheckoutMethod(record);
     setCheckoutDiscountMode("amount");
+
+    // Paused Session Notice & Bill Actual Played Time Option
+    const pauseBanner = document.getElementById("checkout-paused-banner");
+    const pauseInfo = getSessionPauseInfo(record);
+    if (pauseBanner) {
+      if (pauseInfo.isPaused) {
+        pauseBanner.classList.remove("hidden");
+        const pauseTimeEl = document.getElementById("checkout-paused-time");
+        const pauseReasonEl = document.getElementById("checkout-paused-reason");
+        const pausePlayedText = document.getElementById("checkout-paused-played-text");
+        const billActualBtn = document.getElementById("btn-bill-actual-played");
+        const costSpan = document.getElementById("checkout-paused-actual-cost");
+
+        const start = record.start_time ? new Date(record.start_time) : new Date();
+        const playedMs = Math.max(0, pauseInfo.pausedAt - start);
+        const playedMinutes = Math.max(1, Math.round(playedMs / 60000));
+        const actualTimeCost = Math.round((playedMinutes / 60) * (Number(record.rate) || 0));
+
+        if (pauseTimeEl) pauseTimeEl.textContent = fmtTime(pauseInfo.pausedAt);
+        if (pauseReasonEl) pauseReasonEl.textContent = `Reason: ${pauseInfo.reason || "Paused"}`;
+        if (pausePlayedText) pausePlayedText.textContent = `${playedMinutes}m played (booked: ${record.duration_minutes || 0}m)`;
+        if (costSpan) costSpan.textContent = inr(actualTimeCost);
+
+        if (billActualBtn) {
+          billActualBtn.disabled = false;
+          billActualBtn.className = "shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-400 text-slate-950 hover:bg-amber-300 transition cursor-pointer shadow";
+          billActualBtn.innerHTML = `Bill Actual (${inr(actualTimeCost)})`;
+          billActualBtn.onclick = () => {
+            record.duration_minutes = playedMinutes;
+            record.end_time = pauseInfo.pausedAt.toISOString();
+            record.amount = Math.round(actualTimeCost + (Number(record.food_total) || 0));
+            document.getElementById("checkout-station").textContent = `${record.station_name || ""} · ${playedMinutes} min (actual played)`;
+            renderCheckoutBreakdown(record);
+            billActualBtn.innerHTML = `✓ Applied ${playedMinutes}m`;
+            billActualBtn.disabled = true;
+            billActualBtn.className = "shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 text-white cursor-default shadow";
+            showToast(`Adjusted session bill to actual played time: ${playedMinutes} min.`);
+          };
+        }
+      } else {
+        pauseBanner.classList.add("hidden");
+      }
+    }
+
     renderCheckoutBreakdown(record);
 
     // LinkyPot Loyalty & Reward Check
@@ -4656,6 +4937,12 @@
         finalNotes = [finalNotes, "[Overtime Waived]"].filter(Boolean).join(" ");
       }
 
+      if (isSessionPaused(record)) {
+        finalNotes = finalNotes.replace(/\[Session:\s*Paused[^\]]*\]/gi, "").trim();
+        const pauseInfo = getSessionPauseInfo(record);
+        finalNotes = [finalNotes, `[Session: Ended from Paused (${pauseInfo.reason || "Paused"})]`].filter(Boolean).join(" ");
+      }
+
       // When overtime is waived, staff forgot to stop the session and ends it later/next day.
       // Set end_time to the scheduled finish time and keep paid_at on the session date
       let sessionEndTime = record.end_time;
@@ -4689,6 +4976,8 @@
         discount_amount: discount.amount,
         discount_type: discount.amount > 0 ? discount.mode : null,
         discount_value: discount.amount > 0 ? discount.value : 0,
+        is_paused: false,
+        paused_at: null,
         notes: finalNotes
       };
 
@@ -4698,11 +4987,13 @@
         .eq("id", recordId);
 
       // Resilient fallback if cash_amount / online_amount / paid_amount / due_amount not present in PostgREST schema cache
-      if (error && (error.message.includes("cash_amount") || error.message.includes("online_amount") || error.message.includes("paid_amount") || error.message.includes("due_amount") || error.code === "PGRST204")) {
+      if (error && (error.message.includes("cash_amount") || error.message.includes("online_amount") || error.message.includes("paid_amount") || error.message.includes("due_amount") || error.message.includes("is_paused") || error.message.includes("paused_at") || error.code === "PGRST204")) {
         delete updatePayload.cash_amount;
         delete updatePayload.online_amount;
         delete updatePayload.paid_amount;
         delete updatePayload.due_amount;
+        delete updatePayload.is_paused;
+        delete updatePayload.paused_at;
         const retry = await window.sb.from("sessions").update(updatePayload).eq("id", recordId);
         error = retry.error;
       }
@@ -4716,6 +5007,8 @@
         const updatedRecord = {
           ...record,
           ...updatePayload,
+          is_paused: false,
+          paused_at: null,
           cash_amount: cashAmount,
           online_amount: onlineAmount,
           paid_amount: paidAmount,
@@ -5235,6 +5528,45 @@
       editTarget = record;
       document.getElementById("edit-heading").textContent = `${record.customer_name || "—"} · ${record.status || "Session"}`;
       document.getElementById("edit-station").value = record.station_name || "";
+
+      // Active Session Pause / Resume Controls inside Edit Modal
+      const editPauseBar = document.getElementById("edit-pause-bar");
+      if (editPauseBar) {
+        if (record.status === "Active") {
+          editPauseBar.classList.remove("hidden");
+          const pauseInfo = getSessionPauseInfo(record);
+          const pauseTitle = document.getElementById("edit-pause-title");
+          const pauseSub = document.getElementById("edit-pause-sub");
+          const pauseBtn = document.getElementById("edit-toggle-pause-btn");
+
+          if (pauseInfo.isPaused) {
+            if (pauseTitle) pauseTitle.textContent = "Session is currently PAUSED";
+            if (pauseSub) pauseSub.textContent = `Paused at ${fmtTime(pauseInfo.pausedAt)} (${pauseInfo.reason}) · ${Math.round(pauseInfo.remainingMs / 60000)}m remaining frozen`;
+            if (pauseBtn) {
+              pauseBtn.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer border border-emerald-500/50 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 flex items-center gap-1 shadow-sm";
+              pauseBtn.innerHTML = '<i data-lucide="play" width="13" height="13"></i> Resume Game Time';
+              pauseBtn.onclick = async () => {
+                await resumeSession(record);
+                openEditModal(record);
+              };
+            }
+          } else {
+            if (pauseTitle) pauseTitle.textContent = "Session Game Time is Running";
+            if (pauseSub) pauseSub.textContent = "Power cut, error, or customer stopped playing? Freeze game time.";
+            if (pauseBtn) {
+              pauseBtn.className = "px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 flex items-center gap-1";
+              pauseBtn.innerHTML = '<i data-lucide="pause" width="13" height="13"></i> Pause Game Time';
+              pauseBtn.onclick = () => {
+                closeEditModal();
+                openPauseModal(record);
+              };
+            }
+          }
+          if (window.lucide) window.lucide.createIcons({ root: editPauseBar });
+        } else {
+          editPauseBar.classList.add("hidden");
+        }
+      }
 
       document.getElementById("edit-customer-name").value = record.customer_name || "";
       document.getElementById("edit-customer-phone").value = record.customer_phone || "";
@@ -6950,7 +7282,10 @@
 
   function computeStationStatus(station) {
     const activeSession = records.find((r) => r.status === "Active" && sessionUsesStation(r, station.name));
-    if (activeSession) return { state: "occupied", session: activeSession };
+    if (activeSession) {
+      const isPaused = isSessionPaused(activeSession);
+      return { state: isPaused ? "paused" : "occupied", session: activeSession };
+    }
     const nextBooking = records
       .filter((r) => r.status === "Booked" && sessionUsesStation(r, station.name) && r.start_time)
       .sort((a, b) => new Date(a.start_time) - new Date(b.start_time))[0];
@@ -6967,22 +7302,35 @@
       .map((station) => {
         const status = computeStationStatus(station);
         let bodyHtml;
-        if (status.state === "occupied") {
+        if (status.state === "occupied" || status.state === "paused") {
           const r = status.session;
-          const overdue = r.end_time && new Date(r.end_time) < new Date();
+          const isPaused = status.state === "paused";
+          const overdue = !isPaused && r.end_time && new Date(r.end_time) < new Date();
           bodyHtml = `
             <p class="text-xs text-slate-300 mt-2 truncate">${r.customer_name || "—"}${r.game ? " · " + r.game : ""}</p>
-            <p class="mono text-xs mt-1 ${overdue ? "text-[#ff6875]" : "text-amber-300"}">${timeRemainingText(r)}</p>`;
+            <p class="mono text-xs mt-1 ${isPaused ? "text-amber-300 font-semibold" : overdue ? "text-[#ff6875]" : "text-amber-300"}">${timeRemainingText(r)}</p>`;
         } else if (status.nextBooking) {
           bodyHtml = `<p class="text-xs text-slate-400 mt-2">Available now</p><p class="text-xs text-slate-500 mt-1">Next: ${status.nextBooking.customer_name} at ${fmtDateTime(status.nextBooking.start_time)}</p>`;
         } else {
           bodyHtml = `<p class="text-xs text-slate-400 mt-2">Available now</p>`;
         }
+        const cardStyle = status.state === "paused"
+          ? "border-amber-500/40 bg-[#251f15]"
+          : status.state === "occupied"
+          ? "border-[#ff6875]/40 bg-[#241419]"
+          : "border-[#d8ff45]/30 bg-[#15201a]";
+        const badgeStyle = status.state === "paused"
+          ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+          : status.state === "occupied"
+          ? "status-cancelled"
+          : "status-active";
+        const badgeText = status.state === "paused" ? "⏸ Paused" : status.state === "occupied" ? "Occupied" : "Available";
+
         return `
-        <article class="rounded-xl border p-4 ${status.state === "occupied" ? "border-[#ff6875]/40 bg-[#241419]" : "border-[#d8ff45]/30 bg-[#15201a]"}">
+        <article class="rounded-xl border p-4 ${cardStyle}">
           <div class="flex items-center justify-between gap-2">
             <p class="font-semibold truncate">${station.name}</p>
-            <span class="rounded-full px-2 py-0.5 text-xs font-bold whitespace-nowrap ${status.state === "occupied" ? "status-cancelled" : "status-active"}">${status.state === "occupied" ? "Occupied" : "Available"}</span>
+            <span class="rounded-full px-2 py-0.5 text-xs font-bold whitespace-nowrap ${badgeStyle}">${badgeText}</span>
           </div>
           <p class="text-xs text-slate-500 mono mt-0.5">${station.type || ""} · ${inr(station.rate)}/hr</p>
           ${bodyHtml}
@@ -8819,7 +9167,7 @@
     renderWaitingList();
 
     records
-      .filter((r) => r.status === "Active" && r.end_time)
+      .filter((r) => r.status === "Active" && r.end_time && !isSessionPaused(r))
       .forEach(async (record) => {
         const diffMs = new Date(record.end_time) - new Date();
         if (diffMs > 0 && diffMs <= ALERT_MS && !record.notified_5min) {
@@ -8949,6 +9297,7 @@
     applyRoleVisibility();
     initSidebar();
     initCheckoutModal();
+    initPauseModal();
     initUnpaidBillsModal();
     initOverviewKpiModal();
     initCustomerCollectModal();
