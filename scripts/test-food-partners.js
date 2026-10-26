@@ -18,6 +18,13 @@ assert.equal(day('2026-10-25T19:00:00Z'),'2026-10-26');assert.deepEqual(allocate
 const three=[0,1,2].map(i=>({...base,id:'s'+i,amount:1,food_total:1,paid_amount:1,food_items:[{supplier:'bros_burger',name:'Tea',price:1,qty:1}]}));
 result=calculate(three,[{...bill,amount:1}],[],[],bd);assert.equal([...result.byRecord.values()].reduce((sum,r)=>sum+Math.round(r.brosPayable*100),0),100);
 result=calculate([{...base,status:'Cancelled'}],[bill],[],[],bd);assert.equal(result.days[0].collected,0);assert.equal(result.days[0].orphanCost,50);
+const priced={...base,food_items:[{id:'tea',name:'Milk Tea',supplier:'bros_burger',qty:2,price:35,menu_price:40}],amount:70,food_total:70,paid_amount:70};
+const menu=[{id:'tea',name:'Milk Tea',price:50,supplier:'bros_burger'}];
+let line=calculate([priced],[],[],menu,bd).days[0].lines[0];
+assert.equal(line.menuRate,40);assert.equal(line.customerRate,35);assert.equal(line.rateChange,-5);assert.equal(line.menuValue,80);assert.equal(line.amount,70);assert.equal(line.menuRateSource,'saved');
+line=calculate([{...priced,food_items:[{...priced.food_items[0],menu_price:null}]}],[],[],menu,bd).days[0].lines[0];assert.equal(line.menuRate,50);assert.equal(line.menuRateSource,'current');
+line=calculate([{...priced,food_items:[{name:'Special drink',supplier:'bardali',qty:1,price:25}]}],[],[],menu,bd).days[0].lines[0];assert.equal(line.menuRate,null);assert.equal(line.menuRateSource,'unknown');assert.equal(line.customerRate,25);
+line=calculate([{...priced,food_items:[{name:'Milk Tea',supplier:'bardali',qty:1,price:25}]}],[],[],menu,bd).days[0].lines[0];assert.equal(line.menuRate,null);
 const html=fs.readFileSync('dashboard.html','utf8'),ui=fs.readFileSync('assets/js/food-partners.js','utf8');
 for(const match of ui.matchAll(/\$\('(fp-[a-z-]+)'\)/g))assert.ok(html.includes(`id="${match[1]}"`),match[1]);
 for(const id of [...html.matchAll(/id="(fp-[^"]+)"/g)].map(m=>m[1]))assert.equal(html.split(`id="${id}"`).length-1,1,id);

@@ -7,7 +7,7 @@
     "build": "node scripts/generate-config.js && node scripts/sync-console-pages.js",
     "sync-console-pages": "node scripts/sync-console-pages.js",
     "start": "npx serve .",
-    "test": "node scripts/test-session-pauses.js && node scripts/test-inventory.js && node scripts/test-food-only.js && node scripts/test-food-partners.js",
+    "test": "node scripts/test-session-pauses.js && node scripts/test-inventory.js && node scripts/test-food-only.js && node scripts/test-food-partners.js && node scripts/test-record-delete.js",
     "test:inventory:db": "node scripts/test-inventory-db.js",
     "test:food-partners:db": "node scripts/test-food-partners-db.js"
   }

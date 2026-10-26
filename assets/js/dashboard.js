@@ -413,6 +413,7 @@
     if (refreshBtn) refreshBtn.addEventListener("click", handleSystemRefresh);
 
     // Overview quick-action buttons
+    document.getElementById("overview-food-sources-btn")?.addEventListener("click", () => switchPage("page-food-partners"));
     const ovNs = document.getElementById("overview-new-session-btn");
     if (ovNs) ovNs.addEventListener("click", () => switchPage("page-new-session"));
     const ovLog = document.getElementById("overview-lounge-log-btn");
@@ -1829,7 +1830,7 @@
     });
   }
 
-  function addFrRow(containerId, selectedId = "", qty = 1, customUnitPrice = null, preselectedSupplier = "all", customItemName = "") {
+  function addFrRow(containerId, selectedId = "", qty = 1, customUnitPrice = null, preselectedSupplier = "all", customItemName = "", menuPriceSnapshot = undefined) {
     let initialSupplier = preselectedSupplier || "all";
     let isCustom = selectedId === "_custom" || (Boolean(selectedId) && !String(selectedId).startsWith("custom_") === false) ||
                    (Boolean(selectedId) && !(menuItems || []).some((m) => String(m.id) === String(selectedId)));
@@ -1860,6 +1861,8 @@
 
     const row = document.createElement("div");
     row.className = "fr-row grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-2 items-center";
+    if (menuPriceSnapshot === null && selectedId) { row.dataset.menuPriceUnknown = "true"; row.dataset.menuPriceItemId = selectedId; }
+    if (menuPriceSnapshot != null && Number.isFinite(Number(menuPriceSnapshot))) { row.dataset.menuPrice = String(menuPriceSnapshot); row.dataset.menuPriceItemId = selectedId; }
     if (isCustom) row.dataset.isCustom = "true";
     if (selectedId && String(selectedId).startsWith("custom_")) row.dataset.customId = String(selectedId);
 
@@ -2072,6 +2075,14 @@
       }
     }
 
+    const matchedMenuItem = (menuItems || []).find(item => item.id === itemId);
+    if (matchedMenuItem && (row.dataset.menuPriceItemId !== itemId || (row.dataset.menuPrice == null && row.dataset.menuPriceUnknown !== "true"))) {
+      row.dataset.menuPrice = String(Number(matchedMenuItem.price) || 0);
+      row.dataset.menuPriceItemId = itemId;
+      delete row.dataset.menuPriceUnknown;
+    } else if (!matchedMenuItem && row.dataset.menuPriceItemId !== itemId) {
+      delete row.dataset.menuPrice; delete row.dataset.menuPriceItemId; delete row.dataset.menuPriceUnknown;
+    }
     const price = Math.round(unitPrice * quantity);
     row.dataset.price = price;
     row.dataset.qty = quantity;
@@ -2098,13 +2109,14 @@
           name: row.dataset.itemName || "Item",
           price: Number(row.dataset.unitPrice) || 0,
           qty: Number(row.dataset.qty) || 1,
-          supplier: supplier
+          supplier: supplier,
+          menu_price: row.dataset.menuPrice != null ? Number(row.dataset.menuPrice) : null
         };
       });
     // Merge rows that ended up pointing at the exact same menu item, supplier and unit price
     const merged = [];
     raw.forEach((item) => {
-      const existing = merged.find((m) => m.id === item.id && m.price === item.price && m.supplier === item.supplier && m.name === item.name);
+      const existing = merged.find((m) => m.id === item.id && m.price === item.price && m.menu_price === item.menu_price && m.supplier === item.supplier && m.name === item.name);
       if (existing) existing.qty += item.qty;
       else merged.push({ ...item });
     });
@@ -3935,6 +3947,69 @@
     card.querySelector(".record-created").textContent = record.created_at ? fmtDateTime(record.created_at) : "";
   }
 
+  let recordDeleteTarget = null;
+  let recordDeleteBusy = false;
+  let recordDeleteTrigger = null;
+  const deletedRecordIds = new Set();
+  function openRecordDeleteModal(record, trigger) {
+    if (recordDeleteBusy || currentStaff?.role !== "admin") return;
+    recordDeleteTarget = record.id; recordDeleteTrigger = trigger;
+    document.getElementById("record-delete-summary").textContent = [record.customer_name || "Walk-in", record.station_name || "Food order", inr(record.amount)].join(" · ");
+    document.getElementById("record-delete-message").textContent = "";
+    document.getElementById("record-delete-modal").classList.add("show");
+    document.getElementById("record-delete-cancel").focus();
+  }
+  function closeRecordDeleteModal() {
+    if (recordDeleteBusy) return;
+    document.getElementById("record-delete-modal").classList.remove("show");
+    recordDeleteTarget = null;
+    if (recordDeleteTrigger?.isConnected) recordDeleteTrigger.focus();
+  }
+  async function confirmRecordDelete() {
+    if (recordDeleteBusy || !recordDeleteTarget || currentStaff?.role !== "admin") return;
+    const id = recordDeleteTarget;
+    const button = document.getElementById("record-delete-confirm");
+    const message = document.getElementById("record-delete-message");
+    if (!sdkReady || !window.sb) { message.textContent = "Database is not connected. Please try again when connected."; return; }
+    recordDeleteBusy = true; button.disabled = true; button.textContent = "Deleting…";
+    document.getElementById("record-delete-cancel").disabled = true;
+    message.textContent = "";
+    try {
+      const {data,error} = await window.sb.from("sessions").delete().eq("id",id).select("id");
+      if (error) throw error;
+      if (!data?.some(row => String(row.id) === String(id))) {
+        const check = await window.sb.from("sessions").select("id").eq("id",id).maybeSingle();
+        if (check.error) throw check.error;
+        if (check.data) throw new Error("The record was not deleted. Check your permissions and try again.");
+      }
+      deletedRecordIds.add(String(id));
+      records = records.filter(row => String(row.id) !== String(id));
+      renderAllLists();
+      window.ChillPillInventory?.load();
+      recordDeleteBusy = false; closeRecordDeleteModal();
+      showToast("Record deleted successfully.");
+    } catch (error) {
+      message.textContent = "Could not delete record: " + error.message;
+    } finally {
+      recordDeleteBusy = false; button.disabled = false; button.textContent = "Delete record";
+      document.getElementById("record-delete-cancel").disabled = false;
+    }
+  }
+  function initRecordDeleteModal() {
+    const modal = document.getElementById("record-delete-modal");
+    document.getElementById("record-delete-cancel").addEventListener("click",closeRecordDeleteModal);
+    document.getElementById("record-delete-confirm").addEventListener("click",confirmRecordDelete);
+    modal.addEventListener("click",event => { if (event.target === modal) closeRecordDeleteModal(); });
+    modal.addEventListener("keydown",event => {
+      if (event.key === "Escape") { event.preventDefault(); closeRecordDeleteModal(); }
+      if (event.key === "Tab") {
+        const cancel = document.getElementById("record-delete-cancel"), confirm = document.getElementById("record-delete-confirm");
+        if (event.shiftKey && document.activeElement === cancel) { event.preventDefault(); confirm.focus(); }
+        else if (!event.shiftKey && document.activeElement === confirm) { event.preventDefault(); cancel.focus(); }
+      }
+    });
+  }
+
   function createCard(record, overview = false) {
     const fragment = document.getElementById("record-template").content.cloneNode(true);
     const card = fragment.querySelector("article");
@@ -3958,17 +4033,9 @@
       });
     }
 
-    const trigger = card.querySelector(".delete-trigger");
-    const confirmArea = card.querySelector(".delete-confirm");
-    trigger.addEventListener("click", () => { trigger.classList.add("hidden"); confirmArea.classList.replace("hidden", "flex"); });
-    card.querySelector(".delete-no").addEventListener("click", () => { trigger.classList.remove("hidden"); confirmArea.classList.replace("flex", "hidden"); });
-    card.querySelector(".delete-yes").addEventListener("click", async () => {
-      const item = records.find((row) => row.id === card.dataset.recordId);
-      if (!item || !sdkReady) return;
-      const button = card.querySelector(".delete-yes");
-      button.disabled = true;
-      const { error } = await window.sb.from("sessions").delete().eq("id", item.id);
-      if (error) { button.disabled = false; showToast("Could not remove this record."); }
+    card.querySelector(".delete-trigger").addEventListener("click", event => {
+      const item = records.find(row => String(row.id) === String(card.dataset.recordId));
+      if (item) openRecordDeleteModal(item, event.currentTarget);
     });
 
     const pauseBtn = card.querySelector(".toggle-pause-btn");
@@ -6088,7 +6155,7 @@
         if (typeof item === "string") {
           addFrRow("edit-food-rows", "_custom", 1, 0, "chillpill", item);
         } else {
-          addFrRow("edit-food-rows", item.id, item.qty || 1, item.price, item.supplier || "chillpill", item.name || "");
+          addFrRow("edit-food-rows", item.id, item.qty || 1, item.price, item.supplier || "chillpill", item.name || "", item.menu_price ?? null);
         }
       });
       if (!record.food_items || !record.food_items.filter((i) => i && i.id !== "_extra_ctrl").length) addFrRow("edit-food-rows");
@@ -7483,7 +7550,7 @@
 
     clearFrContainer("quick-food-rows");
     document.getElementById("quick-food-menu-empty").classList.toggle("hidden", menuItems.length > 0);
-    (record.food_items || []).forEach((item) => addFrRow("quick-food-rows", item.id, item.qty));
+    (record.food_items || []).forEach((item) => addFrRow("quick-food-rows", item.id, item.qty, item.price, item.supplier || "chillpill", item.name || "", item.menu_price ?? null));
     if (!record.food_items || !record.food_items.length) addFrRow("quick-food-rows");
 
     syncBrosInternalDiscountRows("quick-food-rows");
@@ -7647,7 +7714,7 @@
     document.getElementById("session-status").value = "Active";
     document.getElementById("notes").value = entry.notes || "";
     clearFrContainer("food-order-list");
-    (entry.food_items || []).forEach((item) => addFrRow("food-order-list", item.id, item.qty));
+    (entry.food_items || []).forEach((item) => addFrRow("food-order-list", item.id, item.qty, item.price, item.supplier || "chillpill", item.name || "", item.menu_price ?? null));
     if (!entry.food_items || !entry.food_items.length) addFrRow("food-order-list");
     calculateAmount();
     switchPage("page-new-session");
@@ -7673,7 +7740,7 @@
 
     clearFrContainer("waiting-edit-food-rows");
     document.getElementById("waiting-edit-menu-empty").classList.toggle("hidden", menuItems.length > 0);
-    (entry.food_items || []).forEach((item) => addFrRow("waiting-edit-food-rows", item.id, item.qty));
+    (entry.food_items || []).forEach((item) => addFrRow("waiting-edit-food-rows", item.id, item.qty, item.price, item.supplier || "chillpill", item.name || "", item.menu_price ?? null));
     if (!entry.food_items || !entry.food_items.length) addFrRow("waiting-edit-food-rows");
 
     recalcWaitingEditModal();
@@ -9268,7 +9335,10 @@
       const costRaw = tr.querySelector(".rev-fedit-cost")?.value;
       const partner_cost = (costRaw !== "" && costRaw != null && !isNaN(Number(costRaw))) ? Number(costRaw) : null;
       if (name) {
-        items.push({ name, supplier, qty, price, partner_cost });
+        const original = (revFoodEditActiveRecord?.food_items || []).find(item => item.name === name && (item.supplier || "chillpill") === supplier);
+        const menuItem = menuItems.find(item => item.name.toLowerCase() === name.toLowerCase() && (item.supplier || "chillpill") === supplier);
+        items.push({ ...original, id: original?.id || menuItem?.id || ("custom_" + Date.now() + "_" + items.length), name, supplier, qty, price, partner_cost,
+          menu_price: original ? original.menu_price ?? null : menuItem?.price ?? null });
       }
     });
     return items;
@@ -10027,7 +10097,7 @@
       if (error) { showMessage("Could not load records: "+error.message,true); return; }
       all.push(...(data||[])); if (!data || data.length<500) break;
     }
-    records=all; renderAllLists();
+    records=all.filter(row => !deletedRecordIds.has(String(row.id))); renderAllLists();
   }
 
   async function fetchMenu() {
@@ -10150,6 +10220,7 @@
     window.ChillPillInventory.init({ db: () => window.sb, staff: () => currentStaff, menu: () => menuItems, toast: showToast });
     initCheckoutModal();
     initPauseModal();
+    initRecordDeleteModal();
     initUnpaidBillsModal();
     initOverviewKpiModal();
     initCustomerCollectModal();

@@ -33,6 +33,7 @@
     #page-food-partners #partner-settings-form > div > div { background: var(--panel-soft) !important; }
     [data-theme="light"] #page-food-partners .text-amber-300 { color: #92400e !important; }
     [data-theme="light"] #page-food-partners .text-purple-300 { color: #6b21a8 !important; }
+    [data-theme="light"] #overview-food-sources-btn { background: var(--panel-soft) !important; color: var(--text-primary) !important; border-color: var(--line) !important; }
     /* ===== DARK THEME (default) ===== */
     :root, [data-theme="dark"] {
       color-scheme: dark;
@@ -1114,6 +1115,7 @@
               style="background:#d8ff45;color:#10141e;">
               <i data-lucide="plus-circle" width="17" height="17"></i> New Session
             </button>
+            <button id="overview-food-sources-btn" type="button" class="admin-only flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800/60 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:border-[#d8ff45] transition cursor-pointer"><i data-lucide="store" width="16" height="16"></i> Food Sources &amp; Partners</button>
             <button id="overview-lounge-log-btn" type="button"
               class="flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800/60 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:border-[#d8ff45] hover:text-[#d8ff45] transition cursor-pointer">
               <i data-lucide="scroll-text" width="16" height="16"></i> Lounge Log
@@ -2031,7 +2033,7 @@
  <div class="inv-surface p-4 mb-4"><h3 class="font-bold mb-2">Daily source bills &amp; balances</h3><div class="overflow-x-auto"><table class="inv-table w-full text-sm"><thead><tr><th>Day / source</th><th>Orders</th><th>Collected</th><th>Supplier bill</th><th>Cafe retained</th><th>Paid / due</th><th>Actions</th></tr></thead><tbody id="fp-days"></tbody></table></div><p id="fp-empty" class="text-sm inv-muted py-4" hidden>No food orders or bills in this period.</p></div>
  <form id="fp-bill-form" class="inv-surface p-4 mb-4" hidden><h3 class="font-bold mb-3" id="fp-bill-title">Record supplier bill</h3><div class="grid sm:grid-cols-3 gap-3"><label class="text-xs">Partner<select id="fp-bill-source" class="form-control mt-1" required></select></label><label class="text-xs">Order day<input id="fp-bill-date" type="date" class="form-control mt-1" required></label><label class="text-xs">Actual bill after discount (रु)<input id="fp-bill-amount" type="number" min="0" step="0.01" class="form-control mt-1" required></label><label class="text-xs">Bill reference<input id="fp-bill-reference" class="form-control mt-1" maxlength="120"></label><label class="text-xs sm:col-span-2">Notes<input id="fp-bill-notes" class="form-control mt-1" maxlength="500"></label></div><p class="text-xs inv-muted mt-2">Example: 2 milk teas collected at रु 40 each, supplier bill रु 50 → cafe retained रु 30. A रु 0 bill is allowed when the partner waives it.</p><p id="fp-bill-message" class="inv-error text-sm mt-2" role="status"></p><div class="flex gap-2 mt-3"><button class="inv-button inv-primary" id="fp-bill-save" type="submit">Save bill</button><button class="inv-button" type="button" data-fp-close="fp-bill-form">Cancel</button></div></form>
  <form id="fp-pay-form" class="inv-surface p-4 mb-4" hidden><h3 class="font-bold" id="fp-pay-title">Record partner payment</h3><p id="fp-pay-due" class="text-sm inv-muted mt-1 mb-3"></p><div class="grid sm:grid-cols-3 gap-3"><label class="text-xs sm:col-span-3">Payment record<select id="fp-pay-existing" class="form-control mt-1"><option value="">New payment — record cafe expense</option></select></label><label class="text-xs">Amount paid (रु)<input id="fp-pay-amount" type="number" min="0.01" step="0.01" class="form-control mt-1" required></label><label class="text-xs">Payment date<input id="fp-pay-date" type="date" class="form-control mt-1" required></label><label class="text-xs">Method<select id="fp-pay-method" class="form-control mt-1"><option>Cash</option><option>Online / QR</option></select></label><label class="text-xs sm:col-span-3">Reference / notes<input id="fp-pay-reference" class="form-control mt-1" maxlength="500"></label></div><p class="text-xs inv-muted mt-2">New payments also appear once in Expenses as Partner Payout. You can link a historical payout instead of recording it twice.</p><p id="fp-pay-message" class="inv-error text-sm mt-2" role="status"></p><div class="flex gap-2 mt-3"><button id="fp-pay-save" class="inv-button inv-primary" type="submit">Record payment</button><button class="inv-button" type="button" data-fp-close="fp-pay-form">Cancel</button></div></form>
- <div class="inv-surface p-4 mb-4"><h3 class="font-bold mb-2">Food items ordered</h3><p class="inv-muted text-xs mb-2">Includes unpaid orders so you can reconcile the partner's bill against everything supplied.</p><div class="overflow-x-auto"><table class="inv-table w-full text-xs"><thead><tr><th>Day / source</th><th>Customer</th><th>Food item</th><th>Quantity</th><th>Ordered value</th><th>Collected allocation</th></tr></thead><tbody id="fp-orders"></tbody></table></div></div>
+ <div class="inv-surface p-4 mb-4"><h3 class="font-bold mb-2">Food items ordered</h3><p class="inv-muted text-xs mb-2">Compare the menu rate with the rate charged to the customer. Includes unpaid orders. *Older orders without a saved menu rate use the current menu as a labelled reference; custom items may have no reference rate.</p><div class="overflow-x-auto"><table class="inv-table w-full text-xs"><thead><tr><th>Day / source</th><th>Customer</th><th>Food item</th><th>Quantity</th><th>Menu rate / unit</th><th>Customer rate / unit</th><th>Rate change / unit</th><th>Menu value</th><th>Charged total</th><th>Collected allocation</th></tr></thead><tbody id="fp-orders"></tbody></table></div></div>
  <div class="inv-surface p-4 mb-4"><h3 class="font-bold mb-2">Partner payment history</h3><div class="overflow-x-auto"><table class="inv-table w-full text-xs"><thead><tr><th>Bill day / source</th><th>Paid on</th><th>Amount</th><th>Method / reference</th><th>Recorded by</th><th>Status</th></tr></thead><tbody id="fp-payments"></tbody></table></div></div>
  <div class="inv-surface p-4 mb-4"><h3 class="font-bold mb-2">Historical payouts not linked to a daily bill</h3><p class="text-xs inv-muted mb-2">These existing records remain in Expenses. Use “Record payment” on the appropriate bill and select the old payout to link it without creating another expense.</p><div id="fp-legacy" class="text-sm"></div></div>
  <div class="panel rounded-2xl p-5 md:col-span-2">
@@ -4562,6 +4564,15 @@
     </div>
   </div>
 
+  <div id="record-delete-modal" class="modal-overlay inventory-page" role="dialog" aria-modal="true" aria-labelledby="record-delete-title" aria-describedby="record-delete-summary record-delete-warning">
+    <div class="panel inv-surface rounded-2xl p-5 w-full max-w-md">
+      <h3 id="record-delete-title" class="text-xl font-bold">Delete this record?</h3>
+      <p id="record-delete-summary" class="text-sm mt-3"></p>
+      <p id="record-delete-warning" class="text-xs inv-muted mt-3">This permanently removes the record and returns any food stock deducted for this order. Existing supplier bills stay on file and may need review.</p>
+      <p id="record-delete-message" class="text-sm inv-error mt-3" role="alert"></p>
+      <div class="flex justify-end gap-2 mt-5"><button id="record-delete-cancel" type="button" class="inv-button">Cancel</button><button id="record-delete-confirm" type="button" class="inv-button" style="background:#be123c;color:#fff;border-color:#be123c">Delete record</button></div>
+    </div>
+  </div>
   <template id="record-template">
     <article class="session-card rounded-xl border border-slate-700 bg-[#202838] p-3 sm:p-3.5 transition-all w-full max-w-full overflow-hidden">
       <!-- Top Row: Customer & Station on left, Bill & Status on right -->
@@ -4619,10 +4630,7 @@
           <button type="button" class="delete-trigger rounded-lg border border-slate-700 bg-slate-800/60 p-1 text-slate-400 hover:text-[#ff6875] hover:border-[#ff6875] transition cursor-pointer" title="Delete record">
             <i data-lucide="trash-2" width="13" height="13"></i>
           </button>
-          <div class="delete-confirm hidden items-center gap-1">
-            <button type="button" class="delete-yes rounded-lg bg-[#ff6875] px-2 py-1 text-xs font-bold text-[#10141e] cursor-pointer">Confirm</button>
-            <button type="button" class="delete-no rounded-lg border border-slate-600 px-2 py-1 text-xs text-slate-300 cursor-pointer">Cancel</button>
-          </div>
+
         </div>
       </div>
     </article>

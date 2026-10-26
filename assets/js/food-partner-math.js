@@ -31,8 +31,12 @@
         if (!item || item.id==='_extra_ctrl' || item.name==='Item') continue;
         const qty=Math.max(0,Number(item.qty)||0), amount=cents(Math.max(0,Number(item.price)||0)*qty);
         if (!qty) continue;
-        const match=menu.find(m=>m.id===item.id || (item.name && m.name.toLowerCase()===item.name.toLowerCase()));
-        lines.push({ source:item.supplier || item.source || match?.supplier || 'chillpill', name:item.name || 'Food item', qty, amount });
+        const explicitSource=item.supplier || item.source;
+        const match=menu.find(m=>m.id===item.id) || menu.find(m=>item.name && m.name.toLowerCase()===item.name.toLowerCase() && (!explicitSource || (m.supplier || 'chillpill')===explicitSource));
+        const savedRate=item.menu_price != null && item.menu_price !== '' && Number.isFinite(Number(item.menu_price)) ? Math.max(0,Number(item.menu_price)) : null;
+        const menuRate=savedRate ?? (match ? Math.max(0,Number(match.price)||0) : null);
+        const customerRate=Math.max(0,Number(item.price)||0);
+        lines.push({ menuRate, customerRate, menuRateSource:savedRate != null ? 'saved' : match ? 'current' : 'unknown', rateChange:menuRate == null ? null : customerRate-menuRate, menuValue:menuRate == null ? null : Math.round(menuRate*qty*100)/100, source:item.supplier || item.source || match?.supplier || 'chillpill', name:item.name || 'Food item', qty, amount });
       }
       if (!lines.length && Number(record.food_total)>0) lines.push({ source:'chillpill',name:'Food order (unitemized)',qty:1,amount:cents(record.food_total) });
       const billed=Math.max(0,cents(record.amount));
