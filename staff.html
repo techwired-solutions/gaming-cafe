@@ -78,11 +78,14 @@
     input[type="time"], input[type="date"], input[type="datetime-local"] { cursor: pointer; }
     input[type="number"]::-webkit-inner-spin-button,
     input[type="number"]::-webkit-outer-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
+      -webkit-appearance: none !important;
+      appearance: none !important;
+      display: none !important;
+      margin: 0 !important;
     }
     input[type="number"] {
-      -moz-appearance: textfield;
+      -moz-appearance: textfield !important;
+      appearance: textfield !important;
     }
     .ctrl-qty-input {
       box-sizing: border-box !important;
