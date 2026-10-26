@@ -34,11 +34,12 @@
         const explicitSource=item.supplier || item.source;
         const match=menu.find(m=>m.id===item.id) || menu.find(m=>item.name && m.name.toLowerCase()===item.name.toLowerCase() && (!explicitSource || (m.supplier || 'chillpill')===explicitSource));
         const savedRate=item.menu_price != null && item.menu_price !== '' && Number.isFinite(Number(item.menu_price)) ? Math.max(0,Number(item.menu_price)) : null;
-        const menuRate=savedRate ?? (match ? Math.max(0,Number(match.price)||0) : null);
         const customerRate=Math.max(0,Number(item.price)||0);
-        lines.push({ menuRate, customerRate, menuRateSource:savedRate != null ? 'saved' : match ? 'current' : 'unknown', rateChange:menuRate == null ? null : customerRate-menuRate, menuValue:menuRate == null ? null : Math.round(menuRate*qty*100)/100, source:item.supplier || item.source || match?.supplier || 'chillpill', name:item.name || 'Food item', qty, amount });
+        const currentRate=match?.price != null && match.price !== '' && Number.isFinite(Number(match.price)) ? Math.max(0,Number(match.price)) : null;
+        const menuRate=savedRate ?? currentRate ?? customerRate;
+        lines.push({ menuRate, customerRate, menuRateSource:savedRate != null ? 'saved' : currentRate != null ? 'current' : 'customer', rateChange:menuRate == null ? null : customerRate-menuRate, menuValue:menuRate == null ? null : Math.round(menuRate*qty*100)/100, source:item.supplier || item.source || match?.supplier || 'chillpill', name:item.name || 'Food item', qty, amount });
       }
-      if (!lines.length && Number(record.food_total)>0) lines.push({ source:'chillpill',name:'Food order (unitemized)',qty:1,amount:cents(record.food_total) });
+      if (!lines.length && Number(record.food_total)>0) lines.push({ source:'chillpill',name:'Food order (unitemized)',qty:1,amount:cents(record.food_total),menuRate:Number(record.food_total),customerRate:Number(record.food_total),menuRateSource:'customer',rateChange:0,menuValue:cents(record.food_total)/100 });
       const billed=Math.max(0,cents(record.amount));
       const bd=breakdown(record);
       const collected=bd.isWaived ? 0 : Math.max(0,Math.min(billed,record.paid ? billed : cents(bd.paidAmount)));
