@@ -541,6 +541,28 @@
       border-color: #cbd5e1 !important;
       color: #1e293b !important;
     }
+
+    /* Station pause surfaces and controls retain contrast in light mode. */
+    [data-theme="light"] #session-pause-modal .pause-station-option,
+    [data-theme="light"] .station-timer-row {
+      background: #ffffff !important;
+      border-color: #cbd5e1 !important;
+      color: #1e293b !important;
+    }
+    [data-theme="light"] #session-pause-modal .pause-station-paused,
+    [data-theme="light"] .station-timer-paused {
+      background: #fffbeb !important;
+      border-color: #f59e0b !important;
+    }
+    [data-theme="light"] .station-timer-row .text-slate-400 { color: #475569 !important; }
+    [data-theme="light"] .station-timer-row .text-amber-300,
+    [data-theme="light"] #session-pause-modal .text-amber-400 { color: #92400e !important; }
+    [data-theme="light"] .station-timer-row .text-emerald-400,
+    [data-theme="light"] #session-pause-modal .text-emerald-400 { color: #047857 !important; }
+    [data-theme="light"] #session-pause-modal .text-slate-200 { color: #1e293b !important; }
+    #session-pause-modal button:disabled { opacity: 0.45; cursor: not-allowed; }
+    #session-pause-modal > .panel { max-height: 90vh; overflow-y: auto; }
+
     /* ===== LIGHT THEME: SESSION PAUSE MODAL ===== */
     [data-theme="light"] #session-pause-modal .panel {
       background: #ffffff !important;
@@ -3245,7 +3267,7 @@
         <div class="flex items-center gap-2">
           <span class="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-300 text-sm font-bold">⏸</span>
           <div>
-            <h3 id="pause-modal-title" class="font-bold text-base text-slate-100">Pause Game Time</h3>
+            <h3 id="pause-modal-title" class="font-bold text-base text-slate-100">Manage Station Pauses</h3>
             <p id="pause-modal-subtitle" class="text-xs text-slate-400 mt-0.5 mono">Station · Customer</p>
           </div>
         </div>
@@ -3257,7 +3279,7 @@
       <div class="p-3 rounded-xl bg-[#0f1520] border border-slate-700/80 mb-3 text-xs space-y-1.5">
         <div class="flex items-center justify-between">
           <span class="text-slate-400">Game time countdown:</span>
-          <span class="font-bold text-amber-300">Will freeze immediately</span>
+          <span class="font-bold text-amber-300">Pause or resume below</span>
         </div>
         <div class="flex items-center justify-between">
           <span class="text-slate-400">Remaining time:</span>
@@ -3268,7 +3290,7 @@
 
       <!-- Multi-Station Selector (visible if session uses multiple stations) -->
       <div id="pause-modal-station-selector-wrap" class="hidden mb-3">
-        <label class="block text-xs text-slate-300 font-semibold mb-1.5">Station to Pause</label>
+        <label class="block text-xs text-slate-300 font-semibold mb-1.5">Select stations to manage</label>
         <div id="pause-modal-station-options" class="space-y-1.5"></div>
       </div>
 
@@ -3291,10 +3313,13 @@
         <input id="pause-reason-input" type="text" class="form-control text-xs" placeholder="Or enter specific reason...">
       </div>
 
+      <button type="button" id="pause-modal-complete" class="w-full py-2 px-3 mb-2 rounded-xl border border-emerald-500/40 text-xs font-bold cursor-pointer">Complete Selected &amp; Free Stations</button>
+      <p class="text-xs text-slate-400 mb-2">Completed stations become available to other customers. Charges stay on this bill until checkout.</p>
       <div class="flex items-center gap-2 pt-2">
-        <button type="button" id="pause-modal-cancel" class="flex-1 py-2 px-3 rounded-xl border border-slate-700 hover:bg-slate-800 text-xs font-semibold text-slate-300 transition cursor-pointer">Cancel</button>
+        <button type="button" id="pause-modal-cancel" class="flex-1 py-2 px-3 rounded-xl border border-slate-700 hover:bg-slate-800 text-xs font-semibold text-slate-300 transition cursor-pointer">Done</button>
+        <button type="button" id="pause-modal-resume" class="flex-1 py-2 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold cursor-pointer">Resume Selected</button>
         <button type="button" id="pause-modal-confirm" class="flex-1 py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1 shadow">
-          <i data-lucide="pause" width="14" height="14"></i> Pause Now
+          <i data-lucide="pause" width="14" height="14"></i> Pause Selected
         </button>
       </div>
     </div>
@@ -4632,7 +4657,7 @@
             <span class="record-customer font-bold text-sm sm:text-base text-slate-100 truncate cursor-pointer hover:text-[#d8ff45] transition"></span>
             <span class="record-status rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap"></span>
           </div>
-          <p class="record-station mono text-xs text-slate-400 mt-0.5 truncate"></p>
+          <div class="record-station text-xs text-slate-400 mt-1 w-full"></div>
         </div>
         <div class="text-right shrink-0">
           <p class="record-amount mono font-bold text-base sm:text-lg text-[#d8ff45]"></p>

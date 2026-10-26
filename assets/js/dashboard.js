@@ -2354,7 +2354,7 @@
     if (!container) return;
     container.innerHTML = "";
     (extraStations || []).forEach((es) => {
-      container.appendChild(buildExtraStationRow(prefix, es.station, es.duration_minutes, es.rate, stations, es.start_time, es.end_time));
+      container.appendChild(buildExtraStationRow(prefix, es.station, es.duration_minutes, es.rate, stations, es.start_time && /^\d{2}:\d{2}$/.test(es.start_time) ? es.start_time : (es.start_time ? timeInputValue(new Date(es.start_time)) : ""), es.end_time && /^\d{2}:\d{2}$/.test(es.end_time) ? es.end_time : (es.end_time ? timeInputValue(new Date(es.end_time)) : "")));
     });
     refreshExtraStations(prefix);
   }
@@ -2878,11 +2878,9 @@
   }
 
   function sessionUsesStation(record, stationName) {
-    if (!record || !record.station_name || !stationName) return false;
+    if (!record || !stationName) return false;
     const target = String(stationName).trim().toLowerCase();
-    if (!target) return false;
-    const recStations = splitStationNames(record.station_name);
-    return recStations.some((s) => s === target || s.includes(target) || target.includes(s));
+    return getRecordStations(record).some(slot => slot.name.toLowerCase() === target && !isStationCompleted(record, slot.name));
   }
 
   // A station can only have one Active session at a time. Supports multiple
@@ -2910,11 +2908,13 @@
         if (r.id === excludeId) return false;
         if (r.status !== "Active" && r.status !== "Booked") return false;
         if (!r.start_time || !r.end_time) return false;
-        const overlapsAny = candidateParts.some((cp) => sessionUsesStation(r, cp));
-        if (!overlapsAny) return false;
-        const rStart = new Date(r.start_time);
-        const rEnd = new Date(r.end_time);
-        return candidateStart < rEnd && rStart < candidateEnd;
+        return getRecordStations(r).some(slot => {
+          if (isStationCompleted(r, slot.name) || !candidateParts.includes(slot.name.toLowerCase())) return false;
+          // Historical completed slots in an edited bill no longer reserve a station.
+          const edited = excludeId && records.find(row => row.id === excludeId);
+          if (edited && isStationCompleted(edited, slot.name)) return false;
+          return candidateStart < new Date(slot.end_time) && new Date(slot.start_time) < candidateEnd;
+        });
       }) || null
     );
   }
@@ -3138,6 +3138,14 @@
   let pauseTargetStation = "all";
 
   // Extracts all stations utilized in a session (primary + extra stations)
+  function stationDate(value, fallback) {
+    if (!value) return fallback;
+    if (!/^\d{2}:\d{2}$/.test(value)) return value;
+    const date = new Date(fallback);
+    const [hours, minutes] = value.split(":").map(Number);
+    date.setHours(hours, minutes, 0, 0);
+    return date.toISOString();
+  }
   function getRecordStations(record) {
     if (!record) return [];
     const list = [];
@@ -3161,18 +3169,37 @@
         const esName = (es && (es.station || es.station_name) ? String(es.station || es.station_name).trim() : "");
         if (!esName) return;
         if (list.some((item) => item.name.toLowerCase() === esName.toLowerCase())) return;
+        const start = stationDate(es.start_time, record.start_time);
+        let end = stationDate(es.end_time, start);
+        if (!es.end_time) end = new Date(new Date(start).getTime() + (Number(es.duration_minutes) || 0) * 60000).toISOString();
+        else if (/^\d{2}:\d{2}$/.test(es.end_time) && new Date(end) < new Date(start)) end = new Date(new Date(end).getTime() + 86400000).toISOString();
         list.push({
           name: esName,
           isPrimary: false,
           rate: Number(es.rate) || 0,
           duration_minutes: Number(es.duration_minutes) || 60,
-          start_time: es.start_time || record.start_time,
-          end_time: es.end_time || record.end_time,
+          start_time: start,
+          end_time: end,
           extraObj: es
         });
       });
     }
     return list;
+  }
+
+  // Persist completion in notes, like pause state, without requiring a schema migration.
+  // Retain booked durations/rates for billing; only occupancy and overtime stop here.
+  function getStationCompletion(record, stationName) {
+    const target = String(stationName || "").trim().toLowerCase();
+    const rx = /\[Station Completed:\s*([^|\]]+)\|\s*At:\s*([^|\]]+)(?:\|[^\]]*)?\]/gi;
+    let match;
+    while ((match = rx.exec(record?.notes || ""))) {
+      if (match[1].trim().toLowerCase() === target) return { completedAt: new Date(match[2].trim()) };
+    }
+    return null;
+  }
+  function isStationCompleted(record, stationName) {
+    return !!getStationCompletion(record, stationName);
   }
 
   function isSessionPaused(record) {
@@ -3184,6 +3211,7 @@
 
   function isStationPaused(record, stationName = null) {
     if (!record) return false;
+    if (stationName && isStationCompleted(record, stationName)) return false;
     const fullPause = isSessionPaused(record);
     if (!stationName) return fullPause;
 
@@ -3226,23 +3254,23 @@
   function isAllStationsPaused(record) {
     if (!record) return false;
     if (isSessionPaused(record)) return true;
-    const stns = getRecordStations(record);
-    if (stns.length <= 1) return isSessionPaused(record);
+    const stns = getRecordStations(record).filter(slot => !isStationCompleted(record, slot.name));
+    if (!stns.length) return false;
     return stns.every((s) => isStationPaused(record, s.name));
   }
 
   function getSessionPauseInfo(record) {
     if (!record) return { isPaused: false };
-    const isPaused = isSessionPaused(record) || isAnyStationPaused(record);
+    const isPaused = isSessionPaused(record);
     if (!isPaused) return { isPaused: false };
 
     let pausedAt = record.paused_at ? new Date(record.paused_at) : null;
-    let remainingMs = Number(record.paused_remaining_ms);
+    let remainingMs = record.paused_remaining_ms == null ? null : Number(record.paused_remaining_ms);
     if (isNaN(remainingMs)) remainingMs = null;
     let reason = record.pause_reason || "";
 
     if (record.notes) {
-      const match = record.notes.match(/\[Session:\s*Paused\s*(?:\|\s*At:\s*([^\]|]+))?(?:\|\s*RemainingMs:\s*(\d+))?(?:\|\s*Reason:\s*([^\]]+))?\]/i);
+      const match = record.notes.match(/\[Session:\s*Paused\s*(?:\|\s*At:\s*([^\]|]+))?(?:\|\s*RemainingMs:\s*(\d+)\s*)?(?:\|\s*Reason:\s*([^\]]+))?\]/i);
       if (match) {
         if (!pausedAt && match[1]) pausedAt = new Date(match[1].trim());
         if (remainingMs == null && match[2]) remainingMs = Number(match[2].trim());
@@ -3274,7 +3302,7 @@
     let reason = "";
 
     if (record.notes && target) {
-      const rx = /\[Station Paused:\s*([^|\]]+)(?:\|\s*At:\s*([^|\]]+))?(?:\|\s*RemainingMs:\s*(\d+))?(?:\|\s*Reason:\s*([^\]]+))?\]/gi;
+      const rx = /\[Station Paused:\s*([^|\]]+)(?:\|\s*At:\s*([^|\]]+))?(?:\|\s*RemainingMs:\s*(\d+)\s*)?(?:\|\s*Reason:\s*([^\]]+))?\]/gi;
       let m;
       while ((m = rx.exec(record.notes)) !== null) {
         if (m[1].trim().toLowerCase() === target) {
@@ -3310,158 +3338,177 @@
     };
   }
 
-  async function pauseStation(record, stationName = "all", reason = "Game time paused") {
-    if (!record || record.status !== "Active") return;
-    const now = new Date();
-    const stns = getRecordStations(record);
-    const target = (stationName || "all").trim();
-
-    if (target.toLowerCase() === "all" || stns.length <= 1) {
-      const remainingMs = Math.max(0, (record.end_time ? new Date(record.end_time) : now) - now);
-      const remainingMins = Math.round(remainingMs / 60000);
-
-      let cleanNotes = (record.notes || "").replace(/\[Session:\s*(?:Paused|Resumed)[^\]]*\]/gi, "").trim();
-      const pauseTag = `[Session: Paused | At: ${now.toISOString()} | RemainingMs: ${remainingMs} | Reason: ${reason}]`;
-      const finalNotes = [cleanNotes, pauseTag].filter(Boolean).join(" ");
-
-      record.is_paused = true;
-      record.paused_at = now.toISOString();
-      record.paused_remaining_ms = remainingMs;
-      record.pause_reason = reason;
-      record.notes = finalNotes;
-
+  // Serialize writes per booking and commit local state only after persistence succeeds.
+  const pauseWrites = new Set();
+  async function changeStationPause(record, stationName, reason, resume, complete = false) {
+    if (!record || record.status !== "Active" || pauseWrites.has(record.id)) return false;
+    pauseWrites.add(record.id);
+    try {
+      const next = JSON.parse(JSON.stringify(record));
+      const slots = getRecordStations(next);
+      const targets = (Array.isArray(stationName) ? stationName : [stationName || "all"]).map(name => String(name).trim().toLowerCase());
+      const targetsSlot = slot => targets.includes("all") || targets.includes(slot.name.toLowerCase());
+      const now = new Date();
+      const safeReason = String(reason || "Game time paused").replace(/[|\[\]]/g, " ");
+      // Convert legacy whole-booking pauses into one frozen clock per station.
+      if (isSessionPaused(next)) {
+        const legacy = getSessionPauseInfo(next);
+        const infos = slots.map(slot => ({ slot, info: getStationPauseInfo(next, slot.name) }));
+        next.notes = (next.notes || "").replace(/\[Session:\s*Paused[^\]]*\]/gi, "").trim();
+        next.is_paused = false;
+        next.paused_at = null;
+        next.paused_remaining_ms = null;
+        infos.forEach(({slot, info}) => {
+          if (/\[Station Paused:/i.test(next.notes) && isStationPaused(next, slot.name)) return;
+          const remaining = Math.max(0, new Date(slot.end_time) - legacy.pausedAt);
+          next.notes += ' [Station Paused: ' + slot.name + ' | At: ' + info.pausedAt.toISOString() + ' | RemainingMs: ' + remaining + ' | Reason: ' + safeReason + ']';
+        });
+      }
+      let changed = false;
+      slots.filter(targetsSlot).forEach(slot => {
+        if (isStationCompleted(next, slot.name)) return;
+        const info = getStationPauseInfo(next, slot.name);
+        if (!complete && (resume ? !info.isPaused : info.isPaused)) return;
+        changed = true;
+        const escaped = slot.name.replace(/[.*+?^$\{\}()|[\]\\]/g, "\\$&");
+        next.notes = (next.notes || "").replace(new RegExp('\\[Station (?:Paused|Resumed):\\s*' + escaped + '\\s*\\|[^\\]]*\\]', 'gi'), "").trim();
+        if (complete) {
+          const effectiveEnd = info.isPaused ? info.pausedAt : now;
+          next.notes += ' [Station Completed: ' + slot.name + ' | At: ' + effectiveEnd.toISOString() + ']';
+          if (slot.extraObj) Object.assign(slot.extraObj, { is_paused: false, paused_at: null, paused_remaining_ms: null });
+        } else if (resume) {
+          const end = new Date(now.getTime() + info.remainingMs).toISOString();
+          if (slot.extraObj) {
+            slot.extraObj.end_time = end;
+            slot.extraObj.is_paused = false;
+            slot.extraObj.paused_at = null;
+            slot.extraObj.paused_remaining_ms = null;
+          } else if (slot.isPrimary) next.end_time = end;
+        } else {
+          const remaining = Math.max(0, new Date(slot.end_time) - now);
+          next.notes += ' [Station Paused: ' + slot.name + ' | At: ' + now.toISOString() + ' | RemainingMs: ' + remaining + ' | Reason: ' + safeReason + ']';
+          if (slot.extraObj) Object.assign(slot.extraObj, { is_paused: true, paused_at: now.toISOString(), paused_remaining_ms: remaining, pause_reason: safeReason });
+        }
+      });
+      if (!changed) return false;
+      if (!sdkReady || !window.sb) throw new Error("Database is unavailable");
+      const payload = { notes: next.notes.trim(), end_time: next.end_time, notified_5min: false };
+      if (Array.isArray(next.extra_stations)) payload.extra_stations = next.extra_stations;
+      const { error } = await window.sb.from("sessions").update(payload).eq("id", record.id);
+      if (error) throw error;
+      Object.assign(record, next, payload);
+      overdueToasted.delete(record.id);
       closePauseModal();
       renderAllLists();
       updateStationCards();
-      showToast(`⏸ Session PAUSED for ${record.customer_name || "Customer"} (${remainingMins}m frozen)`);
-
-      if (sdkReady && window.sb) {
-        await window.sb.from("sessions").update({ notes: finalNotes }).eq("id", record.id);
-      }
-      return;
-    }
-
-    // Specific station pause in multi-station booking
-    const matchedStn = stns.find((s) => s.name.toLowerCase() === target.toLowerCase()) || { name: target };
-    const stnEnd = matchedStn.end_time ? new Date(matchedStn.end_time) : (record.end_time ? new Date(record.end_time) : now);
-    const remainingMs = Math.max(0, stnEnd - now);
-    const remainingMins = Math.round(remainingMs / 60000);
-
-    const escaped = matchedStn.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    let cleanNotes = (record.notes || "").replace(new RegExp(`\\[Station (?:Paused|Resumed):\\s*${escaped}[^\\]]*\\]`, "gi"), "").trim();
-    const pauseTag = `[Station Paused: ${matchedStn.name} | At: ${now.toISOString()} | RemainingMs: ${remainingMs} | Reason: ${reason}]`;
-    const finalNotes = [cleanNotes, pauseTag].filter(Boolean).join(" ");
-
-    if (Array.isArray(record.extra_stations)) {
-      const matchExtra = record.extra_stations.find((es) => es && (es.station || es.station_name || "").toLowerCase() === target.toLowerCase());
-      if (matchExtra) {
-        matchExtra.is_paused = true;
-        matchExtra.paused_at = now.toISOString();
-        matchExtra.paused_remaining_ms = remainingMs;
-        matchExtra.pause_reason = reason;
-      }
-    }
-
-    record.notes = finalNotes;
-    closePauseModal();
-    renderAllLists();
-    updateStationCards();
-    showToast(`⏸ ${matchedStn.name} PAUSED for ${record.customer_name || "Customer"} (${remainingMins}m frozen)`);
-
-    if (sdkReady && window.sb) {
-      const updatePayload = { notes: finalNotes };
-      if (Array.isArray(record.extra_stations)) updatePayload.extra_stations = record.extra_stations;
-      await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
+      showToast((complete ? "Completed " : resume ? "Resumed " : "Paused ") + (targets.includes("all") ? "all stations" : slots.filter(targetsSlot).map(slot => slot.name).join(", ")));
+      return true;
+    } catch (error) {
+      showToast("Could not " + (resume ? "resume" : "pause") + " station: " + error.message);
+      return false;
+    } finally {
+      pauseWrites.delete(record.id);
     }
   }
 
+  async function completeStations(record, stationNames = "all") {
+    return changeStationPause(record, stationNames, "Completed", false, true);
+  }
+  async function pauseStation(record, stationName = "all", reason = "Game time paused") {
+    return changeStationPause(record, stationName, reason, false);
+  }
   async function pauseSession(record, reason = "Game time paused") {
     return pauseStation(record, "all", reason);
   }
-
   async function resumeStation(record, stationName = "all") {
-    if (!record || record.status !== "Active") return;
-    const stns = getRecordStations(record);
-    const target = (stationName || "all").trim();
-
-    if (target.toLowerCase() === "all" || stns.length <= 1) {
-      const pauseInfo = getSessionPauseInfo(record);
-      if (!pauseInfo.isPaused) return;
-
-      const now = new Date();
-      const pausedDurationMs = Math.max(0, now - pauseInfo.pausedAt);
-      const pausedDurationMins = Math.round(pausedDurationMs / 60000);
-      const newEndTime = new Date(now.getTime() + pauseInfo.remainingMs);
-
-      let cleanNotes = (record.notes || "").replace(/\[Session:\s*(?:Paused|Resumed)[^\]]*\]/gi, "").trim();
-      const resumeTag = `[Session: Resumed | PausedDuration: ${pausedDurationMins}m | Reason: ${pauseInfo.reason}]`;
-      const finalNotes = [cleanNotes, resumeTag].filter(Boolean).join(" ");
-
-      record.is_paused = false;
-      record.paused_at = null;
-      record.paused_remaining_ms = null;
-      record.end_time = newEndTime.toISOString();
-      record.notes = finalNotes;
-      overdueToasted.delete(record.id);
-
-      renderAllLists();
-      updateStationCards();
-      const remainingMins = Math.round(pauseInfo.remainingMs / 60000);
-      showToast(`▶ Session RESUMED for ${record.customer_name || "Customer"} (${remainingMins}m running)`);
-
-      if (sdkReady && window.sb) {
-        await window.sb.from("sessions").update({ notes: finalNotes, end_time: newEndTime.toISOString() }).eq("id", record.id);
-      }
-      return;
-    }
-
-    const matchedStn = stns.find((s) => s.name.toLowerCase() === target.toLowerCase()) || { name: target };
-    const pauseInfo = getStationPauseInfo(record, matchedStn.name);
-    if (!pauseInfo.isPaused) return;
-
-    const now = new Date();
-    const pausedDurationMs = Math.max(0, now - pauseInfo.pausedAt);
-    const pausedDurationMins = Math.round(pausedDurationMs / 60000);
-    const newEndTime = new Date(now.getTime() + pauseInfo.remainingMs);
-
-    const escaped = matchedStn.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    let cleanNotes = (record.notes || "").replace(new RegExp(`\\[Station (?:Paused|Resumed):\\s*${escaped}[^\\]]*\\]`, "gi"), "").trim();
-    const resumeTag = `[Station Resumed: ${matchedStn.name} | PausedDuration: ${pausedDurationMins}m | Reason: ${pauseInfo.reason}]`;
-    const finalNotes = [cleanNotes, resumeTag].filter(Boolean).join(" ");
-
-    if (Array.isArray(record.extra_stations)) {
-      const matchExtra = record.extra_stations.find((es) => es && (es.station || es.station_name || "").toLowerCase() === target.toLowerCase());
-      if (matchExtra) {
-        matchExtra.is_paused = false;
-        matchExtra.paused_at = null;
-        matchExtra.paused_remaining_ms = null;
-        matchExtra.end_time = newEndTime.toISOString();
-      }
-    } else if (matchedStn.isPrimary) {
-      record.end_time = newEndTime.toISOString();
-    }
-
-    record.notes = finalNotes;
-    renderAllLists();
-    updateStationCards();
-    const remainingMins = Math.round(pauseInfo.remainingMs / 60000);
-    showToast(`▶ ${matchedStn.name} RESUMED for ${record.customer_name || "Customer"} (${remainingMins}m running)`);
-
-    if (sdkReady && window.sb) {
-      const updatePayload = { notes: finalNotes };
-      if (Array.isArray(record.extra_stations)) updatePayload.extra_stations = record.extra_stations;
-      if (matchedStn.isPrimary) updatePayload.end_time = newEndTime.toISOString();
-      await window.sb.from("sessions").update(updatePayload).eq("id", record.id);
-    }
+    return changeStationPause(record, stationName, "Game time paused", true);
   }
-
   async function resumeSession(record) {
     return resumeStation(record, "all");
+  }
+
+  function syncEditStationControls(record, before) {
+    // Keep unsaved customer/order edits while refreshing station state saved immediately.
+    const notes = document.getElementById("edit-notes");
+    const stateTags = /\[(?:Session:\s*(?:Paused|Resumed)|Station (?:Paused|Resumed|Completed):)[^\]]*\]/gi;
+    if (notes) notes.value = [notes.value.replace(stateTags, "").trim(), ...(record.notes || "").match(stateTags) || []].filter(Boolean).join(" ");
+    getRecordStations(record).forEach(slot => {
+      const previous = before.find(old => old.name === slot.name);
+      if (!previous || slot.end_time === previous.end_time) return;
+      if (slot.isPrimary) {
+        const end = document.getElementById("edit-end-time");
+        if (end && end.value === timeInputValue(new Date(previous.end_time))) end.value = timeInputValue(new Date(slot.end_time));
+      } else {
+        document.getElementById("edit-extra-stations-rows")?.querySelectorAll(".extra-station-row").forEach(row => {
+          if (row.querySelector('[data-role="es-station"]').value.trim() !== slot.name) return;
+          const end = row.querySelector('[data-role="es-end"]');
+          if (end.value === timeInputValue(new Date(previous.end_time))) end.value = timeInputValue(new Date(slot.end_time));
+        });
+      }
+    });
+  }
+
+  function renderStationTimers(container, record, editing = false) {
+    container.innerHTML = "";
+    getRecordStations(record).forEach(slot => {
+      const row = document.createElement("div");
+      row.className = "station-timer-row rounded-xl border border-slate-700/60 p-3 mt-2 flex flex-wrap items-center justify-between gap-2";
+      row.classList.toggle("station-timer-paused", isStationPaused(record, slot.name));
+      const info = document.createElement("div");
+      const title = document.createElement("div");
+      title.className = "font-semibold text-sm";
+      title.textContent = slot.name;
+      const detail = document.createElement("div");
+      detail.className = "mono text-xs text-slate-400 mt-1";
+      detail.textContent = fmtTime(slot.start_time) + " – " + fmtTime(slot.end_time) + " · " + slot.duration_minutes + " min · " + inr(slot.rate) + "/hr";
+      const timer = document.createElement("div");
+      timer.className = "mono text-xs mt-1 " + (isStationPaused(record, slot.name) ? "text-amber-300" : "text-emerald-400");
+      timer.textContent = timeRemainingText(record, slot.name);
+      info.append(title, detail, timer);
+      row.append(info);
+      if (record.status === "Active" && !isStationCompleted(record, slot.name)) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "rounded-lg border border-amber-500/40 px-3 py-2 text-xs font-bold cursor-pointer";
+        const paused = isStationPaused(record, slot.name);
+        button.textContent = paused ? "Resume" : "Pause";
+        button.setAttribute("aria-label", button.textContent + " " + slot.name);
+        button.onclick = async () => {
+          if (!editing && !paused) return openPauseModal(record, slot.name);
+          button.disabled = true;
+          const before = getRecordStations(record);
+          const changed = paused ? await resumeStation(record, slot.name) : await pauseStation(record, slot.name);
+          if (editing) {
+            if (changed) syncEditStationControls(record, before);
+            renderStationTimers(container, record, true);
+          } else button.disabled = false;
+        };
+        const completeButton = document.createElement("button");
+        completeButton.type = "button";
+        completeButton.className = "rounded-lg border border-emerald-500/40 px-3 py-2 text-xs font-bold cursor-pointer";
+        completeButton.textContent = "Complete";
+        completeButton.setAttribute("aria-label", "Complete " + slot.name);
+        completeButton.onclick = async () => {
+          completeButton.disabled = true;
+          const before = getRecordStations(record);
+          const changed = await completeStations(record, [slot.name]);
+          if (editing) {
+            if (changed) syncEditStationControls(record, before);
+            renderStationTimers(container, record, true);
+          }
+          else completeButton.disabled = false;
+        };
+        row.append(button, completeButton);
+      }
+      container.append(row);
+    });
   }
 
   function openPauseModal(record, preselectedStation = null) {
     pauseTarget = record;
     pauseTargetStation = preselectedStation || "all";
+    const selection = Array.isArray(pauseTargetStation) ? pauseTargetStation : [pauseTargetStation];
+    const initiallySelected = name => selection.some(value => value.toLowerCase() === "all" || value.toLowerCase() === name.toLowerCase());
     const modal = document.getElementById("session-pause-modal");
     if (!modal) return;
 
@@ -3469,7 +3516,8 @@
     if (subEl) subEl.textContent = `${record.station_name || "Station"} · ${record.customer_name || "Customer"}`;
 
     const remEl = document.getElementById("pause-modal-remaining");
-    const diffMs = Math.max(0, (record.end_time ? new Date(record.end_time) : new Date()) - new Date());
+    const selectedSlot = getRecordStations(record).find(slot => slot.name === preselectedStation);
+    const diffMs = Math.max(0, new Date(selectedSlot?.end_time || record.end_time || new Date()) - new Date());
     const remMins = Math.round(diffMs / 60000);
     if (remEl) remEl.textContent = `${remMins} min remaining`;
 
@@ -3477,23 +3525,23 @@
     if (input) input.value = "";
 
     // Multi-station selector support
-    const stns = getRecordStations(record);
+    const stns = getRecordStations(record).filter(slot => !isStationCompleted(record, slot.name));
     const selectorWrap = document.getElementById("pause-modal-station-selector-wrap");
     const optionsContainer = document.getElementById("pause-modal-station-options");
     if (selectorWrap && optionsContainer) {
       if (stns.length > 1) {
         selectorWrap.classList.remove("hidden");
         const optionsHtml = [
-          `<label class="flex items-center gap-2 p-2 rounded-lg border border-slate-700 bg-slate-900/60 cursor-pointer hover:border-amber-400/50 transition">
-            <input type="radio" name="pause-station-choice" value="all" ${pauseTargetStation === "all" ? "checked" : ""} class="accent-amber-400">
-            <span class="text-xs text-white font-bold">All Stations (${stns.map((s) => s.name).join(", ")})</span>
+          `<label class="pause-station-option flex items-center gap-2 p-2 rounded-lg border border-slate-700 bg-slate-900/60 cursor-pointer hover:border-amber-400/50 transition">
+            <input type="checkbox" id="pause-stations-select-all" ${stns.every(slot => initiallySelected(slot.name)) ? "checked" : ""} class="accent-amber-400">
+            <span class="text-xs text-white font-bold">All Stations (${stns.map((s) => escapeHtml(s.name)).join(", ")})</span>
           </label>`,
           ...stns.map((s) => {
             const isPaused = isStationPaused(record, s.name);
-            return `<label class="flex items-center gap-2 p-2 rounded-lg border ${isPaused ? "border-amber-500/40 bg-amber-950/20" : "border-slate-700 bg-slate-900/60"} cursor-pointer hover:border-amber-400/50 transition">
-              <input type="radio" name="pause-station-choice" value="${s.name}" ${pauseTargetStation.toLowerCase() === s.name.toLowerCase() ? "checked" : ""} class="accent-amber-400">
+            return `<label class="pause-station-option ${isPaused ? "pause-station-paused" : ""} flex items-center gap-2 p-2 rounded-lg border ${isPaused ? "border-amber-500/40 bg-amber-950/20" : "border-slate-700 bg-slate-900/60"} cursor-pointer hover:border-amber-400/50 transition">
+              <input type="checkbox" name="pause-station-choice" value="${escapeHtml(s.name)}" ${initiallySelected(s.name) ? "checked" : ""} class="accent-amber-400">
               <div class="flex-1 flex items-center justify-between text-xs">
-                <span class="text-slate-200 font-semibold">${s.name} ${s.isPrimary ? "(Primary)" : "(Extra)"}</span>
+                <span class="text-slate-200 font-semibold">${escapeHtml(s.name)} ${s.isPrimary ? "(Primary)" : "(Extra)"}</span>
                 <span class="mono ${isPaused ? "text-amber-400" : "text-emerald-400"}">${isPaused ? "Already Paused" : "Active"}</span>
               </div>
             </label>`;
@@ -3506,6 +3554,33 @@
       }
     }
 
+    const updateSelection = () => {
+      const target = selectedPauseStations(record);
+      const slots = stns.filter(slot => target.includes(slot.name));
+      const selectAll = document.getElementById("pause-stations-select-all");
+      if (selectAll) {
+        selectAll.checked = slots.length === stns.length;
+        selectAll.indeterminate = slots.length > 0 && slots.length < stns.length;
+      }
+      if (remEl) remEl.textContent = slots.map(slot => {
+        const info = getStationPauseInfo(record, slot.name);
+        const remaining = info.isPaused ? info.remainingMs : Math.max(0, new Date(slot.end_time) - new Date());
+        return slot.name + ": " + Math.round(remaining / 60000) + " min" + (info.isPaused ? " (paused)" : "");
+      }).join(" · ");
+      const pauseButton = document.getElementById("pause-modal-confirm");
+      const resumeButton = document.getElementById("pause-modal-resume");
+      const completeButton = document.getElementById("pause-modal-complete");
+      if (completeButton) completeButton.disabled = !slots.length;
+      if (pauseButton) pauseButton.disabled = slots.every(slot => isStationPaused(record, slot.name));
+      if (resumeButton) resumeButton.disabled = slots.every(slot => !isStationPaused(record, slot.name));
+    };
+    optionsContainer?.querySelectorAll('input[name="pause-station-choice"]').forEach(input => input.addEventListener("change", updateSelection));
+    const selectAll = document.getElementById("pause-stations-select-all");
+    if (selectAll) selectAll.onchange = () => {
+      optionsContainer.querySelectorAll('input[name="pause-station-choice"]').forEach(input => { input.checked = selectAll.checked; });
+      updateSelection();
+    };
+    updateSelection();
     modal.classList.add("show");
   }
 
@@ -3514,6 +3589,12 @@
     if (modal) modal.classList.remove("show");
     pauseTarget = null;
     pauseTargetStation = "all";
+  }
+
+  function selectedPauseStations(record) {
+    const slots = getRecordStations(record).filter(slot => !isStationCompleted(record, slot.name));
+    if (slots.length <= 1) return slots.map(slot => slot.name);
+    return Array.from(document.getElementById("pause-modal-station-options").querySelectorAll('input[name="pause-station-choice"]:checked'), input => input.value);
   }
 
   function initPauseModal() {
@@ -3529,40 +3610,60 @@
     if (cancelBtn) cancelBtn.addEventListener("click", closePauseModal);
     modal.addEventListener("click", (e) => { if (e.target === modal) closePauseModal(); });
 
-    modal.querySelectorAll(".pause-preset-btn").forEach((btn) => {
+    modal.querySelectorAll(".pause-preset-btn").forEach(btn => {
       btn.addEventListener("click", () => {
-        const reason = btn.dataset.reason || "Paused";
-        if (reasonInput) reasonInput.value = reason;
-        if (pauseTarget) {
-          const selectedRadio = modal.querySelector('input[name="pause-station-choice"]:checked');
-          const targetStation = selectedRadio ? selectedRadio.value : (pauseTargetStation || "all");
-          pauseStation(pauseTarget, targetStation, reason);
-        }
+        if (reasonInput) reasonInput.value = btn.dataset.reason || "Paused";
       });
     });
-
-    if (confirmBtn) {
-      confirmBtn.addEventListener("click", () => {
-        if (!pauseTarget) return;
-        const reason = (reasonInput && reasonInput.value.trim()) || "Game time paused";
-        const selectedRadio = modal.querySelector('input[name="pause-station-choice"]:checked');
-        const targetStation = selectedRadio ? selectedRadio.value : (pauseTargetStation || "all");
-        pauseStation(pauseTarget, targetStation, reason);
-      });
+    const resumeBtn = document.getElementById("pause-modal-resume");
+    const completeBtn = document.getElementById("pause-modal-complete");
+    async function applyPauseAction(resume, complete = false) {
+      if (!pauseTarget) return;
+      const record = pauseTarget;
+      const target = selectedPauseStations(record);
+      if (!target.length) return;
+      const reason = reasonInput?.value.trim() || "Game time paused";
+      if (confirmBtn) confirmBtn.disabled = true;
+      if (resumeBtn) resumeBtn.disabled = true;
+      if (completeBtn) completeBtn.disabled = true;
+      try {
+        const changed = complete ? await completeStations(record, target) : resume ? await resumeStation(record, target) : await pauseStation(record, target, reason);
+        if (changed) {
+          openPauseModal(record, target);
+          if (reasonInput) reasonInput.value = reason;
+        }
+      } finally {
+        if (completeBtn) completeBtn.disabled = !selectedPauseStations(record).length;
+        if (confirmBtn) confirmBtn.disabled = !getRecordStations(record).some(slot => target.includes(slot.name) && !isStationCompleted(record, slot.name) && !isStationPaused(record, slot.name));
+        if (resumeBtn) resumeBtn.disabled = !getRecordStations(record).some(slot => target.includes(slot.name) && isStationPaused(record, slot.name));
+      }
     }
+    if (completeBtn) completeBtn.addEventListener("click", () => applyPauseAction(false, true));
+    if (confirmBtn) confirmBtn.addEventListener("click", () => applyPauseAction(false));
+    if (resumeBtn) resumeBtn.addEventListener("click", () => applyPauseAction(true));
   }
 
   function computeOvertimeCharge(record, stationName = null) {
-    if (!record || record.status !== "Active" || !record.end_time) return { minutes: 0, amount: 0 };
-    const pauseInfo = getStationPauseInfo(record, stationName);
-    const effectiveNow = pauseInfo.isPaused ? pauseInfo.pausedAt : new Date();
-    const overdueMinutes = Math.floor((effectiveNow - new Date(record.end_time)) / 60000);
-    if (overdueMinutes <= OVERTIME_GRACE_MINUTES) return { minutes: 0, amount: 0 };
-    const perMinuteRate = (Number(record.rate) || 0) / 60;
-    return { minutes: overdueMinutes, amount: Math.round(overdueMinutes * perMinuteRate) };
+    if (!record || record.status !== "Active") return { minutes: 0, amount: 0 };
+    const slots = getRecordStations(record).filter(slot => !stationName || slot.name.toLowerCase() === String(stationName).toLowerCase());
+    return slots.reduce((total, slot) => {
+      const completion = getStationCompletion(record, slot.name);
+      const pause = getStationPauseInfo(record, slot.name);
+      const effectiveNow = completion ? completion.completedAt : pause.isPaused ? pause.pausedAt : new Date();
+      const minutes = Math.max(0, Math.floor((effectiveNow - new Date(slot.end_time)) / 60000));
+      if (minutes > OVERTIME_GRACE_MINUTES) {
+        total.minutes += minutes;
+        total.amount += Math.round(minutes * (Number(slot.rate) || 0) / 60);
+      }
+      return total;
+    }, { minutes: 0, amount: 0 });
   }
 
   function timeRemainingText(record, stationName = null) {
+    const slot = stationName && getRecordStations(record).find(s => s.name.toLowerCase() === String(stationName).toLowerCase());
+    if (slot) record = { ...record, end_time: slot.end_time, rate: slot.rate };
+    const completion = getStationCompletion(record, stationName);
+    if (completion) return "Completed at " + fmtTime(completion.completedAt);
     if (!record.end_time) return "";
     const isPaused = isStationPaused(record, stationName);
     if (isPaused) {
@@ -3592,6 +3693,7 @@
     const anyPaused = isAnyStationPaused(record);
     const allPaused = isAllStationsPaused(record);
     const pauseInfo = getSessionPauseInfo(record);
+    const unfinished = stns.filter(slot => !isStationCompleted(record, slot.name));
 
     card.classList.toggle("is-paused", isActive && anyPaused);
     card.classList.toggle("is-running", isActive && !anyPaused);
@@ -3621,20 +3723,17 @@
     }
     const stationEl = card.querySelector(".record-station");
     if (stationEl) {
-      if (stns.length > 1) {
-        stationEl.innerHTML = stns.map((s) => {
-          const p = isStationPaused(record, s.name);
-          return `<span class="inline-flex items-center gap-1 ${p ? "text-rose-400 font-bold" : "text-slate-300"}">${s.name}${p ? " (⏸ Paused)" : ""}</span>`;
-        }).join('<span class="text-slate-600 mx-1">+</span>') + ` · <span class="text-slate-400">${record.type || "Walk-in"}</span>`;
-      } else {
-        stationEl.textContent = (record.station_name || "—") + " · " + (record.type || "—");
-      }
+      if (isActive) renderStationTimers(stationEl, record);
+      else stationEl.textContent = stns.map(slot => slot.name).join(" + ") + " · " + (record.type || "Walk-in");
     }
     card.querySelector(".record-duration").textContent = (Number(record.duration_minutes) || 0) + " min";
     card.querySelector(".record-amount").textContent = inr(record.amount);
 
     const status = card.querySelector(".record-status");
-    if (isActive && allPaused) {
+    if (isActive && !unfinished.length) {
+      status.textContent = "READY FOR CHECKOUT";
+      status.className = "record-status rounded-full px-2 py-0.5 text-[11px] font-bold border border-emerald-500/40";
+    } else if (isActive && allPaused) {
       status.textContent = "⏸ PAUSED";
       status.className = "record-status rounded-full px-2 py-0.5 text-[11px] font-black whitespace-nowrap bg-rose-500/25 text-rose-300 border border-rose-500/60 shadow-sm";
     } else if (isActive && anyPaused) {
@@ -3715,12 +3814,12 @@
     card.classList.remove("overdue", "ending-soon");
 
     if (record.status === "Active" && record.end_time) {
-      countdown.textContent = timeRemainingText(record);
+      countdown.textContent = unfinished.length ? timeRemainingText(record, unfinished[0].name) : "All stations completed · Ready for checkout";
       countdown.classList.remove("hidden");
-      if (pauseInfo.isPaused) {
+      if (!unfinished.length || isStationPaused(record, unfinished[0]?.name)) {
         countdown.className = "record-countdown mono mt-2 text-xs text-amber-300 font-semibold";
       } else {
-        const diffMs = new Date(record.end_time) - new Date();
+        const diffMs = new Date(unfinished[0]?.end_time || record.end_time) - new Date();
         countdown.className = "record-countdown mono mt-2 text-xs " + (diffMs <= 0 ? "text-[#ff6875]" : diffMs <= ALERT_MS ? "text-amber-300" : "text-slate-400");
         if (diffMs <= 0) card.classList.add("overdue");
         else if (diffMs <= ALERT_MS) card.classList.add("ending-soon");
@@ -3738,15 +3837,15 @@
       actions.classList.remove("hidden");
       actions.classList.add("flex");
       const isActive = record.status === "Active";
-      extendGroup.classList.toggle("hidden", !isActive || pauseInfo.isPaused);
+      extendGroup.classList.toggle("hidden", !isActive || pauseInfo.isPaused || isStationCompleted(record, stns[0]?.name));
 
       if (pauseBtn) {
         if (isActive) {
           pauseBtn.classList.remove("hidden");
           if (allPaused) {
             pauseBtn.className = "toggle-pause-btn rounded-lg border border-emerald-500/60 bg-emerald-500/25 text-emerald-300 hover:bg-emerald-500/40 px-2 py-1 text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-sm shrink-0";
-            pauseBtn.innerHTML = '<i data-lucide="play" width="13" height="13"></i> <span class="pause-btn-text">Resume</span>';
-            pauseBtn.title = `Resume all game time for ${record.customer_name || "session"}`;
+            pauseBtn.innerHTML = '<i data-lucide="play" width="13" height="13"></i> <span class="pause-btn-text">Manage Pause...</span>';
+            pauseBtn.title = `Manage station pause states`;
           } else if (anyPaused) {
             pauseBtn.className = "toggle-pause-btn rounded-lg border border-amber-500/60 bg-amber-500/25 text-amber-300 hover:bg-amber-500/40 px-2 py-1 text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-sm shrink-0";
             pauseBtn.innerHTML = '<i data-lucide="pause" width="13" height="13"></i> <span class="pause-btn-text">Manage Pause...</span>';
@@ -3821,12 +3920,7 @@
       pauseBtn.addEventListener("click", () => {
         const item = records.find((row) => String(row.id) === String(card.dataset.recordId)) || record;
         if (!item) return;
-        const pauseInfo = getSessionPauseInfo(item);
-        if (pauseInfo.isPaused) {
-          resumeSession(item);
-        } else {
-          openPauseModal(item);
-        }
+        openPauseModal(item);
       });
     }
 
@@ -4499,7 +4593,7 @@
     if (primaryPaused && !isCompleted) {
       const pInfo = getStationPauseInfo(record, record.station_name);
       const start = record.start_time ? new Date(record.start_time) : new Date();
-      const playedMs = Math.max(0, pInfo.pausedAt - start);
+      const playedMs = Math.max(0, primaryMins * 60000 - pInfo.remainingMs);
       primaryMins = Math.max(1, Math.min(primaryMins, Math.round(playedMs / 60000)));
     }
     const primaryRate = Number(record.rate) || 0;
@@ -4515,8 +4609,8 @@
       const esPaused = isStationPaused(record, esName);
       if (esPaused && !isCompleted) {
         const esInfo = getStationPauseInfo(record, esName);
-        const start = es.start_time ? new Date(es.start_time) : (record.start_time ? new Date(record.start_time) : new Date());
-        const playedMs = Math.max(0, esInfo.pausedAt - start);
+        const start = new Date(stationDate(es.start_time, record.start_time));
+        const playedMs = Math.max(0, esMins * 60000 - esInfo.remainingMs);
         esMins = Math.max(1, Math.min(esMins, Math.round(playedMs / 60000)));
       }
       const esRate = Number(es.rate) || 0;
@@ -4792,7 +4886,7 @@
 
     // Paused Session Notice & Bill Actual Played Time Option
     const pauseBanner = document.getElementById("checkout-paused-banner");
-    const pauseInfo = getSessionPauseInfo(record);
+    const pauseInfo = getStationPauseInfo(record, getRecordStations(record)[0]?.name);
     if (pauseBanner) {
       if (pauseInfo.isPaused) {
         pauseBanner.classList.remove("hidden");
@@ -4803,7 +4897,7 @@
         const costSpan = document.getElementById("checkout-paused-actual-cost");
 
         const start = record.start_time ? new Date(record.start_time) : new Date();
-        const playedMs = Math.max(0, pauseInfo.pausedAt - start);
+        const playedMs = Math.max(0, (Number(record.duration_minutes) || 0) * 60000 - pauseInfo.remainingMs);
         const playedMinutes = Math.max(1, Math.round(playedMs / 60000));
         const actualTimeCost = Math.round((playedMinutes / 60) * (Number(record.rate) || 0));
 
@@ -5864,43 +5958,10 @@
       document.getElementById("edit-heading").textContent = `${record.customer_name || "—"} · ${record.status || "Session"}`;
       document.getElementById("edit-station").value = record.station_name || "";
 
-      // Active Session Pause / Resume Controls inside Edit Modal
       const editPauseBar = document.getElementById("edit-pause-bar");
       if (editPauseBar) {
-        if (record.status === "Active") {
-          editPauseBar.classList.remove("hidden");
-          const pauseInfo = getSessionPauseInfo(record);
-          const pauseTitle = document.getElementById("edit-pause-title");
-          const pauseSub = document.getElementById("edit-pause-sub");
-          const pauseBtn = document.getElementById("edit-toggle-pause-btn");
-
-          if (pauseInfo.isPaused) {
-            if (pauseTitle) pauseTitle.textContent = "Session is currently PAUSED";
-            if (pauseSub) pauseSub.textContent = `Paused at ${fmtTime(pauseInfo.pausedAt)} (${pauseInfo.reason}) · ${Math.round(pauseInfo.remainingMs / 60000)}m remaining frozen`;
-            if (pauseBtn) {
-              pauseBtn.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer border border-emerald-500/50 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 flex items-center gap-1 shadow-sm";
-              pauseBtn.innerHTML = '<i data-lucide="play" width="13" height="13"></i> Resume Game Time';
-              pauseBtn.onclick = async () => {
-                await resumeSession(record);
-                openEditModal(record);
-              };
-            }
-          } else {
-            if (pauseTitle) pauseTitle.textContent = "Session Game Time is Running";
-            if (pauseSub) pauseSub.textContent = "Power cut, error, or customer stopped playing? Freeze game time.";
-            if (pauseBtn) {
-              pauseBtn.className = "px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 flex items-center gap-1";
-              pauseBtn.innerHTML = '<i data-lucide="pause" width="13" height="13"></i> Pause Game Time';
-              pauseBtn.onclick = () => {
-                closeEditModal();
-                openPauseModal(record);
-              };
-            }
-          }
-          if (window.lucide) window.lucide.createIcons({ root: editPauseBar });
-        } else {
-          editPauseBar.classList.add("hidden");
-        }
+        editPauseBar.classList.toggle("hidden", record.status !== "Active");
+        if (record.status === "Active") renderStationTimers(editPauseBar, record, true);
       }
 
       document.getElementById("edit-customer-name").value = record.customer_name || "";
@@ -6354,7 +6415,10 @@
 
       const btn = document.getElementById("edit-session-save");
       btn.disabled = true;
-      const extraStations = isFoodOnly ? [] : collectExtraStations("edit");
+      const extraStations = isFoodOnly ? [] : collectExtraStations("edit").map(slot => {
+        const previous = (editTarget.extra_stations || []).find(es => (es.station || es.station_name) === (slot.station || slot.station_name));
+        return previous ? { ...previous, ...slot } : slot;
+      });
       // Build combined station string for overlap checks (primary + extras)
       const allStationNames = [station, ...extraStations.map((e) => e.station)].filter(Boolean).join(", ");
 
@@ -7618,7 +7682,7 @@
   function computeStationStatus(station) {
     const activeSession = records.find((r) => r.status === "Active" && sessionUsesStation(r, station.name));
     if (activeSession) {
-      const isPaused = isSessionPaused(activeSession);
+      const isPaused = isStationPaused(activeSession, station.name);
       return { state: isPaused ? "paused" : "occupied", session: activeSession };
     }
     const nextBooking = records
@@ -10231,7 +10295,7 @@
     renderWaitingList();
 
     records
-      .filter((r) => r.status === "Active" && r.end_time && !isSessionPaused(r))
+      .filter((r) => r.status === "Active" && r.end_time && !isStationCompleted(r, getRecordStations(r)[0]?.name) && !isStationPaused(r, getRecordStations(r)[0]?.name))
       .forEach(async (record) => {
         const diffMs = new Date(record.end_time) - new Date();
         if (diffMs > 0 && diffMs <= ALERT_MS && !record.notified_5min) {

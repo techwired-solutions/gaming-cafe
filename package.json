@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node scripts/generate-config.js && node scripts/sync-console-pages.js",
     "sync-console-pages": "node scripts/sync-console-pages.js",
-    "start": "npx serve ."
+    "start": "npx serve .",
+    "test": "node scripts/test-session-pauses.js"
   }
 }
