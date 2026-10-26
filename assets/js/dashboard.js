@@ -2170,15 +2170,37 @@
     calculateAmount();
   }
 
+  function updateNsFoodOnlyState() {
+    const foodOnly = !!document.getElementById("ns-is-food-only")?.checked;
+    const section = document.getElementById("ns-stations-section");
+    section.classList.toggle("hidden", foodOnly);
+    section.querySelectorAll("input, select, button").forEach(input => { input.disabled = foodOnly; });
+    const status = document.getElementById("session-status");
+    if (foodOnly && !status.disabled) status.dataset.previousStatus = status.value;
+    status.disabled = foodOnly;
+    status.parentElement.classList.toggle("hidden", foodOnly);
+    document.getElementById("customer-phone").required = !foodOnly;
+    document.getElementById("customer-name").required = !foodOnly;
+    document.getElementById("save-button").textContent = foodOnly ? "Save Food Order" : "Save session";
+    if (foodOnly) document.getElementById("station-conflict-warning").classList.add("hidden");
+    else {
+      if (status.dataset.previousStatus) status.value = status.dataset.previousStatus;
+      delete status.dataset.previousStatus;
+      updateStationConflictUI();
+    }
+    calculateAmount();
+  }
+
   const CTRL_RATE = 50; // रु per extra controller
 
   function calculateAmount() {
-    const duration = Math.max(0, Number(document.getElementById("duration-minutes").value) || 0);
-    const rate = Math.max(0, Number(document.getElementById("rate").value) || 0);
+    const foodOnly = !!document.getElementById("ns-is-food-only")?.checked;
+    const duration = foodOnly ? 0 : Math.max(0, Number(document.getElementById("duration-minutes").value) || 0);
+    const rate = foodOnly ? 0 : Math.max(0, Number(document.getElementById("rate").value) || 0);
     const foodTotal = frTotal("food-order-list");
     const timeCost = Math.round((duration / 60) * rate);
-    const extraCost = calcExtraStationsCost("ns");
-    const ctrlCount = Math.max(0, Number(document.getElementById("ns-extra-controllers")?.value) || 0);
+    const extraCost = foodOnly ? 0 : calcExtraStationsCost("ns");
+    const ctrlCount = foodOnly ? 0 : Math.max(0, Number(document.getElementById("ns-extra-controllers")?.value) || 0);
     const ctrlCost = ctrlCount * CTRL_RATE;
     const total = Math.round(timeCost + ctrlCost + foodTotal + extraCost);
     document.getElementById("estimate-total").textContent = inr(total);
@@ -2387,6 +2409,7 @@
   // station already has a live session, and flags it as blocked if the
   // chosen start time still falls inside that session's remaining time.
   function updateStationConflictUI() {
+    if (document.getElementById("ns-is-food-only")?.checked) return { conflict: null, blocked: false };
     const stationName = document.getElementById("station-name").value.trim();
     const statusSelect = document.getElementById("session-status");
     const activeOption = sessionStatusActiveOption;
@@ -3147,7 +3170,7 @@
     return date.toISOString();
   }
   function getRecordStations(record) {
-    if (!record) return [];
+    if (!record || (Number(record.duration_minutes) === 0 && (record.notes || "").includes("[Food Only Sale]"))) return [];
     const list = [];
     if (record.station_name) {
       const rawParts = String(record.station_name).split(/[,+&/]/).map((s) => s.trim()).filter(Boolean);
@@ -3724,7 +3747,7 @@
     const stationEl = card.querySelector(".record-station");
     if (stationEl) {
       if (isActive && card.dataset.overview === "true") {
-        stationEl.textContent = stns.map(slot => slot.name).join(" + ") + " · " + (record.type || "Walk-in");
+        stationEl.textContent = (stns.map(slot => slot.name).join(" + ") || record.station_name || "—") + " · " + (record.type || "Walk-in");
         let toggle = card.querySelector(".station-details-toggle");
         let details = card.querySelector(".record-station-details");
         if (!toggle) {
@@ -11398,15 +11421,17 @@ Here is the menu image:`;
       event.preventDefault();
       if (!sdkReady) return showMessage("Supabase isn't connected. Edit assets/js/config.js (or config.local.js), then reload.", true);
 
-      const station = document.getElementById("station-name").value.trim();
-      const customer = document.getElementById("customer-name").value.trim();
-      const phone = document.getElementById("customer-phone").value.trim();
+      const foodOnly = !!document.getElementById("ns-is-food-only")?.checked;
+      const station = foodOnly ? "Counter / Cafe" : document.getElementById("station-name").value.trim();
+      const customer = document.getElementById("customer-name").value.trim() || (foodOnly ? "Walk-in Customer" : "");
+      const phone = document.getElementById("customer-phone").value.trim() || (foodOnly ? "—" : "");
+      if (foodOnly && !collectFrItems("food-order-list").length) return showMessage("Add at least one food or drink item.", true);
       if (!station || !customer || !phone) return showMessage("Please enter the station, customer name, and phone number.", true);
 
       // Re-check fresh at submit time, not just relying on the live UI
       // state — a station can't run two overlapping sessions at once.
       const { conflict, blocked } = updateStationConflictUI();
-      const status = document.getElementById("session-status").value;
+      const status = foodOnly ? "Active" : document.getElementById("session-status").value;
       if (blocked) {
         const conflictWord = conflict.status === "Active" ? "an active" : "a booked";
         return showMessage(`${station} already has ${conflictWord} session (${conflict.customer_name}) that overlaps this time — pick a different time or station.`, true);
@@ -11416,7 +11441,7 @@ Here is the menu image:`;
       button.disabled = true;
       button.classList.add("opacity-60");
 
-      const startTimeStr = document.getElementById("start-time").value;
+      const startTimeStr = foodOnly ? "" : document.getElementById("start-time").value;
       const { total, foodTotal, duration, rate, ctrlCount } = calculateAmount();
       const foodItems = collectFrItems("food-order-list");
       // Inject extra controllers as special food item for persistence
@@ -11426,10 +11451,11 @@ Here is the menu image:`;
       const startIso = startDate ? startDate.toISOString() : null;
       const endIso = startDate ? new Date(startDate.getTime() + duration * 60000).toISOString() : null;
 
-      const extraStations = collectExtraStations("ns");
+      const extraStations = foodOnly ? [] : collectExtraStations("ns");
       const isInternal = !!document.getElementById("ns-is-internal-sale")?.checked;
       const isBrosDisc = !!document.getElementById("ns-bros-internal-discount")?.checked;
       let sessionNotes = document.getElementById("notes").value.trim();
+      if (foodOnly) sessionNotes = [sessionNotes, "[Food Only Sale]"].filter(Boolean).join(" ");
       if (isInternal && !sessionNotes.includes("[Internal Sale]")) {
         sessionNotes = ["[Internal Sale]", sessionNotes].filter(Boolean).join(" ");
       }
@@ -11465,12 +11491,14 @@ Here is the menu image:`;
         if (pendingWaitingId) {
           const waitingId = pendingWaitingId;
           pendingWaitingId = null;
-          await window.sb.from("waiting_list").update({ status: "Seated" }).eq("id", waitingId);
+          if (!foodOnly) await window.sb.from("waiting_list").update({ status: "Seated" }).eq("id", waitingId);
         }
         event.target.reset();
         const nsInternalToggle = document.getElementById("ns-is-internal-sale");
         if (nsInternalToggle) nsInternalToggle.checked = false;
         updateNsInternalSaleState();
+        delete document.getElementById("session-status").dataset.previousStatus;
+        updateNsFoodOnlyState();
         document.getElementById("duration-minutes").value = 60;
         document.getElementById("rate").value = document.getElementById("admin-rate").value;
         document.getElementById("start-time").value = timeInputValue(new Date());
@@ -11482,8 +11510,8 @@ Here is the menu image:`;
         const nsCtrlInp = document.getElementById("ns-extra-controllers");
         if (nsCtrlInp) { nsCtrlInp.value = 0; }
         calculateAmount();
-        showMessage("Session saved.", false);
-        showToast("✅ Session started!");
+        showMessage(foodOnly ? "Food order saved. Collect payment from Billing." : "Session saved.", false);
+        showToast(foodOnly ? "Food order saved — ready for checkout." : "✅ Session started!");
         // Immediately refresh data so overview & records update without waiting for realtime
         fetchSessions();
       } else {
@@ -11789,6 +11817,8 @@ Here is the menu image:`;
     wireCtrlStepper("edit-ctrl-dec", "edit-ctrl-inc", "edit-extra-controllers", recalcEditModal);
 
     calculateAmount();
+
+    document.getElementById("ns-is-food-only").addEventListener("change", updateNsFoodOnlyState);
 
     // ---- New Session Internal Sale wiring ----
     const nsInternalToggle = document.getElementById("ns-is-internal-sale");
