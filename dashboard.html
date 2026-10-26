@@ -30,6 +30,9 @@
     [data-theme="light"] .inv-badge-low { background: #fef3c7; color: #92400e; }
     [data-theme="light"] .inv-badge-out { background: #ffe4e6; color: #9f1239; }
     .inventory-page [hidden] { display: none !important; }
+    #page-food-partners #partner-settings-form > div > div { background: var(--panel-soft) !important; }
+    [data-theme="light"] #page-food-partners .text-amber-300 { color: #92400e !important; }
+    [data-theme="light"] #page-food-partners .text-purple-300 { color: #6b21a8 !important; }
     /* ===== DARK THEME (default) ===== */
     :root, [data-theme="dark"] {
       color-scheme: dark;
@@ -1038,6 +1041,7 @@
         <a href="#" data-page="page-inventory" class="sidebar-link"><i data-lucide="package" width="16" height="16"></i>Inventory</a>
         <p class="sidebar-group-label admin-only">Admin</p>
         <a href="#" data-page="page-revenue" class="sidebar-link admin-only"><i data-lucide="banknote" width="16" height="16"></i>Revenue</a>
+        <a href="#" data-page="page-food-partners" class="sidebar-link admin-only"><i data-lucide="store" width="16" height="16"></i>Food Sources &amp; Partners</a>
         <a href="#" data-page="page-expenses" class="sidebar-link admin-only"><i data-lucide="receipt" width="16" height="16"></i>Expenses &amp; Capital</a>
         <a href="#" data-page="page-notices" class="sidebar-link admin-only"><i data-lucide="megaphone" width="16" height="16"></i>Notices &amp; Events</a>
         <a href="#" data-page="page-tournaments" class="sidebar-link admin-only"><i data-lucide="trophy" width="16" height="16"></i>Tournaments</a>
@@ -1161,13 +1165,13 @@
               <p class="text-sm text-slate-400 mt-1">Food orders</p>
             </article>
 
-            <article id="kpi-card-revenue" class="panel rounded-2xl p-4 cursor-pointer hover:border-[#d8ff45]/60 hover:shadow-lg transition transform hover:-translate-y-0.5 group" title="Click to view today's revenue breakdown">
+            <article id="kpi-card-revenue" class="panel rounded-2xl p-4 cursor-pointer hover:border-[#d8ff45]/60 hover:shadow-lg transition transform hover:-translate-y-0.5 group" title="Click to view today's customer collections">
               <div class="flex items-center justify-between">
                 <i data-lucide="banknote" class="text-[#d8ff45]" width="19" height="19"></i>
                 <span class="text-[10px] text-slate-500 group-hover:text-[#d8ff45] flex items-center gap-0.5 transition font-semibold">Details <i data-lucide="chevron-right" width="12" height="12"></i></span>
               </div>
               <p id="today-revenue" class="mono text-2xl font-bold mt-4">रु 0</p>
-              <p class="text-sm text-slate-400 mt-1">Revenue today</p>
+              <p class="text-sm text-slate-400 mt-1">Collected today (gross)</p>
             </article>
           </div>
 
@@ -1315,7 +1319,7 @@
                         <span class="text-xs font-bold text-slate-200">Internal / Staff / Owner Sale</span>
                         <span id="ns-internal-badge" class="hidden text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 uppercase tracking-wider">Internal</span>
                       </div>
-                      <p class="text-[11px] text-slate-400 mt-0.5">Staff consumption, owner use, partner session. 0% cafe commission on Bro's Burger orders.</p>
+                      <p class="text-[11px] text-slate-400 mt-0.5">Staff consumption, owner use, or partner session. Supplier costs come from the actual daily bill.</p>
                     </div>
                   </div>
                   <label class="relative inline-flex items-center cursor-pointer shrink-0">
@@ -1337,7 +1341,7 @@
                 <div id="ns-bros-discount-wrap" class="hidden flex items-center justify-between pt-2 mt-2.5 border-t border-slate-700/60 text-xs">
                   <div class="flex items-center gap-2">
                     <span class="text-amber-400 font-bold">🍔 Bro's Burger 20% Staff Discount</span>
-                    <span class="text-[10px] text-slate-400">(0% cafe commission — pay only Bro's Burger cost price)</span>
+                    <span class="text-[10px] text-slate-400">(customer discount; supplier billed separately)</span>
                   </div>
                   <label class="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white">
                     <input type="checkbox" id="ns-bros-internal-discount" class="rounded accent-[#d8ff45]" checked>
@@ -1710,7 +1714,7 @@
               </div>
               <p id="revenue-total" class="mono text-2xl font-bold mt-3 group-hover:text-[#d8ff45] transition">रु 0</p>
               <div class="flex items-center justify-between text-xs text-slate-400 mt-1">
-                <span id="rev-kpi-desc">Time + Own Food + Commissions</span>
+                <span id="rev-kpi-desc">Time + own food + actual partner margins</span>
                 <span>Gross collected: <strong id="revenue-gross-total" class="mono text-slate-200">रु 0</strong></span>
               </div>
             </article>
@@ -1731,7 +1735,7 @@
                   <p id="rev-kpi-food-net" class="mono text-lg font-bold text-[#d8ff45]">रु 0</p>
                 </div>
               </div>
-              <p class="text-[11px] text-slate-500 mt-1.5">Own drinks/snacks (100%) + partner comm</p>
+              <p class="text-[11px] text-slate-500 mt-1.5">Own food collections + actual partner margins</p>
             </article>
 
             <!-- Station Gameplay Time Revenue -->
@@ -1783,6 +1787,7 @@
             </article>
           </div>
 
+          <p id="rev-food-bill-notice" class="text-xs text-slate-400 my-3"></p>
           <!-- Filtered Sessions Breakdown Table -->
           <div id="rev-sessions-breakdown-panel" class="panel rounded-2xl p-5 mb-5 transition-all">
             <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
@@ -1883,92 +1888,7 @@
             </div>
           </div>
 
-          <!-- Partner Restaurant Food Sales & Settlements -->
-          <div id="rev-restaurant-partnerships" class="panel rounded-2xl p-5 mt-5 transition-all">
-            <div class="flex items-center justify-between mb-4">
-              <div>
-                <h3 class="font-bold text-lg flex items-center gap-2">
-                  <i data-lucide="utensils" width="18" height="18" class="text-[#d8ff45]"></i> Restaurant Partnerships &amp; Food Revenue
-                </h3>
-                <p class="text-xs text-slate-400 mt-0.5">Clear breakdown of gross food orders, ChillPill's 20% commission profit, and partner restaurant payables.</p>
-              </div>
-            </div>
-            <div class="grid sm:grid-cols-3 gap-4">
-              <!-- ChillPill Own Food -->
-              <div id="rev-card-chillpill" class="bg-[#111722] border border-slate-700/80 rounded-xl p-4 cursor-pointer hover:border-[#d8ff45]/60 transition group" title="Click to filter revenue by ChillPill food">
-                <div class="flex items-center justify-between">
-                  <span class="text-xs text-[#d8ff45] font-bold">🏠 ChillPill Own Food</span>
-                  <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#d8ff45]/20 text-[#d8ff45]">100% Cafe Profit</span>
-                </div>
-                <p id="rev-food-chillpill-total" class="mono text-2xl font-bold text-[#d8ff45] mt-2 group-hover:scale-105 transition-transform">रु 0</p>
-                <p class="text-[11px] text-slate-500 mt-1">Direct cafe drinks &amp; snacks sales</p>
-                <div class="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between">
-                  <span class="text-[10px] text-slate-400 group-hover:text-white transition">Filter by ChillPill &rarr;</span>
-                </div>
-              </div>
-              <!-- Bro's Burger -->
-              <div id="rev-card-bros" class="bg-[#111722] border border-amber-500/30 rounded-xl p-4 transition group">
-                <div class="flex items-center justify-between cursor-pointer" id="rev-filter-click-bros" title="Click to filter revenue by Bro's Burger">
-                  <span class="text-xs text-amber-300 font-bold group-hover:text-amber-200 transition">🍔 Bro's Burger</span>
-                  <span id="rev-bros-comm-rate-badge" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">20% Comm</span>
-                </div>
-                <div class="mt-2 flex items-baseline justify-between">
-                  <div>
-                    <span class="text-[11px] text-slate-400">Cafe Commission</span>
-                    <p id="rev-bros-commission-total" class="mono text-xl font-bold text-[#d8ff45]">रु 0</p>
-                  </div>
-                  <div class="text-right">
-                    <span class="text-[11px] text-slate-400">Total Payable</span>
-                    <p id="rev-bros-payable-total" class="mono text-xl font-bold text-amber-300">रु 0</p>
-                  </div>
-                </div>
-                <!-- Settlement Status Bar -->
-                <div class="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
-                  <span class="text-slate-400">Settled: <strong id="rev-bros-settled-total" class="mono text-emerald-400 font-semibold">रु 0</strong></span>
-                  <span class="text-slate-400">Pending: <strong id="rev-bros-pending-total" class="mono text-rose-300 font-bold">रु 0</strong></span>
-                </div>
-                <div class="mt-2 flex items-center justify-between gap-1.5 pt-1">
-                  <button type="button" id="btn-settle-bros" class="px-2 py-1 rounded-lg text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition flex items-center gap-1 cursor-pointer">
-                    <i data-lucide="hand-coins" width="12" height="12"></i> <span>Record Payment</span>
-                  </button>
-                  <button type="button" id="btn-history-bros" class="px-2 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 transition flex items-center gap-1 cursor-pointer">
-                    <i data-lucide="history" width="12" height="12"></i> <span>History</span>
-                  </button>
-                </div>
-              </div>
-              <!-- Bardali -->
-              <div id="rev-card-bardali" class="bg-[#111722] border border-purple-500/30 rounded-xl p-4 transition group">
-                <div class="flex items-center justify-between cursor-pointer" id="rev-filter-click-bardali" title="Click to filter revenue by Bardali">
-                  <span class="text-xs text-purple-300 font-bold group-hover:text-purple-200 transition">🍽️ Bardali</span>
-                  <span id="rev-bardali-comm-rate-badge" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">0% Comm</span>
-                </div>
-                <div class="mt-2 flex items-baseline justify-between">
-                  <div>
-                    <span class="text-[11px] text-slate-400">Cafe Commission</span>
-                    <p id="rev-bardali-commission-total" class="mono text-xl font-bold text-[#d8ff45]">रु 0</p>
-                  </div>
-                  <div class="text-right">
-                    <span class="text-[11px] text-slate-400">Total Payable</span>
-                    <p id="rev-bardali-payable-total" class="mono text-xl font-bold text-purple-300">रु 0</p>
-                  </div>
-                </div>
-                <!-- Settlement Status Bar -->
-                <div class="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
-                  <span class="text-slate-400">Settled: <strong id="rev-bardali-settled-total" class="mono text-emerald-400 font-semibold">रु 0</strong></span>
-                  <span class="text-slate-400">Pending: <strong id="rev-bardali-pending-total" class="mono text-rose-300 font-bold">रु 0</strong></span>
-                </div>
-                <div class="mt-2 flex items-center justify-between gap-1.5 pt-1">
-                  <button type="button" id="btn-settle-bardali" class="px-2 py-1 rounded-lg text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 hover:bg-purple-500/30 transition flex items-center gap-1 cursor-pointer">
-                    <i data-lucide="hand-coins" width="12" height="12"></i> <span>Record Payment</span>
-                  </button>
-                  <button type="button" id="btn-history-bardali" class="px-2 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 transition flex items-center gap-1 cursor-pointer">
-                    <i data-lucide="history" width="12" height="12"></i> <span>History</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
+          <p class="text-sm text-slate-400 mt-4">Manage daily food bills and payments in <a href="#" id="rev-open-food-partners" class="underline">Food Sources &amp; Partners</a>.</p>
           <!-- Tournament Revenue & Profit Audit Panel -->
           <div id="rev-tournament-panel" class="panel rounded-2xl p-5 mt-5 transition-all">
             <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -2101,6 +2021,82 @@
         </section>
 
         <!-- ===================== EXPENSES & CAPITAL (admin) ===================== -->
+<section id="page-food-partners" class="page-view inventory-page">
+ <div class="flex flex-wrap items-start justify-between gap-3 mb-4"><div><h2 class="text-2xl font-bold">Food Sources &amp; Partners</h2><p class="inv-muted text-sm mt-1">Track orders, actual supplier bills, cafe earnings, and payments.</p></div><div class="flex gap-2"><button id="fp-refresh" type="button" class="inv-button">Refresh</button><button id="fp-new-bill" type="button" class="inv-button inv-primary">+ Supplier bill</button></div></div>
+ <div id="fp-status" class="inv-notice mb-3" role="status" hidden></div>
+ <div id="fp-setup" class="inv-notice mb-4" hidden><strong>Enable daily partner bills</strong><p class="text-sm mt-1">Run the food-partner migration once in Supabase SQL Editor. Existing orders and payouts are preserved.</p><a href="supabase/migrations/20261026_food_partner_bills.sql" download class="underline text-sm">Download setup SQL</a><button id="fp-copy-sql" type="button" class="inv-button ml-2">Copy setup SQL</button></div>
+ <div class="inv-surface p-4 mb-4"><div class="flex flex-wrap items-end gap-3"><label class="text-xs">From<input id="fp-start" type="date" class="form-control mt-1"></label><label class="text-xs">Through<input id="fp-end" type="date" class="form-control mt-1"></label><label class="text-xs flex-1">Source<select id="fp-source-filter" class="form-control mt-1"><option value="">All food sources</option></select></label><button id="fp-today" type="button" class="inv-button">Today</button><button id="fp-all" type="button" class="inv-button">All time</button></div><p class="text-xs inv-muted mt-2">Days follow Nepal time and the session's start date. For partially paid or mixed gaming/food bills, collections are allocated proportionally. ChillPill food figures are before stock and operating costs.</p></div>
+ <div id="fp-source-cards" class="grid md:grid-cols-3 gap-3 mb-4"></div>
+ <p class="text-xs inv-muted mb-4">Partner earnings = customer collections − actual supplier bill. Missing bills remain pending; no percentage commission is assumed. Paying the bill changes the amount outstanding, not the earnings a second time.</p>
+ <div class="inv-surface p-4 mb-4"><h3 class="font-bold mb-2">Daily source bills &amp; balances</h3><div class="overflow-x-auto"><table class="inv-table w-full text-sm"><thead><tr><th>Day / source</th><th>Orders</th><th>Collected</th><th>Supplier bill</th><th>Cafe retained</th><th>Paid / due</th><th>Actions</th></tr></thead><tbody id="fp-days"></tbody></table></div><p id="fp-empty" class="text-sm inv-muted py-4" hidden>No food orders or bills in this period.</p></div>
+ <form id="fp-bill-form" class="inv-surface p-4 mb-4" hidden><h3 class="font-bold mb-3" id="fp-bill-title">Record supplier bill</h3><div class="grid sm:grid-cols-3 gap-3"><label class="text-xs">Partner<select id="fp-bill-source" class="form-control mt-1" required></select></label><label class="text-xs">Order day<input id="fp-bill-date" type="date" class="form-control mt-1" required></label><label class="text-xs">Actual bill after discount (रु)<input id="fp-bill-amount" type="number" min="0" step="0.01" class="form-control mt-1" required></label><label class="text-xs">Bill reference<input id="fp-bill-reference" class="form-control mt-1" maxlength="120"></label><label class="text-xs sm:col-span-2">Notes<input id="fp-bill-notes" class="form-control mt-1" maxlength="500"></label></div><p class="text-xs inv-muted mt-2">Example: 2 milk teas collected at रु 40 each, supplier bill रु 50 → cafe retained रु 30. A रु 0 bill is allowed when the partner waives it.</p><p id="fp-bill-message" class="inv-error text-sm mt-2" role="status"></p><div class="flex gap-2 mt-3"><button class="inv-button inv-primary" id="fp-bill-save" type="submit">Save bill</button><button class="inv-button" type="button" data-fp-close="fp-bill-form">Cancel</button></div></form>
+ <form id="fp-pay-form" class="inv-surface p-4 mb-4" hidden><h3 class="font-bold" id="fp-pay-title">Record partner payment</h3><p id="fp-pay-due" class="text-sm inv-muted mt-1 mb-3"></p><div class="grid sm:grid-cols-3 gap-3"><label class="text-xs sm:col-span-3">Payment record<select id="fp-pay-existing" class="form-control mt-1"><option value="">New payment — record cafe expense</option></select></label><label class="text-xs">Amount paid (रु)<input id="fp-pay-amount" type="number" min="0.01" step="0.01" class="form-control mt-1" required></label><label class="text-xs">Payment date<input id="fp-pay-date" type="date" class="form-control mt-1" required></label><label class="text-xs">Method<select id="fp-pay-method" class="form-control mt-1"><option>Cash</option><option>Online / QR</option></select></label><label class="text-xs sm:col-span-3">Reference / notes<input id="fp-pay-reference" class="form-control mt-1" maxlength="500"></label></div><p class="text-xs inv-muted mt-2">New payments also appear once in Expenses as Partner Payout. You can link a historical payout instead of recording it twice.</p><p id="fp-pay-message" class="inv-error text-sm mt-2" role="status"></p><div class="flex gap-2 mt-3"><button id="fp-pay-save" class="inv-button inv-primary" type="submit">Record payment</button><button class="inv-button" type="button" data-fp-close="fp-pay-form">Cancel</button></div></form>
+ <div class="inv-surface p-4 mb-4"><h3 class="font-bold mb-2">Food items ordered</h3><p class="inv-muted text-xs mb-2">Includes unpaid orders so you can reconcile the partner's bill against everything supplied.</p><div class="overflow-x-auto"><table class="inv-table w-full text-xs"><thead><tr><th>Day / source</th><th>Customer</th><th>Food item</th><th>Quantity</th><th>Ordered value</th><th>Collected allocation</th></tr></thead><tbody id="fp-orders"></tbody></table></div></div>
+ <div class="inv-surface p-4 mb-4"><h3 class="font-bold mb-2">Partner payment history</h3><div class="overflow-x-auto"><table class="inv-table w-full text-xs"><thead><tr><th>Bill day / source</th><th>Paid on</th><th>Amount</th><th>Method / reference</th><th>Recorded by</th><th>Status</th></tr></thead><tbody id="fp-payments"></tbody></table></div></div>
+ <div class="inv-surface p-4 mb-4"><h3 class="font-bold mb-2">Historical payouts not linked to a daily bill</h3><p class="text-xs inv-muted mb-2">These existing records remain in Expenses. Use “Record payment” on the appropriate bill and select the old payout to link it without creating another expense.</p><div id="fp-legacy" class="text-sm"></div></div>
+ <div class="panel rounded-2xl p-5 md:col-span-2">
+              <div class="flex items-center justify-between mb-3">
+                <div>
+                  <h3 class="font-semibold text-lg flex items-center gap-2">
+                    <i data-lucide="store" width="18" height="18" class="text-[#d8ff45]"></i> Restaurant contacts &amp; menus
+                  </h3>
+                  <p class="text-xs text-slate-400 mt-0.5">Manage restaurant WhatsApp dispatch numbers and import menus. Actual revenue uses daily supplier bills. Customer bills do not display restaurant names.</p>
+                </div>
+              </div>
+              <form id="partner-settings-form" class="space-y-4">
+                <div class="grid sm:grid-cols-2 gap-4">
+                  <!-- Bro's Burger Card -->
+                  <div class="rounded-xl border border-amber-500/30 bg-[#161d2a] p-4">
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="font-bold text-sm text-amber-300 flex items-center gap-1.5">🍔 Bro's Burger</span>
+                      <div class="flex items-center gap-1.5">
+                        <button type="button" class="bulk-import-partner-btn text-[11px] font-bold text-sky-300 border border-sky-500/40 rounded-lg px-2 py-0.5 hover:bg-sky-500/10 flex items-center gap-1 transition" data-supplier="bros_burger" title="Bulk import Bro's Burger menu">
+                          <i data-lucide="upload" width="11" height="11"></i>Import Menu
+                        </button>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">Actual daily bill</span>
+                      </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                      <input id="partner-bros-commission" type="hidden" min="0" max="100" value="0" class="form-control text-xs py-1.5 mono font-semibold">
+                      <div>
+                        <label class="block text-slate-400 mb-1" for="partner-bros-phone">WhatsApp Number</label>
+                        <input id="partner-bros-phone" type="text" value="+977 9841268666" class="form-control text-xs py-1.5" required>
+                      </div>
+                    </div>
+                    <p class="text-[11px] text-slate-400 mt-2">Enter the actual discounted supplier bill above at the end of each day.</p>
+                  </div>
+
+                  <!-- Bardali Card -->
+                  <div class="rounded-xl border border-purple-500/30 bg-[#161d2a] p-4">
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="font-bold text-sm text-purple-300 flex items-center gap-1.5">🍽️ Bardali</span>
+                      <div class="flex items-center gap-1.5">
+                        <button type="button" class="bulk-import-partner-btn text-[11px] font-bold text-sky-300 border border-sky-500/40 rounded-lg px-2 py-0.5 hover:bg-sky-500/10 flex items-center gap-1 transition" data-supplier="bardali" title="Bulk import Bardali menu">
+                          <i data-lucide="upload" width="11" height="11"></i>Import Menu
+                        </button>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40">Actual daily bill</span>
+                      </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                      <input id="partner-bardali-commission" type="hidden" min="0" max="100" value="0" class="form-control text-xs py-1.5 mono font-semibold">
+                      <div>
+                        <label class="block text-slate-400 mb-1" for="partner-bardali-phone">WhatsApp Number</label>
+                        <input id="partner-bardali-phone" type="text" placeholder="Enter number when confirmed..." class="form-control text-xs py-1.5">
+                      </div>
+                    </div>
+                    <p class="text-[11px] text-slate-400 mt-2">Record the submitted daily bill without any assumed commission.</p>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between pt-1">
+                  <span id="partner-settings-msg" class="text-xs min-h-4"></span>
+                  <button type="submit" class="rounded-xl px-4 py-2 font-bold text-xs cursor-pointer hover:brightness-110 transition flex items-center gap-1.5" style="background:#d8ff45;color:#10141e;">
+                    <i data-lucide="save" width="14" height="14"></i> Save Restaurant Settings
+                  </button>
+                </div>
+              </form>
+            </div>
+</section>
+
         <section id="page-expenses" class="page-view">
           <!-- Top Overview KPI Cards -->
           <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -2854,8 +2850,8 @@
                     <label class="block text-xs text-slate-400 mb-1" for="menu-supplier">Food Source / Restaurant</label>
                     <select id="menu-supplier" class="form-control text-xs font-semibold">
                       <option value="chillpill" selected>ChillPill Cafe (Own Drinks/Snacks · 100% Revenue)</option>
-                      <option value="bros_burger">Bro's Burger (Partner · 20% Commission)</option>
-                      <option value="bardali">Bardali (Partner · 0% Commission)</option>
+                      <option value="bros_burger">Bro's Burger (daily supplier bill)</option>
+                      <option value="bardali">Bardali (daily supplier bill)</option>
                     </select>
                   </div>
                   <div>
@@ -2871,75 +2867,7 @@
               </form>
             </div>
 
-            <!-- Partner Restaurants & Commission Settings Panel -->
-            <div class="panel rounded-2xl p-5 md:col-span-2">
-              <div class="flex items-center justify-between mb-3">
-                <div>
-                  <h3 class="font-semibold text-lg flex items-center gap-2">
-                    <i data-lucide="store" width="18" height="18" class="text-[#d8ff45]"></i> Partner Restaurants &amp; Food Commissions
-                  </h3>
-                  <p class="text-xs text-slate-400 mt-0.5">Manage partner restaurant commission rates and WhatsApp dispatch numbers. Customer bills do not display restaurant names.</p>
-                </div>
-              </div>
-              <form id="partner-settings-form" class="space-y-4">
-                <div class="grid sm:grid-cols-2 gap-4">
-                  <!-- Bro's Burger Card -->
-                  <div class="rounded-xl border border-amber-500/30 bg-[#161d2a] p-4">
-                    <div class="flex items-center justify-between mb-2">
-                      <span class="font-bold text-sm text-amber-300 flex items-center gap-1.5">🍔 Bro's Burger</span>
-                      <div class="flex items-center gap-1.5">
-                        <button type="button" class="bulk-import-partner-btn text-[11px] font-bold text-sky-300 border border-sky-500/40 rounded-lg px-2 py-0.5 hover:bg-sky-500/10 flex items-center gap-1 transition" data-supplier="bros_burger" title="Bulk import Bro's Burger menu">
-                          <i data-lucide="upload" width="11" height="11"></i>Import Menu
-                        </button>
-                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">20% Partner Discount</span>
-                      </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <label class="block text-slate-400 mb-1" for="partner-bros-commission">ChillPill Revenue (%)</label>
-                        <input id="partner-bros-commission" type="number" min="0" max="100" value="20" class="form-control text-xs py-1.5 mono font-semibold" required>
-                      </div>
-                      <div>
-                        <label class="block text-slate-400 mb-1" for="partner-bros-phone">WhatsApp Number</label>
-                        <input id="partner-bros-phone" type="text" value="+977 9841268666" class="form-control text-xs py-1.5" required>
-                      </div>
-                    </div>
-                    <p class="text-[11px] text-slate-400 mt-2">Agreed 20% discount price. ChillPill retains 20% as commission revenue on all Bro's Burger orders.</p>
-                  </div>
-
-                  <!-- Bardali Card -->
-                  <div class="rounded-xl border border-purple-500/30 bg-[#161d2a] p-4">
-                    <div class="flex items-center justify-between mb-2">
-                      <span class="font-bold text-sm text-purple-300 flex items-center gap-1.5">🍽️ Bardali</span>
-                      <div class="flex items-center gap-1.5">
-                        <button type="button" class="bulk-import-partner-btn text-[11px] font-bold text-sky-300 border border-sky-500/40 rounded-lg px-2 py-0.5 hover:bg-sky-500/10 flex items-center gap-1 transition" data-supplier="bardali" title="Bulk import Bardali menu">
-                          <i data-lucide="upload" width="11" height="11"></i>Import Menu
-                        </button>
-                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40">Default 0%</span>
-                      </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <label class="block text-slate-400 mb-1" for="partner-bardali-commission">ChillPill Revenue (%)</label>
-                        <input id="partner-bardali-commission" type="number" min="0" max="100" value="0" class="form-control text-xs py-1.5 mono font-semibold" required>
-                      </div>
-                      <div>
-                        <label class="block text-slate-400 mb-1" for="partner-bardali-phone">WhatsApp Number</label>
-                        <input id="partner-bardali-phone" type="text" placeholder="Enter number when confirmed..." class="form-control text-xs py-1.5">
-                      </div>
-                    </div>
-                    <p class="text-[11px] text-slate-400 mt-2">Commission rate: 0% (admin editable). WhatsApp ordering will activate when number is provided.</p>
-                  </div>
-                </div>
-                <div class="flex items-center justify-between pt-1">
-                  <span id="partner-settings-msg" class="text-xs min-h-4"></span>
-                  <button type="submit" class="rounded-xl px-4 py-2 font-bold text-xs cursor-pointer hover:brightness-110 transition flex items-center gap-1.5" style="background:#d8ff45;color:#10141e;">
-                    <i data-lucide="save" width="14" height="14"></i> Save Restaurant Settings
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
+            <!-- Partner Restaurants & Commission Settings Panel -->          </div>
           <div class="panel rounded-2xl p-5 mt-5">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
@@ -3452,7 +3380,7 @@
       <div id="qf-bros-discount-wrap" class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 mt-3 flex items-center justify-between text-xs">
         <div class="flex items-center gap-2">
           <span class="text-amber-400 font-bold">🍔 Bro's Burger 20% Staff Discount</span>
-          <span class="text-[10px] text-slate-400">(0% cafe commission)</span>
+          <span class="text-[10px] text-slate-400">(supplier billed separately)</span>
         </div>
         <label class="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white">
           <input type="checkbox" id="qf-bros-internal-discount" class="rounded accent-[#d8ff45]">
@@ -3607,7 +3535,7 @@
         <div id="edit-bros-discount-wrap" class="hidden flex items-center justify-between pt-2 mt-2.5 border-t border-slate-700/60 text-xs">
           <div class="flex items-center gap-2">
             <span class="text-amber-400 font-bold">🍔 Bro's Burger 20% Staff Discount</span>
-            <span class="text-[10px] text-slate-400">(0% cafe commission on internal orders)</span>
+            <span class="text-[10px] text-slate-400">(supplier billed separately)</span>
           </div>
           <label class="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white">
             <input type="checkbox" id="edit-bros-internal-discount" class="rounded accent-[#d8ff45]" checked>
@@ -3915,7 +3843,7 @@
           <div id="mr-bros-discount-wrap" class="hidden flex items-center justify-between pt-2 mt-2.5 border-t border-slate-700/60 text-xs">
             <div class="flex items-center gap-2">
               <span class="text-amber-400 font-bold">🍔 Bro's Burger 20% Staff Discount</span>
-              <span class="text-[10px] text-slate-400">(0% cafe commission on internal orders)</span>
+              <span class="text-[10px] text-slate-400">(supplier billed separately)</span>
             </div>
             <label class="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white">
               <input type="checkbox" id="mr-bros-internal-discount" class="rounded accent-[#d8ff45]" checked>
@@ -4509,7 +4437,7 @@
         <div class="flex items-center justify-between gap-2">
           <div class="flex items-center gap-2">
             <span class="text-amber-400 text-xs font-bold">🍔 Bro's Burger 20% Staff Discount</span>
-            <span class="text-[10px] text-slate-400">(0% cafe commission)</span>
+            <span class="text-[10px] text-slate-400">(supplier billed separately)</span>
           </div>
           <label class="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white">
             <input type="checkbox" id="cust-collect-bros-discount" class="rounded accent-[#d8ff45]">
@@ -4517,7 +4445,7 @@
           </label>
         </div>
         <p id="cust-collect-bros-note" class="text-[11px] text-slate-400">
-          Deduct ChillPill's 20% commission on Bro's Burger food so staff/owner only pays Bro's Burger cost price.
+          Optional customer-price discount for staff/owner orders. The supplier amount is entered from the actual daily bill.
         </p>
       </div>
 
@@ -4580,7 +4508,7 @@
             <i data-lucide="utensils" width="18" height="18"></i>
           </span>
           <div>
-            <h3 class="font-bold text-lg text-white">Edit Food Items, Prices &amp; Partner Costs</h3>
+            <h3 class="font-bold text-lg text-white">Edit Food Items &amp; Prices</h3>
             <p id="rev-food-edit-subtitle" class="text-xs text-slate-400">Update items, customer prices and custom vendor payable</p>
           </div>
         </div>
@@ -4590,7 +4518,7 @@
       <div class="rounded-xl p-3 bg-amber-500/10 border border-amber-500/25 mb-4 text-xs text-amber-200/90 flex items-start gap-2">
         <i data-lucide="info" width="15" height="15" class="text-amber-400 shrink-0 mt-0.5"></i>
         <div>
-          <span>Set customer price and custom partner cost. If partner cost is left empty, standard commission % applies. (E.g. Milk Tea: customer price Rs. 40, partner cost Rs. 25 &rarr; Cafe profit Rs. 15).</span>
+          <span>Edit the items and customer prices here. Supplier costs and cafe earnings are reconciled from actual daily bills in Food Sources &amp; Partners.</span>
         </div>
       </div>
 
@@ -4611,7 +4539,7 @@
           <p id="rev-food-edit-total-gross" class="mono font-bold text-base text-amber-300 mt-0.5">रु 0</p>
         </div>
         <div>
-          <span class="text-[11px] text-slate-400 block font-medium">Partner Cost (Payable)</span>
+          <span class="text-[11px] text-slate-400 block font-medium">Allocated Supplier Bill</span>
           <p id="rev-food-edit-total-payable" class="mono font-bold text-base text-purple-300 mt-0.5">रु 0</p>
         </div>
         <div>
@@ -4630,108 +4558,6 @@
           <i data-lucide="check" width="16" height="16"></i> Save Food &amp; Price Changes
         </button>
         <button id="rev-food-edit-cancel-btn" type="button" class="w-full rounded-xl py-2 text-xs font-semibold text-slate-400 hover:text-white border border-slate-700 hover:border-slate-600 transition cursor-pointer">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===================== PARTNER FOOD SETTLEMENT MODAL ===================== -->
-  <div id="partner-settlement-modal" class="modal-overlay">
-    <div class="panel rounded-2xl p-6 w-full max-w-lg" style="max-height:90vh; overflow-y:auto;">
-      <div class="flex items-center justify-between pb-3 border-b border-slate-700/80 mb-4">
-        <div class="flex items-center gap-2.5">
-          <span class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30">
-            <i data-lucide="hand-coins" width="18" height="18"></i>
-          </span>
-          <div>
-            <h3 class="font-bold text-lg text-white">Record Partner Bill Settlement</h3>
-            <p class="text-xs text-slate-400">Record food payment made from cafe revenue to partner restaurant</p>
-          </div>
-        </div>
-        <button id="partner-settlement-close" type="button" class="text-slate-400 hover:text-white text-xl p-1 leading-none cursor-pointer">✕</button>
-      </div>
-
-      <form id="partner-settlement-form" class="space-y-4">
-        <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1" for="settlement-partner">Food Supplier / Restaurant *</label>
-          <select id="settlement-partner" class="form-control text-xs font-semibold w-full" required>
-            <option value="bros_burger">🍔 Bro's Burger</option>
-            <option value="bardali">🍽️ Bardali</option>
-            <option value="other">📦 Other Food Supplier</option>
-          </select>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-semibold text-slate-300 mb-1" for="settlement-amount">Amount Paid (रु) *</label>
-            <input id="settlement-amount" type="number" min="1" step="1" class="form-control mono text-sm font-bold w-full" placeholder="e.g. 1500" required>
-            <span id="settlement-pending-hint" class="text-[10px] text-amber-300 mt-1 block">Current pending: रु 0</span>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-300 mb-1" for="settlement-date">Payment Date *</label>
-            <input id="settlement-date" type="date" class="form-control text-xs w-full mono" required>
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1" for="settlement-method">Paid Via *</label>
-          <select id="settlement-method" class="form-control text-xs font-semibold w-full">
-            <option value="Cash">Cash (from Cafe Cash Drawer)</option>
-            <option value="Online">Online / Fonepay / QR Transfer</option>
-            <option value="Bank Transfer">Bank Account Transfer</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1" for="settlement-ref">Covered Period / Bill Reference (Optional)</label>
-          <input id="settlement-ref" type="text" class="form-control text-xs w-full" placeholder="e.g. Bill #1042 · Settled Oct 20-26 orders">
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1" for="settlement-notes">Additional Notes</label>
-          <textarea id="settlement-notes" rows="2" class="form-control text-xs w-full" placeholder="e.g. Paid in full to Dai"></textarea>
-        </div>
-
-        <div class="space-y-2 pt-2 border-t border-slate-700/80">
-          <button type="submit" class="w-full rounded-xl py-2.5 font-bold text-sm flex items-center justify-center gap-2 bg-purple-500 hover:bg-purple-600 text-white shadow transition cursor-pointer">
-            <i data-lucide="check-circle" width="16" height="16"></i> Confirm Settlement Payment
-          </button>
-          <button id="partner-settlement-cancel" type="button" class="w-full rounded-xl py-2 text-xs font-semibold text-slate-400 hover:text-white border border-slate-700 hover:border-slate-600 transition cursor-pointer">Cancel</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- ===================== PARTNER SETTLEMENT HISTORY MODAL ===================== -->
-  <div id="partner-history-modal" class="modal-overlay">
-    <div class="panel rounded-2xl p-6 w-full max-w-2xl" style="max-height:90vh; overflow-y:auto;">
-      <div class="flex items-center justify-between pb-3 border-b border-slate-700/80 mb-4">
-        <div class="flex items-center gap-2.5">
-          <span class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-slate-800 text-slate-300 border border-slate-700">
-            <i data-lucide="history" width="18" height="18"></i>
-          </span>
-          <div>
-            <h3 id="partner-history-title" class="font-bold text-lg text-white">Settlement History</h3>
-            <p class="text-xs text-slate-400">All recorded payouts made to food supplier</p>
-          </div>
-        </div>
-        <button id="partner-history-close" type="button" class="text-slate-400 hover:text-white text-xl p-1 leading-none cursor-pointer">✕</button>
-      </div>
-
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-left text-xs text-slate-400 border-b border-slate-700">
-              <th class="pb-2.5 pr-3">Date</th>
-              <th class="pb-2.5 pr-3">Partner</th>
-              <th class="pb-2.5 pr-3">Method</th>
-              <th class="pb-2.5 pr-3">Reference / Notes</th>
-              <th class="pb-2.5 pr-3 text-right">Amount Paid</th>
-              <th class="pb-2.5 text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody id="partner-history-table-body" class="divide-y divide-slate-800"></tbody>
-        </table>
-        <p id="partner-history-empty" class="hidden text-sm text-slate-500 py-6 text-center italic">No settlement payments recorded for this supplier yet.</p>
       </div>
     </div>
   </div>
@@ -5521,6 +5347,8 @@
   <script src="assets/js/config.local.js" onerror="console.info('[ChillPill] No config.local.js override found — using assets/js/config.js placeholders.')"></script>
   <script src="assets/js/supabaseClient.js"></script>
   <script src="assets/js/passwordHash.js"></script>
+  <script src="assets/js/food-partner-math.js?v=20261026_01"></script>
+  <script src="assets/js/food-partners.js?v=20261026_01"></script>
   <script src="assets/js/inventory.js?v=20261026_01"></script>
   <script src="assets/js/dashboard.js?v=20261026_02"></script>
   <script src="assets/js/tournament.js?v=20260930"></script>

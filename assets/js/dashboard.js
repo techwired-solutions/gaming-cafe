@@ -8,7 +8,7 @@
   const CFG = window.APP_CONFIG || {};
   const ALERT_MS = (CFG.ALERT_MINUTES_BEFORE_END || 5) * 60 * 1000;
   const OVERTIME_GRACE_MINUTES = CFG.OVERTIME_GRACE_MINUTES != null ? Number(CFG.OVERTIME_GRACE_MINUTES) : 5;
-  const ADMIN_ONLY_PAGES = new Set(["page-revenue", "page-expenses", "page-notices", "page-menu", "page-content", "page-linkypot", "page-staff"]);
+  const ADMIN_ONLY_PAGES = new Set(["page-revenue", "page-food-partners", "page-expenses", "page-notices", "page-menu", "page-content", "page-linkypot", "page-staff"]);
 
   let menuItems = [];
   let records = [];
@@ -881,8 +881,8 @@
         });
       }
     } else if (category === "revenue") {
-      title = "Today's Revenue Breakdown";
-      subtitle = "Detailed breakdown of all income collected on today's date";
+      title = "Today's Customer Collections";
+      subtitle = "Gross customer collections. Actual supplier bills are accounted for in Revenue and Food Sources & Partners.";
       iconName = "banknote";
       iconColorClass = "text-[#d8ff45] bg-[#d8ff45]/20 border-[#d8ff45]/30";
 
@@ -1144,8 +1144,8 @@
         brosCheckbox.checked = isInternal && brosDiscountAvailable > 0;
         if (brosNote) {
           brosNote.textContent = brosDiscountAvailable > 0
-            ? `Bro's Burger food: ${inr(brosTotalGross)}. 20% discount saves ${inr(brosDiscountAvailable)} (0% ChillPill commission). Staff/owner pays Bro's cost price only.`
-            : `Deduct ChillPill's 20% commission on Bro's Burger food so staff/owner pays only Bro's cost price.`;
+            ? `Bro's Burger food: ${inr(brosTotalGross)}. Optional 20% customer discount saves ${inr(brosDiscountAvailable)}. The actual supplier bill is recorded separately.`
+            : `Optional staff/owner customer-price discount. The actual supplier bill is recorded separately.`;
         }
       } else {
         brosCard.classList.add("hidden");
@@ -1652,9 +1652,9 @@
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const brosComm = Math.max(0, Math.min(100, Number(document.getElementById("partner-bros-commission").value) || 20));
+      const brosComm = 0; // Partner revenue now uses actual daily bills.
       const brosPhone = (document.getElementById("partner-bros-phone").value || "").trim();
-      const bardaliComm = Math.max(0, Math.min(100, Number(document.getElementById("partner-bardali-commission").value) || 0));
+      const bardaliComm = 0;
       const bardaliPhone = (document.getElementById("partner-bardali-phone").value || "").trim();
 
       partnerSettings.bros_burger.commission = brosComm;
@@ -2527,13 +2527,11 @@
 
     function renderViewMode() {
       const supplier = item.supplier || "chillpill";
-      const brosComm = partnerSettings ? partnerSettings.bros_burger_commission : 20;
-      const bardaliComm = partnerSettings ? partnerSettings.bardali_commission : 0;
       const supplierBadge = supplier === "bros_burger"
-        ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 font-semibold">🍔 Bro's Burger (${brosComm}%)</span>`
+        ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 font-semibold">🍔 Bro's Burger · actual bill</span>`
         : supplier === "bardali"
-        ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 shrink-0 font-semibold">🍽️ Bardali (${bardaliComm}%)</span>`
-        : `<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 shrink-0 font-semibold">🍟 ChillPill (Own · 100%)</span>`;
+        ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 shrink-0 font-semibold">🍽️ Bardali · actual bill</span>`
+        : `<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 shrink-0 font-semibold">🍟 ChillPill (Own food)</span>`;
 
       line.innerHTML = `
         <div class="flex items-center justify-between gap-2">
@@ -7958,19 +7956,16 @@
   };
 
   function filterRecordByPeriod(r, period, startDate, endDate) {
-    if (period === "range" || (startDate || endDate)) {
-      return recordMatchesDateRange(r, startDate, endDate);
-    }
-    if (period === "today") return isRecordToday(r);
-    const iso = r.start_time || r.end_time || r.created_at || r.paid_at;
-    if (!iso) return false;
-    const ds = getDateStr(iso);
+    const ds=window.FoodPartnerMath.day(r.start_time||r.end_time||r.created_at||r.paid_at);
     if (!ds) return false;
-
-    if (period === "yesterday") return isYesterday(iso);
-    if (period === "month") return isThisMonth(iso);
-    if (period === "custom") return ds === (startDate || revCustomDate);
-    return true; // "all"
+    const today=window.FoodPartnerMath.day(new Date());
+    if (startDate && ds<startDate || endDate && ds>endDate) return false;
+    if (startDate || endDate || period==="range") return true;
+    if (period==="today") return ds===today;
+    if (period==="yesterday") return ds===window.FoodPartnerMath.day(new Date(new Date(today+"T12:00:00+05:45").getTime()-86400000));
+    if (period==="month") return ds.slice(0,7)===today.slice(0,7);
+    if (period==="custom") return ds===revCustomDate;
+    return true;
   }
 
   function getRevPeriodLabel(period, startDate, endDate) {
@@ -8066,126 +8061,7 @@
   }
 
   function computeRecordRevenue(record) {
-    const bd = getRecordPaymentBreakdown(record);
-    if (bd.isWaived && bd.paidAmount === 0) {
-      return {
-        grossAmount: 0,
-        timeRevenue: 0,
-        foodTotal: 0,
-        chillpillFood: 0,
-        brosGross: 0,
-        brosCommission: 0,
-        brosPayable: 0,
-        bardaliGross: 0,
-        bardaliCommission: 0,
-        bardaliPayable: 0,
-        otherFoodGross: 0,
-        otherFoodCommission: 0,
-        otherFoodPayable: 0,
-        netFoodRevenue: 0,
-        netRevenue: 0
-      };
-    }
-
-    const grossAmount = Number(record.amount) || 0;
-    const foodTotal = Number(record.food_total) || 0;
-    const timeRevenue = Math.max(0, grossAmount - foodTotal);
-
-    let chillpillFood = 0;
-    let brosGross = 0;
-    let bardaliGross = 0;
-    let otherFoodGross = 0;
-
-    let brosPayable = 0;
-    let bardaliPayable = 0;
-    let otherFoodPayable = 0;
-
-    let brosCommission = 0;
-    let bardaliCommission = 0;
-    let otherFoodCommission = 0;
-
-    const isInternal = isInternalSaleRecord(record);
-    const defaultBrosRate = isInternal ? 0 : (Number(partnerSettings.bros_burger_commission) || 0);
-    const defaultBardaliRate = Number(partnerSettings.bardali_commission) || 0;
-
-    const items = Array.isArray(record.food_items) ? record.food_items : [];
-    if (items.length > 0) {
-      items.forEach((fi) => {
-        if (!fi || fi.id === "_extra_ctrl" || fi.name === "Item") return;
-        let sup = fi.supplier || fi.source;
-        if (!sup) {
-          const menuItem = menuItems.find((m) => m.id === fi.id || (fi.name && m.name.toLowerCase() === fi.name.toLowerCase()));
-          sup = (menuItem && menuItem.supplier) ? menuItem.supplier : "chillpill";
-        }
-        const qty = Number(fi.qty) || 1;
-        const linePrice = Number(fi.price) || 0;
-        const lineTotal = linePrice * qty;
-
-        // Custom partner cost override check (per unit or total)
-        const hasCustomCost = (fi.partner_cost != null && fi.partner_cost !== "" && !isNaN(Number(fi.partner_cost))) ||
-                              (fi.cost_price != null && fi.cost_price !== "" && !isNaN(Number(fi.cost_price)));
-        const customUnitCost = hasCustomCost ? Number(fi.partner_cost != null && fi.partner_cost !== "" ? fi.partner_cost : fi.cost_price) : null;
-
-        if (sup === "bros_burger") {
-          brosGross += lineTotal;
-          if (customUnitCost != null) {
-            const lineCost = Math.round(customUnitCost * qty);
-            brosPayable += lineCost;
-            brosCommission += Math.max(0, lineTotal - lineCost);
-          } else {
-            const lineComm = Math.round((lineTotal * defaultBrosRate) / 100);
-            brosCommission += lineComm;
-            brosPayable += (lineTotal - lineComm);
-          }
-        } else if (sup === "bardali") {
-          bardaliGross += lineTotal;
-          if (customUnitCost != null) {
-            const lineCost = Math.round(customUnitCost * qty);
-            bardaliPayable += lineCost;
-            bardaliCommission += Math.max(0, lineTotal - lineCost);
-          } else {
-            const lineComm = Math.round((lineTotal * defaultBardaliRate) / 100);
-            bardaliCommission += lineComm;
-            bardaliPayable += (lineTotal - lineComm);
-          }
-        } else if (sup === "chillpill") {
-          chillpillFood += lineTotal;
-        } else {
-          // Other custom food supplier
-          otherFoodGross += lineTotal;
-          if (customUnitCost != null) {
-            const lineCost = Math.round(customUnitCost * qty);
-            otherFoodPayable += lineCost;
-            otherFoodCommission += Math.max(0, lineTotal - lineCost);
-          } else {
-            otherFoodPayable += lineTotal;
-          }
-        }
-      });
-    } else if (foodTotal > 0) {
-      chillpillFood += foodTotal;
-    }
-
-    const netFoodRevenue = chillpillFood + brosCommission + bardaliCommission + otherFoodCommission;
-    const netRevenue = timeRevenue + netFoodRevenue;
-
-    return {
-      grossAmount,
-      timeRevenue,
-      foodTotal,
-      chillpillFood,
-      brosGross,
-      brosCommission,
-      brosPayable,
-      bardaliGross,
-      bardaliCommission,
-      bardaliPayable,
-      otherFoodGross,
-      otherFoodCommission,
-      otherFoodPayable,
-      netFoodRevenue,
-      netRevenue
-    };
+    return window.FoodPartners.forRecord(record);
   }
 
   function getPartnerSettlementExpenses(supplierKey, startDate = null, endDate = null) {
@@ -8238,7 +8114,7 @@
     }
 
     paid.forEach((r) => {
-      const ds = getDateStr(r.paid_at || r.created_at);
+      const ds = window.FoodPartnerMath.day(r.start_time || r.created_at || r.paid_at);
       if (!ds) return;
       if (!map[ds]) map[ds] = { total: 0, gross: 0, cash: 0, online: 0, sessions: [] };
       const rev = computeRecordRevenue(r);
@@ -8251,6 +8127,9 @@
       } else if (dept === "food") {
         effectiveNet = rev.netFoodRevenue;
         effectiveGross = rev.foodTotal;
+        if (revSelectedFoodSource === "bros_burger") { effectiveNet=rev.brosCommission; effectiveGross=rev.brosGross; }
+        else if (revSelectedFoodSource === "bardali") { effectiveNet=rev.bardaliCommission; effectiveGross=rev.bardaliGross; }
+        else if (revSelectedFoodSource === "chillpill") { effectiveNet=rev.chillpillFood; effectiveGross=rev.chillpillFood; }
       }
 
       map[ds].total += effectiveNet;
@@ -8266,6 +8145,12 @@
       }
       map[ds].sessions.push({ ...r, _rev: rev });
     });
+    if (dept === "all" || dept === "food") window.FoodPartners.days().filter(g => g.orphanCost > 0 &&
+      filterRecordByPeriod({start_time:g.date+"T12:00:00+05:45"},revSelectedPeriod,revStartDate,revEndDate) &&
+      (dept !== "food" || revSelectedFoodSource === "all" || revSelectedFoodSource === g.source)).forEach(g => {
+        if (!map[g.date]) map[g.date] = {total:0,gross:0,cash:0,online:0,sessions:[]};
+        map[g.date].total -= g.orphanCost;
+      });
     return map;
   }
 
@@ -8478,66 +8363,6 @@
       });
     }
 
-    // Partner settlement buttons
-    const settleBrosBtn = document.getElementById("btn-settle-bros");
-    if (settleBrosBtn && !settleBrosBtn.dataset.wired) {
-      settleBrosBtn.dataset.wired = "1";
-      settleBrosBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        openPartnerSettlementModal("bros_burger");
-      });
-    }
-    const historyBrosBtn = document.getElementById("btn-history-bros");
-    if (historyBrosBtn && !historyBrosBtn.dataset.wired) {
-      historyBrosBtn.dataset.wired = "1";
-      historyBrosBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        openPartnerHistoryModal("bros_burger");
-      });
-    }
-    const settleBardaliBtn = document.getElementById("btn-settle-bardali");
-    if (settleBardaliBtn && !settleBardaliBtn.dataset.wired) {
-      settleBardaliBtn.dataset.wired = "1";
-      settleBardaliBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        openPartnerSettlementModal("bardali");
-      });
-    }
-    const historyBardaliBtn = document.getElementById("btn-history-bardali");
-    if (historyBardaliBtn && !historyBardaliBtn.dataset.wired) {
-      historyBardaliBtn.dataset.wired = "1";
-      historyBardaliBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        openPartnerHistoryModal("bardali");
-      });
-    }
-
-    // Initialize partner settlement form submit listener
-    const settlementForm = document.getElementById("partner-settlement-form");
-    if (settlementForm && !settlementForm.dataset.wired) {
-      settlementForm.dataset.wired = "1";
-      settlementForm.addEventListener("submit", savePartnerSettlement);
-    }
-    const settlementClose = document.getElementById("partner-settlement-close");
-    const settlementCancel = document.getElementById("partner-settlement-cancel");
-    const settlementModal = document.getElementById("partner-settlement-modal");
-    if (settlementClose && !settlementClose.dataset.wired) {
-      settlementClose.dataset.wired = "1";
-      settlementClose.addEventListener("click", () => settlementModal && settlementModal.classList.remove("open"));
-    }
-    if (settlementCancel && !settlementCancel.dataset.wired) {
-      settlementCancel.dataset.wired = "1";
-      settlementCancel.addEventListener("click", () => settlementModal && settlementModal.classList.remove("open"));
-    }
-
-    // Partner history modal close
-    const historyClose = document.getElementById("partner-history-close");
-    const historyModal = document.getElementById("partner-history-modal");
-    if (historyClose && !historyClose.dataset.wired) {
-      historyClose.dataset.wired = "1";
-      historyClose.addEventListener("click", () => historyModal && historyModal.classList.remove("open"));
-    }
-
     // Revenue food edit modal close & cancel
     const revFoodClose = document.getElementById("rev-food-edit-close");
     const revFoodCancel = document.getElementById("rev-food-edit-cancel-btn");
@@ -8610,7 +8435,7 @@
             active ? "border-[#d8ff45] text-[#d8ff45] bg-[#d8ff45]/10" : "border-slate-700 text-slate-400"
           }`;
         });
-        const paid = records.filter((r) => r.paid);
+        const paid = window.FoodPartners.revenueRecords();
         renderRevenueChart(buildDailyMap(paid, revSelectedDept), revSelectedDept);
       });
     });
@@ -8647,9 +8472,10 @@
   }
 
   function renderRevenue() {
+    window.FoodPartners.refresh();
     initRevenueFiltersOnce();
 
-    const allPaid = records.filter((r) => r.paid);
+    const allPaid = window.FoodPartners.revenueRecords();
     const periodPaid = allPaid.filter((r) => filterRecordByPeriod(r, revSelectedPeriod, revStartDate, revEndDate));
 
     let totalGross = 0;
@@ -8701,7 +8527,18 @@
       totalBardaliPayable += rev.bardaliPayable;
     });
 
-    const totalPartnerPayables = totalBrosPayable + totalBardaliPayable;
+    const foodDays = window.FoodPartners.days().filter(g => filterRecordByPeriod({start_time:g.date+"T12:00:00+05:45"},revSelectedPeriod,revStartDate,revEndDate));
+    foodDays.filter(g => g.orphanCost > 0).forEach(g => {
+      totalNet -= g.orphanCost; totalFoodNet -= g.orphanCost;
+      if (g.source === "bros_burger") totalBrosCommission -= g.orphanCost;
+      if (g.source === "bardali") totalBardaliCommission -= g.orphanCost;
+    });
+    totalBrosPayable = foodDays.filter(g=>g.source==="bros_burger").reduce((n,g)=>n+g.outstanding,0);
+    totalBardaliPayable = foodDays.filter(g=>g.source==="bardali").reduce((n,g)=>n+g.outstanding,0);
+    const totalPartnerPayables = foodDays.reduce((n,g)=>n+g.outstanding,0);
+    const pendingFoodDays = foodDays.filter(g=>g.pending).length;
+    const foodNotice = document.getElementById("rev-food-bill-notice");
+    if (foodNotice) foodNotice.textContent = pendingFoodDays ? pendingFoodDays+" partner day(s) await actual bills. Those earnings are excluded until billed; see Food Sources & Partners." : "Food earnings use actual daily supplier bills. Payouts settle the bill without reducing earnings twice.";
 
     // Filter tournaments matching period
     const periodTournaments = tournamentsFinancials.filter((t) => filterTournamentByPeriod(t, revSelectedPeriod, revStartDate, revEndDate));
@@ -8752,22 +8589,22 @@
         if (totalEl) totalEl.textContent = inr(totalBrosCommission);
         if (grossEl) grossEl.textContent = inr(totalBrosGross);
         if (badgeEl) badgeEl.textContent = "🍔 Bro's Burger Net Profit";
-        if (descEl) descEl.textContent = "Cafe Commission earned on Bro's Burger orders";
+        if (descEl) descEl.textContent = "Customer collections minus actual Bro's Burger bills";
       } else if (revSelectedFoodSource === "bardali") {
         if (totalEl) totalEl.textContent = inr(totalBardaliCommission);
         if (grossEl) grossEl.textContent = inr(totalBardaliGross);
         if (badgeEl) badgeEl.textContent = "🍽️ Bardali Net Profit";
-        if (descEl) descEl.textContent = "Cafe Commission earned on Bardali orders";
+        if (descEl) descEl.textContent = "Customer collections minus actual Bardali bills";
       } else if (revSelectedFoodSource === "chillpill") {
         if (totalEl) totalEl.textContent = inr(totalChillpillFood);
         if (grossEl) grossEl.textContent = inr(totalChillpillFood);
         if (badgeEl) badgeEl.textContent = "🏠 ChillPill Food Net Profit";
-        if (descEl) descEl.textContent = "Direct cafe drinks & snacks (100% cafe profit)";
+        if (descEl) descEl.textContent = "Direct cafe food collections before stock and operating costs";
       } else {
         if (totalEl) totalEl.textContent = inr(totalFoodNet);
         if (grossEl) grossEl.textContent = inr(totalFoodGross);
         if (badgeEl) badgeEl.textContent = "🍟 Food Net Cafe Profit";
-        if (descEl) descEl.textContent = "ChillPill Food (100%) + Partner Commissions";
+        if (descEl) descEl.textContent = "ChillPill food collections + actual partner margins";
       }
     } else if (revSelectedDept === "tournament") {
       if (totalEl) totalEl.textContent = inr(totalTrnNet);
@@ -8778,7 +8615,7 @@
       if (totalEl) totalEl.textContent = inr(totalNet);
       if (grossEl) grossEl.textContent = inr(totalGross);
       if (badgeEl) badgeEl.textContent = "Net Cafe Earnings";
-      if (descEl) descEl.textContent = "Station Time + Own Food + Comm + Tournaments";
+      if (descEl) descEl.textContent = "Station time + own food + actual partner margins + tournaments";
     }
 
     // Food Orders Price vs Actual Revenue to ChillPill
@@ -9384,10 +9221,10 @@
               <input type="number" min="0" step="1" class="rev-fedit-price w-24 bg-slate-900 border border-slate-700 rounded pl-5 pr-2 py-1 text-xs text-amber-300 font-semibold text-right" value="${it.price || 0}" required />
             </div>
           </td>
-          <td class="py-2 pr-2">
+          <td class="hidden">
             <div class="relative flex items-center">
               <span class="absolute left-2 text-[10px] text-slate-500">रु</span>
-              <input type="number" min="0" step="1" class="rev-fedit-cost w-24 bg-slate-900 border border-slate-700 rounded pl-5 pr-2 py-1 text-xs text-sky-300 font-semibold text-right" value="${partnerCostVal}" placeholder="Auto rate" title="Vendor cost per unit. Leave blank to use cafe % commission" />
+              <input type="hidden" min="0" step="1" class="rev-fedit-cost w-24 bg-slate-900 border border-slate-700 rounded pl-5 pr-2 py-1 text-xs text-sky-300 font-semibold text-right" value="${partnerCostVal}" placeholder="Auto rate" title="Historical per-item cost (actual daily supplier bills determine earnings)" />
             </div>
           </td>
           <td class="py-2 text-right">
@@ -9517,194 +9354,6 @@
         saveBtn.disabled = false;
         saveBtn.innerHTML = `Save Changes`;
       }
-    }
-  }
-
-  // --- Partner Settlements ---
-
-  function openPartnerSettlementModal(supplierKey) {
-    const modal = document.getElementById("partner-settlement-modal");
-    if (!modal) return;
-
-    const isBros = supplierKey === "bros_burger";
-    const name = isBros ? "Bro's Burger" : (supplierKey === "bardali" ? "Bardali" : supplierKey);
-    const supInput = document.getElementById("settlement-supplier");
-    if (supInput) supInput.value = supplierKey;
-
-    const titleEl = document.getElementById("settlement-partner-title");
-    if (titleEl) titleEl.textContent = `${name} Settlement Payout`;
-
-    const allPaid = records.filter(r => r.paid);
-    const periodPaid = allPaid.filter(r => filterRecordByPeriod(r, revSelectedPeriod, revStartDate, revEndDate));
-
-    let periodPayable = 0;
-    periodPaid.forEach(r => {
-      const rev = computeRecordRevenue(r);
-      if (isBros) periodPayable += rev.brosPayable;
-      else if (supplierKey === "bardali") periodPayable += rev.bardaliPayable;
-      else periodPayable += (rev.otherFoodPayable || 0);
-    });
-
-    const filterStart = revStartDate || (revSelectedPeriod === "today" ? getDateStr(new Date().toISOString()) : "");
-    const filterEnd = revEndDate || (revSelectedPeriod === "today" ? getDateStr(new Date().toISOString()) : "");
-    const sStart = revSelectedPeriod !== "all" ? filterStart : null;
-    const sEnd = revSelectedPeriod !== "all" ? filterEnd : null;
-    const periodSettled = getPartnerSettlementTotal(supplierKey, sStart, sEnd);
-    const pendingBalance = Math.max(0, periodPayable - periodSettled);
-
-    const periodEl = document.getElementById("settlement-period-label");
-    if (periodEl) periodEl.textContent = getRevPeriodLabel(revSelectedPeriod, revStartDate, revEndDate);
-
-    const pendingEl = document.getElementById("settlement-pending-amount");
-    if (pendingEl) pendingEl.textContent = inr(pendingBalance);
-
-    const amtInput = document.getElementById("settlement-amount");
-    if (amtInput) amtInput.value = pendingBalance > 0 ? pendingBalance : "";
-
-    const dateInput = document.getElementById("settlement-date");
-    if (dateInput) dateInput.value = new Date().toISOString().slice(0, 10);
-
-    const notesInput = document.getElementById("settlement-notes");
-    if (notesInput) notesInput.value = `Food payout for ${name} (${getRevPeriodLabel(revSelectedPeriod, revStartDate, revEndDate)})`;
-
-    modal.classList.add("open");
-  }
-
-  async function savePartnerSettlement(e) {
-    if (e) e.preventDefault();
-    if (!window.sb) return;
-
-    const supplierKey = document.getElementById("settlement-supplier")?.value || "bros_burger";
-    const amount = Number(document.getElementById("settlement-amount")?.value) || 0;
-    const paymentMethod = document.getElementById("settlement-payment-method")?.value || "Online / QR";
-    const expenseDate = document.getElementById("settlement-date")?.value || new Date().toISOString().slice(0, 10);
-    const userNotes = (document.getElementById("settlement-notes")?.value || "").trim();
-
-    if (amount <= 0) {
-      showToast("Please enter a valid payout amount.");
-      return;
-    }
-
-    const isBros = supplierKey === "bros_burger";
-    const supplierName = isBros ? "Bro's Burger" : (supplierKey === "bardali" ? "Bardali" : supplierKey);
-
-    const saveBtn = document.getElementById("settlement-submit-btn");
-    if (saveBtn) {
-      saveBtn.disabled = true;
-      saveBtn.innerHTML = `<span class="animate-spin inline-block mr-1">⏳</span> Recording...`;
-    }
-
-    try {
-      const payload = {
-        title: `${supplierName} Food Settlement`,
-        category: "Partner Payout",
-        amount: amount,
-        payment_method: paymentMethod,
-        expense_date: expenseDate,
-        notes: `[Settlement: ${supplierKey}] ${userNotes}`.trim(),
-        created_at: new Date().toISOString()
-      };
-
-      const { data, error } = await window.sb.from("expenses").insert([payload]).select();
-      if (error) throw error;
-
-      if (data && data[0] && Array.isArray(expenses)) {
-        expenses.unshift(data[0]);
-      } else {
-        await fetchExpenses();
-      }
-
-      showToast(`Settlement payment of रु ${amount} recorded for ${supplierName}!`);
-      const modal = document.getElementById("partner-settlement-modal");
-      if (modal) modal.classList.remove("open");
-      renderRevenue();
-    } catch (err) {
-      console.error("[ChillPill] Failed to save partner settlement:", err);
-      showToast("Error saving settlement: " + (err.message || "database error"));
-    } finally {
-      if (saveBtn) {
-        saveBtn.disabled = false;
-        saveBtn.innerHTML = `Confirm Payout`;
-      }
-    }
-  }
-
-  function openPartnerHistoryModal(supplierKey) {
-    const modal = document.getElementById("partner-history-modal");
-    if (!modal) return;
-
-    const isBros = supplierKey === "bros_burger";
-    const supplierName = isBros ? "Bro's Burger" : (supplierKey === "bardali" ? "Bardali" : supplierKey);
-
-    const titleEl = document.getElementById("history-partner-title");
-    if (titleEl) titleEl.textContent = `${supplierName} Settlement History`;
-
-    const recordsList = getPartnerSettlementExpenses(supplierKey);
-    const totalSettled = recordsList.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-
-    const totEl = document.getElementById("history-total-settled");
-    if (totEl) totEl.textContent = inr(totalSettled);
-
-    const tbody = document.getElementById("partner-history-tbody");
-    const emptyEl = document.getElementById("partner-history-empty");
-
-    if (tbody) {
-      if (!recordsList.length) {
-        tbody.innerHTML = "";
-        if (emptyEl) emptyEl.classList.remove("hidden");
-      } else {
-        if (emptyEl) emptyEl.classList.add("hidden");
-        tbody.innerHTML = recordsList.map((e) => {
-          const dateStr = e.expense_date ? e.expense_date.slice(0, 10) : (e.date ? e.date.slice(0, 10) : "—");
-          return `
-            <tr class="hover:bg-white/5 transition-colors border-b border-slate-800">
-              <td class="py-2.5 pr-3 text-xs text-slate-300">${dateStr}</td>
-              <td class="py-2.5 pr-3 text-xs text-slate-400 font-medium">${esc(e.title || "Settlement")}</td>
-              <td class="py-2.5 pr-3 text-xs"><span class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">${esc(e.payment_method || "—")}</span></td>
-              <td class="py-2.5 pr-3 text-xs text-slate-400 truncate max-w-[200px]" title="${esc(e.notes || "")}">${esc(e.notes || "—")}</td>
-              <td class="py-2.5 pr-3 text-right mono font-bold text-amber-400 text-sm">${inr(e.amount)}</td>
-              <td class="py-2.5 text-right">
-                <button type="button" class="del-settlement-btn text-slate-500 hover:text-rose-400 p-1 transition cursor-pointer" data-id="${e.id}" data-sup="${supplierKey}" title="Delete settlement">
-                  <i data-lucide="trash-2" width="14" height="14"></i>
-                </button>
-              </td>
-            </tr>
-          `;
-        }).join("");
-
-        tbody.querySelectorAll(".del-settlement-btn").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const expId = btn.dataset.id;
-            const sup = btn.dataset.sup;
-            deletePartnerSettlement(expId, sup);
-          });
-        });
-
-        if (window.lucide && typeof window.lucide.createIcons === "function") window.lucide.createIcons();
-      }
-    }
-
-    modal.classList.add("open");
-  }
-
-  async function deletePartnerSettlement(expenseId, supplierKey) {
-    if (!expenseId || !window.sb) return;
-    if (!confirm("Are you sure you want to delete this settlement payment record?")) return;
-
-    try {
-      const { error } = await window.sb.from("expenses").delete().eq("id", expenseId);
-      if (error) throw error;
-
-      if (Array.isArray(expenses)) {
-        expenses = expenses.filter(e => String(e.id) !== String(expenseId));
-      }
-
-      showToast("Settlement record deleted.");
-      openPartnerHistoryModal(supplierKey);
-      renderRevenue();
-    } catch (err) {
-      console.error("[ChillPill] Failed to delete settlement:", err);
-      showToast("Error deleting settlement: " + (err.message || "database error"));
     }
   }
 
@@ -10372,10 +10021,13 @@
 
   // ---------- supabase data loading ----------
   async function fetchSessions() {
-    const { data, error } = await window.sb.from("sessions").select("*").order("created_at", { ascending: false });
-    if (error) { showMessage("Could not load records: " + error.message, true); return; }
-    records = data || [];
-    renderAllLists();
+    const all = [];
+    for (let offset=0;;offset+=500) {
+      const {data,error} = await window.sb.from("sessions").select("*").order("created_at",{ascending:false}).order("id").range(offset,offset+499);
+      if (error) { showMessage("Could not load records: "+error.message,true); return; }
+      all.push(...(data||[])); if (!data || data.length<500) break;
+    }
+    records=all; renderAllLists();
   }
 
   async function fetchMenu() {
@@ -10384,6 +10036,7 @@
     menuItems = data || [];
     renderMenu();
     window.ChillPillInventory.refreshMenu();
+    window.FoodPartners.refresh();
     refreshFoodMenus();
   }
 
@@ -10447,6 +10100,7 @@
       fetchSessions(),
       fetchMenu(),
       window.ChillPillInventory.load(),
+      window.FoodPartners.load(),
       fetchSettings(),
       fetchStaff(),
       fetchWaitingList(),
@@ -10465,6 +10119,8 @@
       .channel("chillpill-dashboard")
       .on("postgres_changes", { event: "*", schema: "public", table: "sessions" }, fetchSessions)
       .on("postgres_changes", { event: "*", schema: "public", table: "menu_items" }, fetchMenu)
+      .on("postgres_changes", { event: "*", schema: "public", table: "food_partner_bills" }, () => window.FoodPartners.load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "food_partner_payments" }, () => window.FoodPartners.load())
       .on("postgres_changes", { event: "*", schema: "public", table: "inventory_items" }, () => window.ChillPillInventory.load())
       .on("postgres_changes", { event: "*", schema: "public", table: "inventory_movements" }, () => window.ChillPillInventory.load())
       .on("postgres_changes", { event: "*", schema: "public", table: "settings" }, fetchSettings)
@@ -10486,6 +10142,11 @@
   function bootstrap() {
     applyRoleVisibility();
     initSidebar();
+    window.FoodPartners.init({ db: () => window.sb, staff: () => currentStaff, records: () => records, menu: () => menuItems,
+      expenses: () => expenses, breakdown: getRecordPaymentBreakdown, toast: showToast, changed: renderRevenue,
+      reloadExpenses: fetchExpenses, reloadRecords: fetchSessions });
+    document.getElementById("rev-open-food-partners")?.addEventListener("click", event => { event.preventDefault(); switchPage("page-food-partners"); });
+    ["rev-kpi-food-card", "rev-kpi-payables-card"].forEach(id => document.getElementById(id)?.addEventListener("click", () => switchPage("page-food-partners")));
     window.ChillPillInventory.init({ db: () => window.sb, staff: () => currentStaff, menu: () => menuItems, toast: showToast });
     initCheckoutModal();
     initPauseModal();
