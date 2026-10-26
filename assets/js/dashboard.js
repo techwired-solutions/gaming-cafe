@@ -3142,10 +3142,12 @@
     if (!record) return [];
     const list = [];
     if (record.station_name) {
-      splitStationNames(record.station_name).forEach((sn, idx) => {
-        const match = stations.find((s) => s.name.trim().toLowerCase() === sn) || { name: sn, rate: record.rate };
+      const rawParts = String(record.station_name).split(/[,+&/]/).map((s) => s.trim()).filter(Boolean);
+      rawParts.forEach((origName, idx) => {
+        const sn = origName.toLowerCase();
+        const match = (stations || []).find((s) => s && s.name && s.name.trim().toLowerCase() === sn) || { name: origName, rate: record.rate };
         list.push({
-          name: match.name || sn,
+          name: match.name || origName,
           isPrimary: idx === 0,
           rate: Number(record.rate) || 0,
           duration_minutes: Number(record.duration_minutes) || 60,
@@ -3156,7 +3158,7 @@
     }
     if (Array.isArray(record.extra_stations)) {
       record.extra_stations.forEach((es) => {
-        const esName = (es.station || es.station_name || "").trim();
+        const esName = (es && (es.station || es.station_name) ? String(es.station || es.station_name).trim() : "");
         if (!esName) return;
         if (list.some((item) => item.name.toLowerCase() === esName.toLowerCase())) return;
         list.push({
@@ -3189,7 +3191,7 @@
 
     // 1. Specific station pause in notes: [Station Paused: <Name> | ...]
     if (record.notes) {
-      const rx = new RegExp(`\[Station Paused:\s*([^|\]]+)`, "gi");
+      const rx = /\[Station Paused:\s*([^|\]]+)/gi;
       let m;
       while ((m = rx.exec(record.notes)) !== null) {
         if (m[1].trim().toLowerCase() === target) return true;
@@ -3198,7 +3200,7 @@
 
     // 2. Extra stations array check
     if (Array.isArray(record.extra_stations)) {
-      const match = record.extra_stations.find((es) => (es.station || es.station_name || "").trim().toLowerCase() === target);
+      const match = record.extra_stations.find((es) => es && (es.station || es.station_name || "").trim().toLowerCase() === target);
       if (match && (match.is_paused === true || match.is_paused === "true")) return true;
     }
 
@@ -3217,7 +3219,7 @@
     if (!record) return false;
     if (isSessionPaused(record)) return true;
     if (record.notes && /\[Station Paused:/i.test(record.notes)) return true;
-    if (Array.isArray(record.extra_stations) && record.extra_stations.some((es) => es.is_paused)) return true;
+    if (Array.isArray(record.extra_stations) && record.extra_stations.some((es) => es && es.is_paused)) return true;
     return false;
   }
 
@@ -3272,7 +3274,7 @@
     let reason = "";
 
     if (record.notes && target) {
-      const rx = new RegExp(`\[Station Paused:\s*([^|\]]+)(?:\|\s*At:\s*([^|\]]+))?(?:\|\s*RemainingMs:\s*(\d+))?(?:\|\s*Reason:\s*([^\]]+))?\]`, "gi");
+      const rx = /\[Station Paused:\s*([^|\]]+)(?:\|\s*At:\s*([^|\]]+))?(?:\|\s*RemainingMs:\s*(\d+))?(?:\|\s*Reason:\s*([^\]]+))?\]/gi;
       let m;
       while ((m = rx.exec(record.notes)) !== null) {
         if (m[1].trim().toLowerCase() === target) {
@@ -3285,7 +3287,7 @@
     }
 
     if (Array.isArray(record.extra_stations) && target) {
-      const match = record.extra_stations.find((es) => (es.station || es.station_name || "").trim().toLowerCase() === target);
+      const match = record.extra_stations.find((es) => es && (es.station || es.station_name || "").trim().toLowerCase() === target);
       if (match && match.is_paused) {
         if (!pausedAt && match.paused_at) pausedAt = new Date(match.paused_at);
         if (remainingMs == null && match.paused_remaining_ms != null) remainingMs = Number(match.paused_remaining_ms);
@@ -3346,12 +3348,12 @@
     const remainingMins = Math.round(remainingMs / 60000);
 
     const escaped = matchedStn.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    let cleanNotes = (record.notes || "").replace(new RegExp(`\\\[Station (?:Paused|Resumed):\\s*${escaped}[^\\\]]*\\\]`, "gi"), "").trim();
+    let cleanNotes = (record.notes || "").replace(new RegExp(`\\[Station (?:Paused|Resumed):\\s*${escaped}[^\\]]*\\]`, "gi"), "").trim();
     const pauseTag = `[Station Paused: ${matchedStn.name} | At: ${now.toISOString()} | RemainingMs: ${remainingMs} | Reason: ${reason}]`;
     const finalNotes = [cleanNotes, pauseTag].filter(Boolean).join(" ");
 
     if (Array.isArray(record.extra_stations)) {
-      const matchExtra = record.extra_stations.find((es) => (es.station || es.station_name || "").toLowerCase() === target.toLowerCase());
+      const matchExtra = record.extra_stations.find((es) => es && (es.station || es.station_name || "").toLowerCase() === target.toLowerCase());
       if (matchExtra) {
         matchExtra.is_paused = true;
         matchExtra.paused_at = now.toISOString();
@@ -3423,12 +3425,12 @@
     const newEndTime = new Date(now.getTime() + pauseInfo.remainingMs);
 
     const escaped = matchedStn.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    let cleanNotes = (record.notes || "").replace(new RegExp(`\\\[Station (?:Paused|Resumed):\\s*${escaped}[^\\\]]*\\\]`, "gi"), "").trim();
+    let cleanNotes = (record.notes || "").replace(new RegExp(`\\[Station (?:Paused|Resumed):\\s*${escaped}[^\\]]*\\]`, "gi"), "").trim();
     const resumeTag = `[Station Resumed: ${matchedStn.name} | PausedDuration: ${pausedDurationMins}m | Reason: ${pauseInfo.reason}]`;
     const finalNotes = [cleanNotes, resumeTag].filter(Boolean).join(" ");
 
     if (Array.isArray(record.extra_stations)) {
-      const matchExtra = record.extra_stations.find((es) => (es.station || es.station_name || "").toLowerCase() === target.toLowerCase());
+      const matchExtra = record.extra_stations.find((es) => es && (es.station || es.station_name || "").toLowerCase() === target.toLowerCase());
       if (matchExtra) {
         matchExtra.is_paused = false;
         matchExtra.paused_at = null;
