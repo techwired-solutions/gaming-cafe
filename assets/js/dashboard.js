@@ -3723,8 +3723,36 @@
     }
     const stationEl = card.querySelector(".record-station");
     if (stationEl) {
-      if (isActive) renderStationTimers(stationEl, record);
+      if (isActive && card.dataset.overview === "true") {
+        stationEl.textContent = stns.map(slot => slot.name).join(" + ") + " · " + (record.type || "Walk-in");
+        let toggle = card.querySelector(".station-details-toggle");
+        let details = card.querySelector(".record-station-details");
+        if (!toggle) {
+          toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.className = "station-details-toggle text-xs text-slate-400 mt-1 hover:underline cursor-pointer";
+          toggle.addEventListener("click", () => {
+            card.dataset.stationsExpanded = card.dataset.stationsExpanded === "true" ? "false" : "true";
+            const item = records.find(row => String(row.id) === String(card.dataset.recordId)) || record;
+            updateCard(card, item);
+          });
+          details = document.createElement("div");
+          details.className = "record-station-details";
+          details.id = "overview-stations-" + record.id;
+          toggle.setAttribute("aria-controls", details.id);
+          stationEl.after(toggle, details);
+        }
+        const expanded = card.dataset.stationsExpanded === "true";
+        toggle.textContent = expanded ? "Hide stations ▴" : "Show stations ▾";
+        toggle.setAttribute("aria-expanded", String(expanded));
+        details.classList.toggle("hidden", !expanded);
+        if (expanded) renderStationTimers(details, record);
+      } else if (isActive) renderStationTimers(stationEl, record);
       else stationEl.textContent = stns.map(slot => slot.name).join(" + ") + " · " + (record.type || "Walk-in");
+      if (!isActive) {
+        card.querySelector(".station-details-toggle")?.remove();
+        card.querySelector(".record-station-details")?.remove();
+      }
     }
     card.querySelector(".record-duration").textContent = (Number(record.duration_minutes) || 0) + " min";
     card.querySelector(".record-amount").textContent = inr(record.amount);
@@ -3886,9 +3914,16 @@
     card.querySelector(".record-created").textContent = record.created_at ? fmtDateTime(record.created_at) : "";
   }
 
-  function createCard(record) {
+  function createCard(record, overview = false) {
     const fragment = document.getElementById("record-template").content.cloneNode(true);
     const card = fragment.querySelector("article");
+    card.dataset.overview = String(overview);
+    if (overview) {
+      card.addEventListener("click", event => {
+        if (event.target.closest("button, input, select, textarea, a, .record-customer, .record-station-details")) return;
+        card.querySelector(".station-details-toggle")?.click();
+      });
+    }
     updateCard(card, record);
     if (window.lucide) window.lucide.createIcons({ root: card });
 
@@ -3986,7 +4021,7 @@
     list.forEach((record) => {
       const card = existing.get(record.id);
       if (card) { updateCard(card, record); existing.delete(record.id); }
-      else container.appendChild(createCard(record));
+      else container.appendChild(createCard(record, container.id === "overview-active-list"));
     });
     existing.forEach((card) => card.remove());
   }
