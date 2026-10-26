@@ -7803,6 +7803,7 @@
   let revDailyChart = null;
   let revChartDays = 30;
   let revSelectedDept = "all";       // "all" | "station" | "food" | "tournament"
+  let revSelectedFoodSource = "all"; // "all" | "bros_burger" | "bardali" | "chillpill" | "other"
   let revSelectedPeriod = "all";     // "all" | "today" | "yesterday" | "month" | "range" | "custom"
   let revStartDate = "";             // "YYYY-MM-DD"
   let revEndDate = "";               // "YYYY-MM-DD"
@@ -7871,9 +7872,21 @@
 
   function getRevDeptLabel(dept) {
     if (dept === "station") return "Station Gameplay Only";
-    if (dept === "food") return "Food & Drinks Only";
+    if (dept === "food") {
+      if (revSelectedFoodSource === "bros_burger") return "Food (🍔 Bro's Burger)";
+      if (revSelectedFoodSource === "bardali") return "Food (🍽️ Bardali)";
+      if (revSelectedFoodSource === "chillpill") return "Food (🏠 ChillPill Food)";
+      return "Food & Drinks Only";
+    }
     if (dept === "tournament") return "Tournaments Only";
     return "All Revenue";
+  }
+
+  function getRevFoodSourceLabel(source) {
+    if (source === "bros_burger") return "🍔 Bro's Burger";
+    if (source === "bardali") return "🍽️ Bardali";
+    if (source === "chillpill") return "🏠 ChillPill Food";
+    return "All Food Sources";
   }
 
   let tournamentsFinancials = [];
@@ -7944,6 +7957,9 @@
         bardaliGross: 0,
         bardaliCommission: 0,
         bardaliPayable: 0,
+        otherFoodGross: 0,
+        otherFoodCommission: 0,
+        otherFoodPayable: 0,
         netFoodRevenue: 0,
         netRevenue: 0
       };
@@ -7956,40 +7972,79 @@
     let chillpillFood = 0;
     let brosGross = 0;
     let bardaliGross = 0;
+    let otherFoodGross = 0;
+
+    let brosPayable = 0;
+    let bardaliPayable = 0;
+    let otherFoodPayable = 0;
+
+    let brosCommission = 0;
+    let bardaliCommission = 0;
+    let otherFoodCommission = 0;
+
+    const isInternal = isInternalSaleRecord(record);
+    const defaultBrosRate = isInternal ? 0 : (Number(partnerSettings.bros_burger_commission) || 0);
+    const defaultBardaliRate = Number(partnerSettings.bardali_commission) || 0;
 
     const items = Array.isArray(record.food_items) ? record.food_items : [];
     if (items.length > 0) {
       items.forEach((fi) => {
-        let sup = fi.supplier;
+        if (!fi || fi.id === "_extra_ctrl" || fi.name === "Item") return;
+        let sup = fi.supplier || fi.source;
         if (!sup) {
           const menuItem = menuItems.find((m) => m.id === fi.id || (fi.name && m.name.toLowerCase() === fi.name.toLowerCase()));
           sup = (menuItem && menuItem.supplier) ? menuItem.supplier : "chillpill";
         }
-        const lineTotal = (Number(fi.price) || 0) * (Number(fi.qty) || 1);
+        const qty = Number(fi.qty) || 1;
+        const linePrice = Number(fi.price) || 0;
+        const lineTotal = linePrice * qty;
+
+        // Custom partner cost override check (per unit or total)
+        const hasCustomCost = (fi.partner_cost != null && fi.partner_cost !== "" && !isNaN(Number(fi.partner_cost))) ||
+                              (fi.cost_price != null && fi.cost_price !== "" && !isNaN(Number(fi.cost_price)));
+        const customUnitCost = hasCustomCost ? Number(fi.partner_cost != null && fi.partner_cost !== "" ? fi.partner_cost : fi.cost_price) : null;
+
         if (sup === "bros_burger") {
           brosGross += lineTotal;
+          if (customUnitCost != null) {
+            const lineCost = Math.round(customUnitCost * qty);
+            brosPayable += lineCost;
+            brosCommission += Math.max(0, lineTotal - lineCost);
+          } else {
+            const lineComm = Math.round((lineTotal * defaultBrosRate) / 100);
+            brosCommission += lineComm;
+            brosPayable += (lineTotal - lineComm);
+          }
         } else if (sup === "bardali") {
           bardaliGross += lineTotal;
-        } else {
+          if (customUnitCost != null) {
+            const lineCost = Math.round(customUnitCost * qty);
+            bardaliPayable += lineCost;
+            bardaliCommission += Math.max(0, lineTotal - lineCost);
+          } else {
+            const lineComm = Math.round((lineTotal * defaultBardaliRate) / 100);
+            bardaliCommission += lineComm;
+            bardaliPayable += (lineTotal - lineComm);
+          }
+        } else if (sup === "chillpill") {
           chillpillFood += lineTotal;
+        } else {
+          // Other custom food supplier
+          otherFoodGross += lineTotal;
+          if (customUnitCost != null) {
+            const lineCost = Math.round(customUnitCost * qty);
+            otherFoodPayable += lineCost;
+            otherFoodCommission += Math.max(0, lineTotal - lineCost);
+          } else {
+            otherFoodPayable += lineTotal;
+          }
         }
       });
     } else if (foodTotal > 0) {
       chillpillFood += foodTotal;
     }
 
-    const isInternal = isInternalSaleRecord(record);
-    // ChillPill takes 0% commission from Bro's Burger on internal sales (20% discount sent directly to Bro's Burger)
-    const brosRate = isInternal ? 0 : (Number(partnerSettings.bros_burger_commission) || 0);
-    const bardaliRate = Number(partnerSettings.bardali_commission) || 0;
-
-    const brosCommission = Math.round((brosGross * brosRate) / 100);
-    const brosPayable = brosGross - brosCommission;
-
-    const bardaliCommission = Math.round((bardaliGross * bardaliRate) / 100);
-    const bardaliPayable = bardaliGross - bardaliCommission;
-
-    const netFoodRevenue = chillpillFood + brosCommission + bardaliCommission;
+    const netFoodRevenue = chillpillFood + brosCommission + bardaliCommission + otherFoodCommission;
     const netRevenue = timeRevenue + netFoodRevenue;
 
     return {
@@ -8003,9 +8058,46 @@
       bardaliGross,
       bardaliCommission,
       bardaliPayable,
+      otherFoodGross,
+      otherFoodCommission,
+      otherFoodPayable,
       netFoodRevenue,
       netRevenue
     };
+  }
+
+  function getPartnerSettlementExpenses(supplierKey, startDate = null, endDate = null) {
+    if (!Array.isArray(expenses)) return [];
+    return expenses.filter((e) => {
+      const cat = String(e.category || "").toLowerCase();
+      const title = String(e.title || "").toLowerCase();
+      const notes = String(e.notes || "").toLowerCase();
+      const isSettlement = cat.includes("partner payout") || cat.includes("food vendor") || title.includes("food settlement") || title.includes("settlement");
+      if (!isSettlement) return false;
+
+      let match = false;
+      if (supplierKey === "bros_burger") {
+        match = notes.includes("bros_burger") || title.includes("bro's") || title.includes("bros");
+      } else if (supplierKey === "bardali") {
+        match = notes.includes("bardali") || title.includes("bardali");
+      } else if (supplierKey === "all") {
+        match = true;
+      } else {
+        match = notes.includes(String(supplierKey).toLowerCase()) || title.includes(String(supplierKey).toLowerCase());
+      }
+      if (!match) return false;
+
+      if (startDate || endDate) {
+        const expDate = e.expense_date ? e.expense_date.slice(0, 10) : (e.date || "");
+        if (startDate && expDate < startDate) return false;
+        if (endDate && expDate > endDate) return false;
+      }
+      return true;
+    });
+  }
+
+  function getPartnerSettlementTotal(supplierKey, startDate = null, endDate = null) {
+    return getPartnerSettlementExpenses(supplierKey, startDate, endDate).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   }
 
   function buildDailyMap(paid, dept = "all") {
@@ -8224,6 +8316,119 @@
       });
     });
 
+    // Food source sub-filter buttons
+    document.querySelectorAll(".rev-food-source-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        revSelectedFoodSource = btn.dataset.source || "all";
+        if (revSelectedDept !== "food" && revSelectedFoodSource !== "all") {
+          revSelectedDept = "food";
+        }
+        renderRevenue();
+      });
+    });
+
+    // Partner card filter triggers
+    const clickBros = document.getElementById("rev-filter-click-bros");
+    if (clickBros && !clickBros.dataset.wired) {
+      clickBros.dataset.wired = "1";
+      clickBros.addEventListener("click", () => {
+        revSelectedDept = "food";
+        revSelectedFoodSource = "bros_burger";
+        renderRevenue();
+      });
+    }
+    const clickBardali = document.getElementById("rev-filter-click-bardali");
+    if (clickBardali && !clickBardali.dataset.wired) {
+      clickBardali.dataset.wired = "1";
+      clickBardali.addEventListener("click", () => {
+        revSelectedDept = "food";
+        revSelectedFoodSource = "bardali";
+        renderRevenue();
+      });
+    }
+    const cardChill = document.getElementById("rev-card-chillpill");
+    if (cardChill && !cardChill.dataset.wired) {
+      cardChill.dataset.wired = "1";
+      cardChill.addEventListener("click", () => {
+        revSelectedDept = "food";
+        revSelectedFoodSource = "chillpill";
+        renderRevenue();
+      });
+    }
+
+    // Partner settlement buttons
+    const settleBrosBtn = document.getElementById("btn-settle-bros");
+    if (settleBrosBtn && !settleBrosBtn.dataset.wired) {
+      settleBrosBtn.dataset.wired = "1";
+      settleBrosBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openPartnerSettlementModal("bros_burger");
+      });
+    }
+    const historyBrosBtn = document.getElementById("btn-history-bros");
+    if (historyBrosBtn && !historyBrosBtn.dataset.wired) {
+      historyBrosBtn.dataset.wired = "1";
+      historyBrosBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openPartnerHistoryModal("bros_burger");
+      });
+    }
+    const settleBardaliBtn = document.getElementById("btn-settle-bardali");
+    if (settleBardaliBtn && !settleBardaliBtn.dataset.wired) {
+      settleBardaliBtn.dataset.wired = "1";
+      settleBardaliBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openPartnerSettlementModal("bardali");
+      });
+    }
+    const historyBardaliBtn = document.getElementById("btn-history-bardali");
+    if (historyBardaliBtn && !historyBardaliBtn.dataset.wired) {
+      historyBardaliBtn.dataset.wired = "1";
+      historyBardaliBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openPartnerHistoryModal("bardali");
+      });
+    }
+
+    // Initialize partner settlement form submit listener
+    const settlementForm = document.getElementById("partner-settlement-form");
+    if (settlementForm && !settlementForm.dataset.wired) {
+      settlementForm.dataset.wired = "1";
+      settlementForm.addEventListener("submit", savePartnerSettlement);
+    }
+    const settlementClose = document.getElementById("partner-settlement-close");
+    const settlementCancel = document.getElementById("partner-settlement-cancel");
+    const settlementModal = document.getElementById("partner-settlement-modal");
+    if (settlementClose && !settlementClose.dataset.wired) {
+      settlementClose.dataset.wired = "1";
+      settlementClose.addEventListener("click", () => settlementModal && settlementModal.classList.remove("open"));
+    }
+    if (settlementCancel && !settlementCancel.dataset.wired) {
+      settlementCancel.dataset.wired = "1";
+      settlementCancel.addEventListener("click", () => settlementModal && settlementModal.classList.remove("open"));
+    }
+
+    // Partner history modal close
+    const historyClose = document.getElementById("partner-history-close");
+    const historyModal = document.getElementById("partner-history-modal");
+    if (historyClose && !historyClose.dataset.wired) {
+      historyClose.dataset.wired = "1";
+      historyClose.addEventListener("click", () => historyModal && historyModal.classList.remove("open"));
+    }
+
+    // Revenue food edit modal close & cancel
+    const revFoodClose = document.getElementById("rev-food-edit-close");
+    const revFoodCancel = document.getElementById("rev-food-edit-cancel-btn");
+    const revFoodModal = document.getElementById("rev-food-edit-modal");
+    if (revFoodClose && !revFoodClose.dataset.wired) {
+      revFoodClose.dataset.wired = "1";
+      revFoodClose.addEventListener("click", () => revFoodModal && revFoodModal.classList.remove("open"));
+    }
+    if (revFoodCancel && !revFoodCancel.dataset.wired) {
+      revFoodCancel.dataset.wired = "1";
+      revFoodCancel.addEventListener("click", () => revFoodModal && revFoodModal.classList.remove("open"));
+    }
+
     // Time period filter buttons
     document.querySelectorAll(".rev-period-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -8389,7 +8594,27 @@
       totalOnline += totalTrnGross;
     }
 
-    // Primary Top KPI Card (adapts dynamically to department)
+    // Sync Dept Buttons
+    document.querySelectorAll(".rev-dept-btn").forEach((b) => {
+      const active = (b.dataset.dept || "all") === revSelectedDept;
+      b.className = `rev-dept-btn px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+        active ? "bg-[#d8ff45] text-[#10141e]" : "text-slate-400 hover:text-white"
+      }`;
+    });
+
+    // Sync Food Source Sub-filter Buttons
+    const foodSourceWrap = document.getElementById("rev-food-source-wrap");
+    if (foodSourceWrap) {
+      foodSourceWrap.classList.toggle("hidden", revSelectedDept !== "food");
+    }
+    document.querySelectorAll(".rev-food-source-btn").forEach((b) => {
+      const active = (b.dataset.source || "all") === revSelectedFoodSource;
+      b.className = `rev-food-source-btn px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+        active ? "border-amber-400 bg-amber-400/20 text-amber-300 font-bold" : "border-slate-700 text-slate-400 hover:border-slate-500 hover:text-white"
+      }`;
+    });
+
+    // Primary Top KPI Card (adapts dynamically to department and food source)
     const totalEl = document.getElementById("revenue-total");
     const grossEl = document.getElementById("revenue-gross-total");
     const badgeEl = document.getElementById("rev-kpi-badge");
@@ -8401,10 +8626,27 @@
       if (badgeEl) badgeEl.textContent = "🎮 Station Gameplay Only";
       if (descEl) descEl.textContent = "Net earnings from station gaming time";
     } else if (revSelectedDept === "food") {
-      if (totalEl) totalEl.textContent = inr(totalFoodNet);
-      if (grossEl) grossEl.textContent = inr(totalFoodGross);
-      if (badgeEl) badgeEl.textContent = "🍟 Food Net Cafe Profit";
-      if (descEl) descEl.textContent = "ChillPill Food (100%) + Partner Commissions";
+      if (revSelectedFoodSource === "bros_burger") {
+        if (totalEl) totalEl.textContent = inr(totalBrosCommission);
+        if (grossEl) grossEl.textContent = inr(totalBrosGross);
+        if (badgeEl) badgeEl.textContent = "🍔 Bro's Burger Net Profit";
+        if (descEl) descEl.textContent = "Cafe Commission earned on Bro's Burger orders";
+      } else if (revSelectedFoodSource === "bardali") {
+        if (totalEl) totalEl.textContent = inr(totalBardaliCommission);
+        if (grossEl) grossEl.textContent = inr(totalBardaliGross);
+        if (badgeEl) badgeEl.textContent = "🍽️ Bardali Net Profit";
+        if (descEl) descEl.textContent = "Cafe Commission earned on Bardali orders";
+      } else if (revSelectedFoodSource === "chillpill") {
+        if (totalEl) totalEl.textContent = inr(totalChillpillFood);
+        if (grossEl) grossEl.textContent = inr(totalChillpillFood);
+        if (badgeEl) badgeEl.textContent = "🏠 ChillPill Food Net Profit";
+        if (descEl) descEl.textContent = "Direct cafe drinks & snacks (100% cafe profit)";
+      } else {
+        if (totalEl) totalEl.textContent = inr(totalFoodNet);
+        if (grossEl) grossEl.textContent = inr(totalFoodGross);
+        if (badgeEl) badgeEl.textContent = "🍟 Food Net Cafe Profit";
+        if (descEl) descEl.textContent = "ChillPill Food (100%) + Partner Commissions";
+      }
     } else if (revSelectedDept === "tournament") {
       if (totalEl) totalEl.textContent = inr(totalTrnNet);
       if (grossEl) grossEl.textContent = inr(totalTrnGross);
@@ -8461,7 +8703,7 @@
     const tablePeriodLabel = document.getElementById("rev-table-period-label");
     if (tablePeriodLabel) tablePeriodLabel.textContent = periodLabel;
 
-    // Filter sessions to display in table according to department
+    // Filter sessions to display in table according to department and food source
     let displayedSessions = periodPaid;
     if (revSelectedDept === "station") {
       displayedSessions = periodPaid.filter((r) => {
@@ -8471,6 +8713,9 @@
     } else if (revSelectedDept === "food") {
       displayedSessions = periodPaid.filter((r) => {
         const rev = computeRecordRevenue(r);
+        if (revSelectedFoodSource === "bros_burger") return rev.brosGross > 0;
+        if (revSelectedFoodSource === "bardali") return rev.bardaliGross > 0;
+        if (revSelectedFoodSource === "chillpill") return rev.chillpillFood > 0;
         return rev.foodTotal > 0;
       });
     } else if (revSelectedDept === "tournament") {
@@ -8524,6 +8769,13 @@
             payCellHtml = `<span class="${isCash ? "text-amber-300" : "text-sky-300"}">${r.payment_method || "—"}</span>`;
           }
 
+          const actionCell = `
+            <td class="py-2.5 text-right whitespace-nowrap">
+              <button type="button" class="rev-edit-food-btn px-2.5 py-1 rounded-lg text-xs font-bold border border-amber-500/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 transition cursor-pointer inline-flex items-center gap-1" data-id="${r.id}" title="Edit food items, customer price & vendor cost">
+                <i data-lucide="utensils" width="12" height="12"></i> <span>Edit Food</span>
+              </button>
+            </td>`;
+
           return `
             <tr class="hover:bg-white/5 transition-colors">
               <td class="py-2.5 pr-3 text-xs text-slate-300">${fmtDateTime(r.paid_at || r.created_at)}</td>
@@ -8535,8 +8787,18 @@
               <td class="py-2.5 pr-3 text-xs">${payCellHtml}</td>
               <td class="py-2.5 pr-3 mono text-slate-200 text-xs">${inr(r.amount)}</td>
               <td class="py-2.5 text-right mono font-bold text-xs text-[#d8ff45]">${inr(profit)}</td>
+              ${actionCell}
             </tr>`;
         }).join("");
+
+        sessionsBody.querySelectorAll(".rev-edit-food-btn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const rid = btn.dataset.id;
+            const rec = records.find((x) => String(x.id) === String(rid));
+            if (rec) openRevFoodEditModal(rec);
+          });
+        });
+        if (window.lucide && typeof window.lucide.createIcons === "function") window.lucide.createIcons();
       }
     }
 
@@ -8594,6 +8856,35 @@
     if (bardaliPayEl2) bardaliPayEl2.textContent = inr(totalBardaliPayable);
     const bardaliGrossEl = document.getElementById("rev-bardali-gross-total");
     if (bardaliGrossEl) bardaliGrossEl.textContent = inr(totalBardaliGross);
+
+    // Compute Settlement Payouts & Outstanding Balances
+    const filterStart = revStartDate || (revSelectedPeriod === "today" ? getDateStr(new Date().toISOString()) : "");
+    const filterEnd = revEndDate || (revSelectedPeriod === "today" ? getDateStr(new Date().toISOString()) : "");
+    const isPeriodBounded = revSelectedPeriod !== "all";
+    const sStart = isPeriodBounded ? filterStart : null;
+    const sEnd = isPeriodBounded ? filterEnd : null;
+
+    const totalBrosSettled = getPartnerSettlementTotal("bros_burger", sStart, sEnd);
+    const totalBardaliSettled = getPartnerSettlementTotal("bardali", sStart, sEnd);
+
+    const brosPending = Math.max(0, totalBrosPayable - totalBrosSettled);
+    const bardaliPending = Math.max(0, totalBardaliPayable - totalBardaliSettled);
+
+    const brosSettledEl = document.getElementById("rev-bros-settled-total");
+    if (brosSettledEl) brosSettledEl.textContent = inr(totalBrosSettled);
+    const brosPendingEl = document.getElementById("rev-bros-pending-total");
+    if (brosPendingEl) {
+      brosPendingEl.textContent = inr(brosPending);
+      brosPendingEl.className = (brosPending === 0 && totalBrosPayable > 0) ? "mono text-emerald-400 font-bold" : "mono text-rose-300 font-bold";
+    }
+
+    const bardaliSettledEl = document.getElementById("rev-bardali-settled-total");
+    if (bardaliSettledEl) bardaliSettledEl.textContent = inr(totalBardaliSettled);
+    const bardaliPendingEl = document.getElementById("rev-bardali-pending-total");
+    if (bardaliPendingEl) {
+      bardaliPendingEl.textContent = inr(bardaliPending);
+      bardaliPendingEl.className = (bardaliPending === 0 && totalBardaliPayable > 0) ? "mono text-emerald-400 font-bold" : "mono text-rose-300 font-bold";
+    }
 
     // ----- Department-specific breakdowns -----
     // Station breakdown: per-station revenue when station mode is active
@@ -8655,9 +8946,10 @@
         const itemMap = {};
         displayedSessions.forEach((r) => {
           (r.food_items || []).forEach((item) => {
+            if (!item || item.id === "_extra_ctrl" || item.name === "Item") return;
             const key = item.name || "Unknown Item";
-            // Items are saved with 'supplier' field; fall back to 'source' for older records
             const supplier = item.supplier || item.source || "chillpill";
+            if (revSelectedFoodSource !== "all" && supplier !== revSelectedFoodSource) return;
             if (!itemMap[key]) itemMap[key] = { qty: 0, gross: 0, source: supplier };
             itemMap[key].qty += Number(item.qty) || 1;
             itemMap[key].gross += (Number(item.qty) || 1) * (Number(item.price) || 0);
@@ -8888,6 +9180,410 @@
         }
       }
     });
+  }
+
+  // ==========================================
+  // Food Revenue Editing & Partner Settlements
+  // ==========================================
+
+  let revFoodEditActiveRecord = null;
+
+  function openRevFoodEditModal(record) {
+    if (!record) return;
+    revFoodEditActiveRecord = record;
+    const modal = document.getElementById("rev-food-edit-modal");
+    if (!modal) return;
+
+    const custEl = document.getElementById("rev-food-edit-customer");
+    if (custEl) {
+      custEl.textContent = `${record.customer_name || "Customer"} · Session #${String(record.id).slice(-4)} · ${fmtDateTime(record.paid_at || record.created_at)}`;
+    }
+
+    renderRevFoodEditRows();
+    modal.classList.add("open");
+
+    const form = document.getElementById("rev-food-edit-form");
+    if (form && !form._wired) {
+      form._wired = true;
+      form.addEventListener("submit", saveRevFoodEdit);
+
+      const addBtn = document.getElementById("rev-food-add-item-btn");
+      if (addBtn) {
+        addBtn.addEventListener("click", () => {
+          if (!revFoodEditActiveRecord) return;
+          if (!Array.isArray(revFoodEditActiveRecord.food_items)) revFoodEditActiveRecord.food_items = [];
+          revFoodEditActiveRecord.food_items.push({
+            name: "New Item",
+            qty: 1,
+            price: 100,
+            supplier: "chillpill",
+            partner_cost: null
+          });
+          renderRevFoodEditRows();
+        });
+      }
+    }
+  }
+
+  function renderRevFoodEditRows() {
+    const tbody = document.getElementById("rev-food-edit-tbody");
+    if (!tbody || !revFoodEditActiveRecord) return;
+
+    const items = Array.isArray(revFoodEditActiveRecord.food_items) ? revFoodEditActiveRecord.food_items.filter(i => i && i.id !== "_extra_ctrl" && i.name !== "Item") : [];
+
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="py-4 text-center text-xs text-slate-500 italic">No food items on this session. Click "+ Add Food Item" below to add one.</td></tr>`;
+      updateRevFoodEditTotals();
+      return;
+    }
+
+    tbody.innerHTML = items.map((it, idx) => {
+      const sup = it.supplier || it.source || "chillpill";
+      const partnerCostVal = it.partner_cost != null && it.partner_cost !== "" ? it.partner_cost : (it.cost_price != null && it.cost_price !== "" ? it.cost_price : "");
+      return `
+        <tr class="hover:bg-white/5 transition-colors border-b border-slate-800" data-idx="${idx}">
+          <td class="py-2 pr-2">
+            <input type="text" class="rev-fedit-name w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white" value="${esc(it.name || "")}" placeholder="Item name" required />
+          </td>
+          <td class="py-2 pr-2">
+            <select class="rev-fedit-supplier w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white">
+              <option value="chillpill" ${sup === "chillpill" ? "selected" : ""}>🏠 ChillPill Food</option>
+              <option value="bros_burger" ${sup === "bros_burger" ? "selected" : ""}>🍔 Bro's Burger</option>
+              <option value="bardali" ${sup === "bardali" ? "selected" : ""}>🍽️ Bardali</option>
+              <option value="other" ${sup === "other" ? "selected" : ""}>📦 Other Supplier</option>
+            </select>
+          </td>
+          <td class="py-2 pr-2">
+            <input type="number" min="1" class="rev-fedit-qty w-16 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white text-right" value="${it.qty || 1}" required />
+          </td>
+          <td class="py-2 pr-2">
+            <div class="relative flex items-center">
+              <span class="absolute left-2 text-[10px] text-slate-500">रु</span>
+              <input type="number" min="0" step="1" class="rev-fedit-price w-24 bg-slate-900 border border-slate-700 rounded pl-5 pr-2 py-1 text-xs text-amber-300 font-semibold text-right" value="${it.price || 0}" required />
+            </div>
+          </td>
+          <td class="py-2 pr-2">
+            <div class="relative flex items-center">
+              <span class="absolute left-2 text-[10px] text-slate-500">रु</span>
+              <input type="number" min="0" step="1" class="rev-fedit-cost w-24 bg-slate-900 border border-slate-700 rounded pl-5 pr-2 py-1 text-xs text-sky-300 font-semibold text-right" value="${partnerCostVal}" placeholder="Auto rate" title="Vendor cost per unit. Leave blank to use cafe % commission" />
+            </div>
+          </td>
+          <td class="py-2 text-right">
+            <button type="button" class="rev-fedit-del text-slate-500 hover:text-rose-400 p-1 transition cursor-pointer" data-idx="${idx}" title="Remove item">
+              <i data-lucide="trash-2" width="14" height="14"></i>
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join("");
+
+    tbody.querySelectorAll("input, select").forEach(input => {
+      input.addEventListener("input", updateRevFoodEditTotals);
+      input.addEventListener("change", updateRevFoodEditTotals);
+    });
+
+    tbody.querySelectorAll(".rev-fedit-del").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const idx = Number(btn.dataset.idx);
+        if (!isNaN(idx) && revFoodEditActiveRecord && Array.isArray(revFoodEditActiveRecord.food_items)) {
+          revFoodEditActiveRecord.food_items.splice(idx, 1);
+          renderRevFoodEditRows();
+        }
+      });
+    });
+
+    if (window.lucide && typeof window.lucide.createIcons === "function") window.lucide.createIcons();
+    updateRevFoodEditTotals();
+  }
+
+  function getRevFoodEditCurrentItems() {
+    const tbody = document.getElementById("rev-food-edit-tbody");
+    if (!tbody) return [];
+    const rows = tbody.querySelectorAll("tr[data-idx]");
+    const items = [];
+    rows.forEach(tr => {
+      const name = (tr.querySelector(".rev-fedit-name")?.value || "").trim();
+      const supplier = tr.querySelector(".rev-fedit-supplier")?.value || "chillpill";
+      const qty = Number(tr.querySelector(".rev-fedit-qty")?.value) || 1;
+      const price = Number(tr.querySelector(".rev-fedit-price")?.value) || 0;
+      const costRaw = tr.querySelector(".rev-fedit-cost")?.value;
+      const partner_cost = (costRaw !== "" && costRaw != null && !isNaN(Number(costRaw))) ? Number(costRaw) : null;
+      if (name) {
+        items.push({ name, supplier, qty, price, partner_cost });
+      }
+    });
+    return items;
+  }
+
+  function updateRevFoodEditTotals() {
+    if (!revFoodEditActiveRecord) return;
+    const items = getRevFoodEditCurrentItems();
+    const newFoodGross = items.reduce((sum, it) => sum + (it.price * it.qty), 0);
+
+    const oldGross = Number(revFoodEditActiveRecord.amount) || 0;
+    const oldFoodGross = Number(revFoodEditActiveRecord.food_total) || 0;
+    const timeRevenue = Math.max(0, oldGross - oldFoodGross);
+    const newTotalBill = timeRevenue + newFoodGross;
+
+    const simRecord = {
+      ...revFoodEditActiveRecord,
+      amount: newTotalBill,
+      food_total: newFoodGross,
+      food_items: items
+    };
+    const rev = computeRecordRevenue(simRecord);
+
+    const fgEl = document.getElementById("rev-food-edit-prev-foodgross");
+    if (fgEl) fgEl.textContent = inr(newFoodGross);
+    const totEl = document.getElementById("rev-food-edit-prev-totalbill");
+    if (totEl) totEl.textContent = inr(newTotalBill);
+    const netEl = document.getElementById("rev-food-edit-prev-cafeprofit");
+    if (netEl) netEl.textContent = inr(rev.netFoodRevenue);
+    const payEl = document.getElementById("rev-food-edit-prev-partnerpayable");
+    if (payEl) payEl.textContent = inr(rev.brosPayable + rev.bardaliPayable + (rev.otherFoodPayable || 0));
+  }
+
+  async function saveRevFoodEdit(e) {
+    if (e) e.preventDefault();
+    if (!revFoodEditActiveRecord || !window.sb) return;
+
+    const items = getRevFoodEditCurrentItems();
+    const newFoodGross = items.reduce((sum, it) => sum + (it.price * it.qty), 0);
+    const oldGross = Number(revFoodEditActiveRecord.amount) || 0;
+    const oldFoodGross = Number(revFoodEditActiveRecord.food_total) || 0;
+    const timeRevenue = Math.max(0, oldGross - oldFoodGross);
+    const newTotalBill = timeRevenue + newFoodGross;
+
+    const saveBtn = document.getElementById("rev-food-edit-save-btn");
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = `<span class="animate-spin inline-block mr-1">⏳</span> Saving...`;
+    }
+
+    try {
+      const updatePayload = {
+        food_items: items,
+        food_total: newFoodGross,
+        amount: newTotalBill,
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await window.sb
+        .from("sessions")
+        .update(updatePayload)
+        .eq("id", revFoodEditActiveRecord.id);
+
+      if (error) throw error;
+
+      // Update in local records cache
+      Object.assign(revFoodEditActiveRecord, updatePayload);
+      const recIdx = records.findIndex(r => String(r.id) === String(revFoodEditActiveRecord.id));
+      if (recIdx !== -1) {
+        records[recIdx] = { ...records[recIdx], ...updatePayload };
+      }
+
+      showToast("Food items, prices & vendor costs updated!");
+      const modal = document.getElementById("rev-food-edit-modal");
+      if (modal) modal.classList.remove("open");
+      renderAllLists();
+      renderRevenue();
+    } catch (err) {
+      console.error("[ChillPill] Failed to update session food items:", err);
+      showToast("Error saving food: " + (err.message || "database error"));
+    } finally {
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = `Save Changes`;
+      }
+    }
+  }
+
+  // --- Partner Settlements ---
+
+  function openPartnerSettlementModal(supplierKey) {
+    const modal = document.getElementById("partner-settlement-modal");
+    if (!modal) return;
+
+    const isBros = supplierKey === "bros_burger";
+    const name = isBros ? "Bro's Burger" : (supplierKey === "bardali" ? "Bardali" : supplierKey);
+    const supInput = document.getElementById("settlement-supplier");
+    if (supInput) supInput.value = supplierKey;
+
+    const titleEl = document.getElementById("settlement-partner-title");
+    if (titleEl) titleEl.textContent = `${name} Settlement Payout`;
+
+    const allPaid = records.filter(r => r.paid);
+    const periodPaid = allPaid.filter(r => filterRecordByPeriod(r, revSelectedPeriod, revStartDate, revEndDate));
+
+    let periodPayable = 0;
+    periodPaid.forEach(r => {
+      const rev = computeRecordRevenue(r);
+      if (isBros) periodPayable += rev.brosPayable;
+      else if (supplierKey === "bardali") periodPayable += rev.bardaliPayable;
+      else periodPayable += (rev.otherFoodPayable || 0);
+    });
+
+    const filterStart = revStartDate || (revSelectedPeriod === "today" ? getDateStr(new Date().toISOString()) : "");
+    const filterEnd = revEndDate || (revSelectedPeriod === "today" ? getDateStr(new Date().toISOString()) : "");
+    const sStart = revSelectedPeriod !== "all" ? filterStart : null;
+    const sEnd = revSelectedPeriod !== "all" ? filterEnd : null;
+    const periodSettled = getPartnerSettlementTotal(supplierKey, sStart, sEnd);
+    const pendingBalance = Math.max(0, periodPayable - periodSettled);
+
+    const periodEl = document.getElementById("settlement-period-label");
+    if (periodEl) periodEl.textContent = getRevPeriodLabel(revSelectedPeriod, revStartDate, revEndDate);
+
+    const pendingEl = document.getElementById("settlement-pending-amount");
+    if (pendingEl) pendingEl.textContent = inr(pendingBalance);
+
+    const amtInput = document.getElementById("settlement-amount");
+    if (amtInput) amtInput.value = pendingBalance > 0 ? pendingBalance : "";
+
+    const dateInput = document.getElementById("settlement-date");
+    if (dateInput) dateInput.value = new Date().toISOString().slice(0, 10);
+
+    const notesInput = document.getElementById("settlement-notes");
+    if (notesInput) notesInput.value = `Food payout for ${name} (${getRevPeriodLabel(revSelectedPeriod, revStartDate, revEndDate)})`;
+
+    modal.classList.add("open");
+  }
+
+  async function savePartnerSettlement(e) {
+    if (e) e.preventDefault();
+    if (!window.sb) return;
+
+    const supplierKey = document.getElementById("settlement-supplier")?.value || "bros_burger";
+    const amount = Number(document.getElementById("settlement-amount")?.value) || 0;
+    const paymentMethod = document.getElementById("settlement-payment-method")?.value || "Online / QR";
+    const expenseDate = document.getElementById("settlement-date")?.value || new Date().toISOString().slice(0, 10);
+    const userNotes = (document.getElementById("settlement-notes")?.value || "").trim();
+
+    if (amount <= 0) {
+      showToast("Please enter a valid payout amount.");
+      return;
+    }
+
+    const isBros = supplierKey === "bros_burger";
+    const supplierName = isBros ? "Bro's Burger" : (supplierKey === "bardali" ? "Bardali" : supplierKey);
+
+    const saveBtn = document.getElementById("settlement-submit-btn");
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = `<span class="animate-spin inline-block mr-1">⏳</span> Recording...`;
+    }
+
+    try {
+      const payload = {
+        title: `${supplierName} Food Settlement`,
+        category: "Partner Payout",
+        amount: amount,
+        payment_method: paymentMethod,
+        expense_date: expenseDate,
+        notes: `[Settlement: ${supplierKey}] ${userNotes}`.trim(),
+        created_at: new Date().toISOString()
+      };
+
+      const { data, error } = await window.sb.from("expenses").insert([payload]).select();
+      if (error) throw error;
+
+      if (data && data[0] && Array.isArray(expenses)) {
+        expenses.unshift(data[0]);
+      } else {
+        await fetchExpenses();
+      }
+
+      showToast(`Settlement payment of रु ${amount} recorded for ${supplierName}!`);
+      const modal = document.getElementById("partner-settlement-modal");
+      if (modal) modal.classList.remove("open");
+      renderRevenue();
+    } catch (err) {
+      console.error("[ChillPill] Failed to save partner settlement:", err);
+      showToast("Error saving settlement: " + (err.message || "database error"));
+    } finally {
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = `Confirm Payout`;
+      }
+    }
+  }
+
+  function openPartnerHistoryModal(supplierKey) {
+    const modal = document.getElementById("partner-history-modal");
+    if (!modal) return;
+
+    const isBros = supplierKey === "bros_burger";
+    const supplierName = isBros ? "Bro's Burger" : (supplierKey === "bardali" ? "Bardali" : supplierKey);
+
+    const titleEl = document.getElementById("history-partner-title");
+    if (titleEl) titleEl.textContent = `${supplierName} Settlement History`;
+
+    const recordsList = getPartnerSettlementExpenses(supplierKey);
+    const totalSettled = recordsList.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+    const totEl = document.getElementById("history-total-settled");
+    if (totEl) totEl.textContent = inr(totalSettled);
+
+    const tbody = document.getElementById("partner-history-tbody");
+    const emptyEl = document.getElementById("partner-history-empty");
+
+    if (tbody) {
+      if (!recordsList.length) {
+        tbody.innerHTML = "";
+        if (emptyEl) emptyEl.classList.remove("hidden");
+      } else {
+        if (emptyEl) emptyEl.classList.add("hidden");
+        tbody.innerHTML = recordsList.map((e) => {
+          const dateStr = e.expense_date ? e.expense_date.slice(0, 10) : (e.date ? e.date.slice(0, 10) : "—");
+          return `
+            <tr class="hover:bg-white/5 transition-colors border-b border-slate-800">
+              <td class="py-2.5 pr-3 text-xs text-slate-300">${dateStr}</td>
+              <td class="py-2.5 pr-3 text-xs text-slate-400 font-medium">${esc(e.title || "Settlement")}</td>
+              <td class="py-2.5 pr-3 text-xs"><span class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">${esc(e.payment_method || "—")}</span></td>
+              <td class="py-2.5 pr-3 text-xs text-slate-400 truncate max-w-[200px]" title="${esc(e.notes || "")}">${esc(e.notes || "—")}</td>
+              <td class="py-2.5 pr-3 text-right mono font-bold text-amber-400 text-sm">${inr(e.amount)}</td>
+              <td class="py-2.5 text-right">
+                <button type="button" class="del-settlement-btn text-slate-500 hover:text-rose-400 p-1 transition cursor-pointer" data-id="${e.id}" data-sup="${supplierKey}" title="Delete settlement">
+                  <i data-lucide="trash-2" width="14" height="14"></i>
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join("");
+
+        tbody.querySelectorAll(".del-settlement-btn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const expId = btn.dataset.id;
+            const sup = btn.dataset.sup;
+            deletePartnerSettlement(expId, sup);
+          });
+        });
+
+        if (window.lucide && typeof window.lucide.createIcons === "function") window.lucide.createIcons();
+      }
+    }
+
+    modal.classList.add("open");
+  }
+
+  async function deletePartnerSettlement(expenseId, supplierKey) {
+    if (!expenseId || !window.sb) return;
+    if (!confirm("Are you sure you want to delete this settlement payment record?")) return;
+
+    try {
+      const { error } = await window.sb.from("expenses").delete().eq("id", expenseId);
+      if (error) throw error;
+
+      if (Array.isArray(expenses)) {
+        expenses = expenses.filter(e => String(e.id) !== String(expenseId));
+      }
+
+      showToast("Settlement record deleted.");
+      openPartnerHistoryModal(supplierKey);
+      renderRevenue();
+    } catch (err) {
+      console.error("[ChillPill] Failed to delete settlement:", err);
+      showToast("Error deleting settlement: " + (err.message || "database error"));
+    }
   }
 
   // ---------- staff management (admin) ----------
