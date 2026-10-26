@@ -13,6 +13,23 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,700;1,9..144,900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
   <style>
+    .inventory-page { color: var(--text-primary); }
+    .inventory-page .inv-muted { color: var(--text-muted); }
+    .inv-surface { background: var(--panel); border: 1px solid var(--line); border-radius: 1rem; }
+    .inv-button { padding: .5rem .8rem; border: 1px solid var(--line); border-radius: .65rem; font-size: .75rem; font-weight: 700; color: var(--text-primary); background: var(--panel-soft); cursor: pointer; }
+    .inv-button:hover { border-color: var(--acid); }
+    .inv-button:disabled { opacity: .5; cursor: not-allowed; }
+    .inv-primary { background: #d8ff45; color: #10141e; border-color: #d8ff45; }
+    .inv-table th, .inv-table td { text-align: left; padding: .8rem .6rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    .inv-table th { font-size: .7rem; color: var(--text-muted); white-space: nowrap; }
+    .inv-notice { background: var(--panel-soft); color: var(--text-primary); padding: 1rem; border: 1px solid var(--line); border-radius: .8rem; }
+    .inv-error { color: var(--danger); }
+    .inv-badge { display: inline-block; padding: .2rem .5rem; border-radius: .5rem; font-size: .7rem; white-space: nowrap; background: var(--panel-soft); }
+    .inv-badge-low { background: #422e10; color: #fcd34d; }
+    .inv-badge-out { background: #3b1823; color: #fda4af; }
+    [data-theme="light"] .inv-badge-low { background: #fef3c7; color: #92400e; }
+    [data-theme="light"] .inv-badge-out { background: #ffe4e6; color: #9f1239; }
+    .inventory-page [hidden] { display: none !important; }
     /* ===== DARK THEME (default) ===== */
     :root, [data-theme="dark"] {
       color-scheme: dark;
@@ -1018,6 +1035,7 @@
         <a href="#" data-page="page-billing" class="sidebar-link"><i data-lucide="credit-card" width="16" height="16"></i>Billing</a>
         <a href="#" data-page="page-stations" class="sidebar-link"><i data-lucide="tv" width="16" height="16"></i>Stations</a>
         <a href="#" data-page="page-records" class="sidebar-link"><i data-lucide="archive" width="16" height="16"></i>Records</a>
+        <a href="#" data-page="page-inventory" class="sidebar-link"><i data-lucide="package" width="16" height="16"></i>Inventory</a>
         <p class="sidebar-group-label admin-only">Admin</p>
         <a href="#" data-page="page-revenue" class="sidebar-link admin-only"><i data-lucide="banknote" width="16" height="16"></i>Revenue</a>
         <a href="#" data-page="page-expenses" class="sidebar-link admin-only"><i data-lucide="receipt" width="16" height="16"></i>Expenses &amp; Capital</a>
@@ -2758,6 +2776,35 @@
         </section>
 
         <!-- ===================== MENU & PRICING (admin) ===================== -->
+<section id="page-inventory" class="page-view inventory-page">
+  <div class="flex flex-wrap items-start justify-between gap-3 mb-5">
+    <div><p class="mono text-xs inv-muted tracking-widest">CHILLPILL / OPERATIONS</p><h2 class="text-2xl font-bold mt-1">Inventory</h2><p class="text-sm inv-muted mt-1">Food, drinks, supplies &amp; gaming equipment, all in one place.</p></div>
+    <div class="flex gap-2"><button type="button" id="inv-refresh" class="inv-button">Refresh</button><button type="button" id="inv-export" class="inv-button">Export stock</button><button type="button" id="inv-add" class="inv-button inv-primary">+ Add item</button></div>
+  </div>
+  <div id="inv-status" role="status" class="inv-notice mb-4" hidden>Loading inventory…</div>
+  <div id="inv-setup" class="inv-notice mb-4" hidden><h3 class="font-bold mb-1">Set up your cafe inventory</h3><p class="text-sm">An admin needs to run the inventory migration once in Supabase SQL Editor. Existing sales and menu items will be kept.</p><a class="underline text-sm" href="supabase/migrations/20261026_inventory.sql" download>Download inventory setup SQL</a><button type="button" id="inv-copy-setup" class="inv-button ml-2 mt-2">Copy setup SQL</button><p class="inv-muted text-xs mt-2">After running the SQL, click Refresh. Stock starts from the opening quantities you enter; past sales are not deducted.</p></div>
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5" id="inv-kpis">
+    <div class="inv-surface p-4"><p class="text-xs inv-muted">Active items</p><strong id="inv-total" class="mono text-2xl">—</strong></div>
+    <div class="inv-surface p-4"><p class="text-xs inv-muted">Low stock</p><strong id="inv-low" class="mono text-2xl">—</strong></div>
+    <div class="inv-surface p-4"><p class="text-xs inv-muted">Out of stock / unavailable</p><strong id="inv-out" class="mono text-2xl">—</strong></div>
+    <div class="inv-surface p-4"><p class="text-xs inv-muted">On-hand value at cost</p><strong id="inv-value" class="mono text-xl">—</strong></div>
+  </div>
+  <div class="inv-surface p-4 mb-5">
+    <div class="flex flex-wrap items-end gap-3 mb-4">
+      <label class="flex-1 min-w-40 text-xs inv-muted">Search inventory<input id="inv-search" type="search" class="form-control mt-1" placeholder="Name, SKU, supplier…"></label>
+      <label class="text-xs inv-muted">Category<select id="inv-category-filter" class="form-control mt-1"><option value="">All categories</option></select></label>
+      <label class="text-xs inv-muted">Stock status<select id="inv-stock-filter" class="form-control mt-1"><option value="active">Active items</option><option value="low">Low stock</option><option value="out">Out of stock</option><option value="archived">Archived items</option><option value="all">All items</option></select></label>
+    </div>
+    <div class="overflow-x-auto"><table class="w-full text-sm inv-table"><thead><tr><th>Item</th><th>Available / on hand</th><th>Reorder at</th><th>Unit cost</th><th>Status</th><th>Actions</th></tr></thead><tbody id="inv-items"></tbody></table></div>
+    <p id="inv-empty" class="text-sm inv-muted py-6 text-center" hidden>No inventory items yet. Add opening stock to get started.</p>
+  </div>
+  <div class="inv-surface p-4">
+    <div class="flex flex-wrap gap-3 items-center justify-between mb-3"><div><h3 class="font-bold">Stock movement history</h3><p class="inv-muted text-xs mt-1">Recent changes, with staff names and running balances.</p></div><label class="text-xs inv-muted">Item<select id="inv-history-filter" class="form-control mt-1"><option value="">All items</option></select></label></div>
+    <div class="overflow-x-auto"><table class="w-full text-xs inv-table"><thead><tr><th>When</th><th>Item</th><th>Movement</th><th>Change</th><th>Balance</th><th>Staff / reason</th></tr></thead><tbody id="inv-history"></tbody></table></div>
+    <p id="inv-history-empty" class="text-sm inv-muted py-4" hidden>No movements yet.</p><button type="button" id="inv-history-more" class="inv-button mt-3" hidden>Load older movements</button>
+  </div>
+</section>
+
         <section id="page-menu" class="page-view">
           <div class="grid md:grid-cols-2 gap-5">
             <div class="panel rounded-2xl p-5">
@@ -3262,6 +3309,40 @@
       <button id="checkout-cancel" type="button" class="w-full mt-3 rounded-xl border border-slate-700 py-2.5 text-xs text-slate-400 hover:text-white">Cancel</button>
     </div>
   </div>
+
+<div id="inv-item-modal" class="modal-overlay inventory-page" role="dialog" aria-modal="true" aria-labelledby="inv-item-title">
+  <form id="inv-item-form" class="panel inv-surface rounded-2xl p-5 w-full max-w-xl" style="max-height:90vh;overflow-y:auto">
+    <h3 id="inv-item-title" class="text-xl font-bold mb-4">Add inventory item</h3><input type="hidden" id="inv-item-id">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <label class="text-xs">Item name<input id="inv-name" class="form-control mt-1" maxlength="120" required placeholder="e.g. Coke 250 ml / PS5 controller"></label>
+      <label class="text-xs">SKU / asset reference<input id="inv-sku" class="form-control mt-1" maxlength="60" placeholder="Optional unique reference"></label>
+      <label class="text-xs">Category<select id="inv-category" class="form-control mt-1"><option>Drinks</option><option>Snacks</option><option>Food &amp; drinks</option><option>Gaming equipment</option><option>Supplies</option><option>Other</option></select></label>
+      <label class="text-xs">Unit<input id="inv-unit" class="form-control mt-1" value="pcs" maxlength="30" required placeholder="pcs, bottles, packs"></label>
+      <label id="inv-opening-wrap" class="text-xs">Opening stock<input id="inv-opening" type="number" min="0" step="0.001" value="0" class="form-control mt-1" required></label>
+      <label class="text-xs">Low-stock threshold<input id="inv-reorder" type="number" min="0" step="0.001" value="5" class="form-control mt-1" required></label>
+      <label class="text-xs">Cost per unit (रु)<input id="inv-cost" type="number" min="0" step="0.01" value="0" class="form-control mt-1" required></label>
+      <label class="text-xs">Supplier<input id="inv-supplier" class="form-control mt-1" maxlength="120" placeholder="Optional"></label>
+      <label class="text-xs">Link to food / drink menu item<select id="inv-menu" class="form-control mt-1"><option value="">No link — manage stock manually</option></select></label>
+      <label class="text-xs">Stock units per menu sale<input id="inv-units-per-sale" type="number" min="0.001" step="0.001" value="1" class="form-control mt-1" required></label>
+    </div>
+    <p class="text-xs inv-muted mt-3">Linked menu orders automatically deduct stock when saved. Reducing or deleting an order returns its tracked stock. Equipment should use manual Issue / Return movements.</p>
+    <label id="inv-active-wrap" class="flex items-center gap-2 text-sm mt-3" hidden><input id="inv-active" type="checkbox" checked> Active item (uncheck to archive)</label>
+    <p id="inv-item-message" role="status" class="text-sm mt-3 inv-error"></p>
+    <div class="flex justify-end gap-2 mt-4"><button type="button" data-inv-close="inv-item-modal" class="inv-button">Cancel</button><button type="submit" id="inv-item-save" class="inv-button inv-primary">Save item</button></div>
+  </form>
+</div>
+<div id="inv-move-modal" class="modal-overlay inventory-page" role="dialog" aria-modal="true" aria-labelledby="inv-move-title">
+  <form id="inv-move-form" class="panel inv-surface rounded-2xl p-5 w-full max-w-md">
+    <h3 id="inv-move-title" class="text-xl font-bold">Update stock</h3><p id="inv-move-balance" class="text-sm inv-muted mt-1 mb-4"></p><input type="hidden" id="inv-move-item">
+    <label class="block text-xs mb-3">Movement<select id="inv-move-type" class="form-control mt-1"><option value="restock">Restock / purchase</option><option value="usage">Issue equipment / internal use</option><option value="return">Return equipment / stock</option><option value="waste">Damaged / wasted / lost</option><option value="adjustment">Stocktake — set actual available count</option></select></label>
+    <label class="block text-xs mb-3"><span id="inv-move-qty-label">Quantity to add</span><input id="inv-move-qty" type="number" min="0.001" step="0.001" class="form-control mt-1" required></label>
+    <label id="inv-move-cost-wrap" class="block text-xs mb-3">Cost per unit (रु)<input id="inv-move-cost" type="number" min="0" step="0.01" class="form-control mt-1"></label>
+    <label class="block text-xs">Reason / reference<textarea id="inv-move-reason" rows="2" class="form-control mt-1" maxlength="500" required placeholder="e.g. Purchase invoice #12, controller issued to Station 2"></textarea></label>
+    <p class="text-xs inv-muted mt-2">Changes are recorded immediately. Restocking does not automatically create an expense.</p>
+    <p id="inv-move-message" role="status" class="text-sm mt-3 inv-error"></p>
+    <div class="flex justify-end gap-2 mt-4"><button type="button" data-inv-close="inv-move-modal" class="inv-button">Cancel</button><button type="submit" id="inv-move-save" class="inv-button inv-primary">Record movement</button></div>
+  </form>
+</div>
 
   <!-- ===================== SESSION PAUSE MODAL ===================== -->
   <div id="session-pause-modal" class="modal-overlay">
@@ -5436,6 +5517,7 @@
   <script src="assets/js/config.local.js" onerror="console.info('[ChillPill] No config.local.js override found — using assets/js/config.js placeholders.')"></script>
   <script src="assets/js/supabaseClient.js"></script>
   <script src="assets/js/passwordHash.js"></script>
+  <script src="assets/js/inventory.js?v=20261026_01"></script>
   <script src="assets/js/dashboard.js?v=20261026_02"></script>
   <script src="assets/js/tournament.js?v=20260930"></script>
 </body>

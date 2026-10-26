@@ -229,3 +229,24 @@ Gaming-Cafe/
 └─ supabase/
    └─ schema.sql                  # run once in Supabase's SQL editor (safe to re-run/migrate)
 ```
+## Native inventory
+
+The **Inventory** sidebar page manages food, drinks, supplies, and gaming equipment in the cafe dashboard. Admins create/edit/archive items and set opening stock, unit costs, suppliers, reorder levels and optional menu links. Both admins and staff can restock, issue, return, record damage/wastage, and perform stocktakes. Equipment shows **available** and **issued** quantities; returning more equipment than was issued is rejected.
+
+### Enable it on an existing Supabase project
+
+1. Open Supabase **SQL Editor** for this cafe's project.
+2. Run [`supabase/migrations/20261026_inventory.sql`](supabase/migrations/20261026_inventory.sql). It can be re-run safely and is also included in `supabase/schema.sql` for new projects.
+3. Reload the dashboard, open **Inventory**, and add the actual stock currently on hand. The page includes a download/copy setup option until the migration has been run.
+
+Existing LinkyPot inventory is **not imported or synchronized**. Enter opening stock from a physical count or your existing inventory records. Past food orders are not automatically deducted when you add a menu link. New linked orders deduct stock when saved, including food added to existing sessions. Quantity edits apply only the difference, so checkout, payment edits, and repeated saves do not deduct twice. Reducing/cancelling/deleting an order returns only stock previously deducted by this system. Insufficient stock rejects the entire order save without leaving a partial sale or stock change.
+
+Menu-linked items can specify stock units per sale (e.g. 1 bottle). Leave the menu link empty for supplies and equipment. Issue equipment when it leaves storage and return it when available again; damaged equipment already issued should be returned before recording damage. Stocktake sets the actual **available** count and retains issued equipment separately. Restocking records stock/cost, but **does not add an expense**; record supplier payments in Expenses as usual. The displayed inventory value is the current available quantity multiplied by the current unit cost, not a full accounting valuation.
+
+Search/filter stock, see low/out-of-stock warnings, export filtered stock to CSV, and view movement history by item. Archive items instead of deleting their history. Inventory follows this console's existing staff-ID login model; see the existing security note before exposing the anon-key application beyond trusted staff.
+
+### Inventory verification
+
+- `npm test` runs session regressions plus inventory KPI/filter and dashboard-wiring tests.
+- `npm run test:inventory:db` runs PostgreSQL transaction and concurrency tests **only** against an isolated local database named `inventory_test` on `127.0.0.1:55439`, as user `inventory_test`. It never reads production credentials. Create that test database first; set `INVENTORY_TEST_PSQL` or `INVENTORY_TEST_PORT` if needed.
+- Database tests cover repeated migrations, sale quantity changes, checkout idempotency, insufficient-stock rollback, cancellation/deletion returns, historical-order handling, equipment issue/return, audit balances and simultaneous use of the last stock unit.

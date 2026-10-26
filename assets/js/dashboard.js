@@ -10360,6 +10360,7 @@
     if (error) { showToast("Could not load the menu."); return; }
     menuItems = data || [];
     renderMenu();
+    window.ChillPillInventory.refreshMenu();
     refreshFoodMenus();
   }
 
@@ -10422,6 +10423,7 @@
     await Promise.allSettled([
       fetchSessions(),
       fetchMenu(),
+      window.ChillPillInventory.load(),
       fetchSettings(),
       fetchStaff(),
       fetchWaitingList(),
@@ -10440,6 +10442,8 @@
       .channel("chillpill-dashboard")
       .on("postgres_changes", { event: "*", schema: "public", table: "sessions" }, fetchSessions)
       .on("postgres_changes", { event: "*", schema: "public", table: "menu_items" }, fetchMenu)
+      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_items" }, () => window.ChillPillInventory.load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_movements" }, () => window.ChillPillInventory.load())
       .on("postgres_changes", { event: "*", schema: "public", table: "settings" }, fetchSettings)
       .on("postgres_changes", { event: "*", schema: "public", table: "staff" }, fetchStaff)
       .on("postgres_changes", { event: "*", schema: "public", table: "waiting_list" }, fetchWaitingList)
@@ -10459,6 +10463,7 @@
   function bootstrap() {
     applyRoleVisibility();
     initSidebar();
+    window.ChillPillInventory.init({ db: () => window.sb, staff: () => currentStaff, menu: () => menuItems, toast: showToast });
     initCheckoutModal();
     initPauseModal();
     initUnpaidBillsModal();
