@@ -4765,7 +4765,8 @@
     const subtotal = isCompleted ? (Number(record.amount) || 0) : Math.round(timeCost + extraCost + foodTotal + overtime.amount);
 
     const rawValue = document.getElementById("checkout-discount-value").value;
-    const discount = computeDiscount(record, checkoutDiscountMode, rawValue);
+    const rewardCredit = window.CafeLoyalty?.credit(record) || 0;
+    const discount = rewardCredit > 0 ? { mode: "amount", value: 0, amount: rewardCredit } : computeDiscount(record, checkoutDiscountMode, rawValue);
     if (String(discount.value) !== String(rawValue)) document.getElementById("checkout-discount-value").value = discount.value;
     document.getElementById("checkout-discount-cap").textContent = discountCapLabel(checkoutDiscountMode, timeCost + extraCost, primaryMins);
 
@@ -4779,7 +4780,7 @@
     }
     if (discount.amount > 0) {
       const discountLabel =
-        discount.mode === "percent" ? `${discount.value}% off play time` : discount.mode === "minutes" ? `${discount.value} min waived` : `Discount on play time`;
+        discount.mode === "percent" ? `${discount.value}% off play time` : discount.mode === "minutes" ? `${discount.value} min waived` : rewardCredit > 0 ? `ChillPill loyalty: one station free hour` : `Discount on play time`;
       lines.push(`${discountLabel}: −${inr(discount.amount)}`);
     }
     document.getElementById("checkout-breakdown").innerHTML = lines.map((l) => `<span class="block">${l}</span>`).join("");
@@ -4849,159 +4850,10 @@
     return { slug, key, host };
   }
 
-  function getLinkyPotApiUrl() {
-    return `${currentLinkyPotHost}/api/cards/${currentLinkyPotSlug}/loyalty/pos`;
-  }
-
-  async function fetchCustomerLoyalty(phone) {
-    if (!phone) return null;
-    try {
-      const res = await fetch(`${getLinkyPotApiUrl()}?key=${currentLinkyPotKey}&phone=${encodeURIComponent(phone.trim())}`);
-      if (!res.ok) return null;
-      return await res.json();
-    } catch (e) {
-      console.warn("[ChillPill] Could not check LinkyPot loyalty status:", e);
-      return null;
-    }
-  }
-
-  /**
-   * Returns true only for real customer phone numbers.
-   * Rejects: blank, "Internal", "—", "-", or anything that isn't
-   * mostly digits (at least 7 numeric digits required).
-   */
-  function isRealCustomerPhone(phone) {
-    if (!phone) return false;
-    const p = phone.trim();
-    if (!p || p === "—" || p === "-") return false;
-    // Must not be the literal placeholder used for internal sales
-    if (/^internal$/i.test(p)) return false;
-    // Must contain at least 7 digits
-    const digits = p.replace(/\D/g, "");
-    return digits.length >= 7;
-  }
-
-  async function logVisitToLinkyPot(phone, name, amount, redeemed = false) {
-    if (!isRealCustomerPhone(phone)) return;
-    try {
-      const res = await fetch(getLinkyPotApiUrl(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          key: currentLinkyPotKey,
-          action: "log_visit",
-          phone: phone.trim(),
-          name: name ? name.trim() : "Customer",
-          amount_spent: Number(amount) || 0,
-          logged_by: currentStaff ? currentStaff.name : "ChillPill POS",
-          redeemed: Boolean(redeemed),
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success) {
-        if (data.reward_ready && !redeemed) {
-          showToast(`🎉 LinkyPot: ${name || phone} unlocked a loyalty reward!`);
-        } else {
-          showToast(`⚡ LinkyPot: Visit recorded (${data.current_progress}/${data.target_value} stamps).`);
-        }
-      } else {
-        console.warn("[ChillPill] LinkyPot visit log response:", res.status, data);
-      }
-    } catch (e) {
-      console.warn("[ChillPill] Background visit log to LinkyPot failed:", e);
-    }
-  }
-
-  async function syncPastRecordsToLinkyPot() {
-    const syncBtn = document.getElementById("btn-sync-linkypot");
-    const syncText = document.getElementById("btn-sync-linkypot-text");
-    if (!syncBtn || !syncText) return;
-
-    syncBtn.disabled = true;
-    syncText.textContent = "Checking records...";
-
-    // Filter to real paying customers only — exclude internal sales, staff sessions, and placeholder phones
-    const isEligible = (r) =>
-      r.status === "Completed" &&
-      isRealCustomerPhone(r.customer_phone) &&
-      !(r.notes && r.notes.includes("[Internal Sale]")) &&
-      !(r.customer_name && /^internal/i.test(r.customer_name.trim()));
-
-    let completedSessions = records.filter(isEligible);
-
-    // Also pull directly from Supabase if connected to ensure all historical records are included
-    if (window.sb) {
-      try {
-        const { data: dbSessions } = await window.sb.from("sessions").select("*").eq("status", "Completed");
-        if (dbSessions && dbSessions.length) {
-          const dbFiltered = dbSessions.filter(isEligible);
-          if (dbFiltered.length >= completedSessions.length) {
-            completedSessions = dbFiltered;
-          }
-        }
-      } catch (e) {}
-    }
-
-    if (!completedSessions.length) {
-      syncBtn.disabled = false;
-      syncText.textContent = "Sync Past Records";
-      showToast("No completed sessions with phone numbers found to sync.");
-      return;
-    }
-
-    const customerMap = new Map();
-    completedSessions.forEach((s) => {
-      const cleanPhone = s.customer_phone.trim();
-      const existing = customerMap.get(cleanPhone) || { phone: cleanPhone, name: s.customer_name || "Customer", visits: 0, total_spent: 0, last_visit_at: null };
-      existing.visits += 1;
-      existing.total_spent += Number(s.amount || s.final_amount || 0);
-      if (s.customer_name && s.customer_name !== "Customer") existing.name = s.customer_name;
-      // Track the most-recent session date so LinkyPot shows accurate last-visit time.
-      const sessionDate = s.end_time || s.start_time || s.created_at;
-      if (sessionDate) {
-        const d = new Date(sessionDate).toISOString();
-        if (!existing.last_visit_at || d > existing.last_visit_at) existing.last_visit_at = d;
-      }
-      customerMap.set(cleanPhone, existing);
-    });
-
-    const customers = Array.from(customerMap.values());
-    syncText.textContent = `Syncing ${customers.length} customers...`;
-
-    try {
-      const res = await fetch(getLinkyPotApiUrl(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          key: currentLinkyPotKey,
-          action: "bulk_sync",
-          customers,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success) {
-        showToast(`✅ Synced ${data.synced_count || customers.length} customers with past visits to LinkyPot!`);
-        const iframe = document.getElementById("linkypot-frame");
-        if (iframe) {
-          const src = iframe.src;
-          iframe.src = "";
-          setTimeout(() => { iframe.src = src; }, 50);
-        }
-      } else {
-        showToast("Sync failed: " + (data.error || "Check console"));
-      }
-    } catch (err) {
-      showToast("Could not connect to LinkyPot API.");
-    } finally {
-      syncBtn.disabled = false;
-      syncText.textContent = "Sync Past Records";
-    }
-  }
-
   function openCheckoutModal(record) {
     const modal = document.getElementById("checkout-modal");
     modal.dataset.recordId = record.id;
-    modal.dataset.linkypotRedeemed = "false";
+    window.CafeLoyalty?.reset();
     document.getElementById("checkout-customer").textContent = record.customer_name || "—";
     document.getElementById("checkout-station").textContent = `${record.station_name || ""} · ${record.duration_minutes || 0} min`;
     if (window._resetCheckoutMethod) window._resetCheckoutMethod(record);
@@ -5052,44 +4904,7 @@
 
     renderCheckoutBreakdown(record);
 
-    // LinkyPot Loyalty & Reward Check
-    const lpBadge = document.getElementById("checkout-linkypot-badge");
-    const lpText = document.getElementById("checkout-linkypot-text");
-    const lpBtn = document.getElementById("btn-apply-linkypot-reward");
-
-    if (lpBadge) {
-      if (isRealCustomerPhone(record.customer_phone)) {
-        lpBadge.classList.remove("hidden");
-        lpText.textContent = "Checking LinkyPot loyalty...";
-        if (lpBtn) lpBtn.classList.add("hidden");
-
-        fetchCustomerLoyalty(record.customer_phone).then((info) => {
-          if (!info || !info.success) {
-            lpText.textContent = `Customer: ${record.customer_phone} (New to loyalty program)`;
-            return;
-          }
-          if (info.reward_ready) {
-            lpText.textContent = `🎁 REWARD READY: ${info.reward_description} (${info.current_progress}/${info.target_value} stamps)!`;
-            if (lpBtn) {
-              lpBtn.classList.remove("hidden");
-              lpBtn.onclick = () => {
-                setCheckoutDiscountMode("percent");
-                document.getElementById("checkout-discount-value").value = 100;
-                modal.dataset.linkypotRedeemed = "true";
-                renderCheckoutBreakdown(record);
-                lpBtn.classList.add("hidden");
-                lpText.textContent = `🎉 Reward Applied: ${info.reward_description} (will be redeemed on checkout)`;
-                showToast("LinkyPot reward applied to bill!");
-              };
-            }
-          } else {
-            lpText.textContent = `Loyalty Stamps: ${info.current_progress}/${info.target_value} (${info.stamps_needed} more needed for ${info.reward_description})`;
-          }
-        });
-      } else {
-        lpBadge.classList.add("hidden");
-      }
-    }
+    window.CafeLoyalty?.open(record);
 
     modal.classList.add("show");
     clearInterval(Number(modal.dataset.refreshTimer) || 0);
@@ -5101,7 +4916,7 @@
 
   function closeCheckoutModal() {
     const modal = document.getElementById("checkout-modal");
-    modal.dataset.linkypotRedeemed = "false";
+    window.CafeLoyalty?.reset();
     modal.classList.remove("show");
     clearInterval(Number(modal.dataset.refreshTimer) || 0);
   }
@@ -5525,24 +5340,21 @@
         notes: finalNotes
       };
 
-      let { error } = await window.sb
-        .from("sessions")
-        .update(updatePayload)
-        .eq("id", recordId);
-
-      // Resilient fallback if any optional billing columns are not present in PostgREST schema cache
-      if (error) {
-        delete updatePayload.cash_amount;
-        delete updatePayload.online_amount;
-        delete updatePayload.paid_amount;
-        delete updatePayload.due_amount;
-        delete updatePayload.overtime_amount;
-        delete updatePayload.discount_amount;
-        delete updatePayload.discount_type;
-        delete updatePayload.discount_value;
-        const retry = await window.sb.from("sessions").update(updatePayload).eq("id", recordId);
-        error = retry.error;
+      const usingReward = !!window.CafeLoyalty?.selected();
+      let error = null, savedCheckout = null;
+      if (usingReward) {
+        if (isWaived) { if (btn) btn.disabled = false; showToast("Remove the loyalty reward before waiving this session."); return; }
+        try { savedCheckout = await window.CafeLoyalty.checkout(record, updatePayload); }
+        catch (failure) { error = failure; }
+      } else {
+        const saved = await window.sb.from("sessions").update(updatePayload).eq("id", recordId);
+        error = saved.error;
+        if (error && ["PGRST204", "42703"].includes(error.code)) {
+          ["cash_amount", "online_amount", "paid_amount", "due_amount", "overtime_amount", "discount_amount", "discount_type", "discount_value"].forEach(key => delete updatePayload[key]);
+          error = (await window.sb.from("sessions").update(updatePayload).eq("id", recordId)).error;
+        }
       }
+      if (error) { if (btn) btn.disabled = false; showToast("Could not record payment: " + error.message); return; }
 
       record.status = "Completed";
       record.is_paused = false;
@@ -5555,10 +5367,11 @@
       if (error) {
         showToast("Could not record payment: " + error.message);
       } else {
-        const redeemed = modal.dataset.linkypotRedeemed === "true";
+
         const updatedRecord = {
           ...record,
           ...updatePayload,
+          ...(savedCheckout || {}),
           is_paused: false,
           paused_at: null,
           cash_amount: cashAmount,
@@ -5589,7 +5402,7 @@
         } else {
           showToast(`Payment recorded — ${methodDisplay}${extras ? ` (${extras})` : ""}.`);
         }
-        logVisitToLinkyPot(record.customer_phone, record.customer_name, paidAmount > 0 ? paidAmount : grandTotal, redeemed);
+        window.CafeLoyalty?.load();
       }
     }
 
@@ -5929,12 +5742,13 @@
     // Apply discount (on play time only, same as checkout)
     const discountValInput = document.getElementById("edit-discount-value");
     const rawDiscountVal = discountValInput ? discountValInput.value : 0;
-    const discount = isFoodOnly ? { amount: 0, mode: editDiscountMode, value: 0 } : computeDiscount({ duration_minutes: duration, rate }, editDiscountMode, rawDiscountVal);
+    const rewardCredit = Number(editTarget?.loyalty_discount) || 0;
+    const discount = rewardCredit > 0 ? { amount: rewardCredit, mode: "amount", value: 0 } : isFoodOnly ? { amount: 0, mode: editDiscountMode, value: 0 } : computeDiscount({ duration_minutes: duration, rate }, editDiscountMode, rawDiscountVal);
     if (!isFoodOnly && discountValInput && String(discount.value) !== String(rawDiscountVal)) discountValInput.value = discount.value;
 
     const discountCapEl = document.getElementById("edit-discount-cap");
     const timeCost = Math.round((duration / 60) * rate);
-    if (discountCapEl) discountCapEl.textContent = isFoodOnly ? "" : discountCapLabel(editDiscountMode, timeCost, duration);
+    if (discountCapEl) discountCapEl.textContent = rewardCredit > 0 ? "Native loyalty reward retained. Cancel or delete the visit to reverse its redemption." : isFoodOnly ? "" : discountCapLabel(editDiscountMode, timeCost, duration);
 
     const tagEl = document.getElementById("edit-discount-summary-tag");
     if (tagEl) tagEl.textContent = (!isFoodOnly && discount.amount > 0) ? `−${inr(discount.amount)}` : "";
@@ -6243,7 +6057,8 @@
         }`;
       });
       const editDiscValInput = document.getElementById("edit-discount-value");
-      if (editDiscValInput) editDiscValInput.value = dVal;
+      if (editDiscValInput) { editDiscValInput.value = dVal; editDiscValInput.disabled = Number(record.loyalty_discount) > 0; }
+      document.querySelectorAll(".edit-discount-mode-btn").forEach(b => b.disabled = Number(record.loyalty_discount) > 0);
 
       const customBillInput = document.getElementById("edit-custom-bill");
       if (customBillInput) {
@@ -7483,11 +7298,7 @@
         closeMissingRecordModal();
         showToast(isInternal ? "Internal sale record saved successfully!" : "Missing record added from register successfully!");
 
-        // Log visit to LinkyPot CRM & Loyalty if real customer phone number is provided (skip for internal sales)
-        if (!isInternal && savedRecord.customer_phone && savedRecord.customer_phone !== "—" && savedRecord.customer_phone !== "Internal" && (savedRecord.status === "Completed" || savedRecord.paid)) {
-          const amt = Number(savedRecord.amount || savedRecord.final_amount || 0);
-          logVisitToLinkyPot(savedRecord.customer_phone, savedRecord.customer_name, amt, false);
-        }
+        window.CafeLoyalty?.load();
 
         if (printBill) {
           printPanBill(savedRecord);
@@ -10174,6 +9985,7 @@
       window.ChillPillInventory.load(),
       window.FoodPartners.load(),
       window.CafeAccounting.load(),
+      window.CafeLoyalty.load(),
       fetchSettings(),
       fetchStaff(),
       fetchWaitingList(),
@@ -10191,6 +10003,8 @@
     realtimeChannel = window.sb
       .channel("chillpill-dashboard")
       .on("postgres_changes", { event: "*", schema: "public", table: "sessions" }, fetchSessions)
+      .on("postgres_changes", { event: "*", schema: "public", table: "loyalty_visits" }, () => window.CafeLoyalty.load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "loyalty_rewards" }, () => window.CafeLoyalty.load())
       .on("postgres_changes", { event: "*", schema: "public", table: "menu_items" }, fetchMenu)
       .on("postgres_changes", { event: "*", schema: "public", table: "accounting_entries" }, () => window.CafeAccounting.load())
       .on("postgres_changes", { event: "*", schema: "public", table: "accounting_expense_payments" }, () => window.CafeAccounting.load())
@@ -10227,6 +10041,8 @@
     window.CafeAccounting.init({ db: () => window.sb, staff: () => currentStaff, records: () => records, breakdown: getRecordPaymentBreakdown,
       reloadExpenses: fetchExpenses, menu: () => menuItems, collect: openUnpaidBillsModal, toast: showToast, navigate: switchPage, tournaments: () => tournamentsFinancials,
       revenuePeriod: () => ({ period: revSelectedPeriod, start: revStartDate, end: revEndDate }) });
+    window.CafeLoyalty.init({ db: () => window.sb, staff: () => currentStaff, clearDiscount: () => setCheckoutDiscountMode("amount"), rerender: () => { const r = records.find(r => r.id === document.getElementById("checkout-modal").dataset.recordId); if (r) renderCheckoutBreakdown(r); } });
+    document.getElementById("overview-loyalty-btn")?.addEventListener("click", () => switchPage("page-loyalty"));
     initCheckoutModal();
     initPauseModal();
     initRecordDeleteModal();
@@ -10241,10 +10057,6 @@
     initRecordsFilter();
     initPartnerSettingsForm();
     switchPage("page-overview");
-
-    // LinkyPot: wire bulk historical sync button
-    const syncBtn = document.getElementById("btn-sync-linkypot");
-    if (syncBtn) syncBtn.addEventListener("click", syncPastRecordsToLinkyPot);
 
     // --- Expense quick-chips, source toggle, form, and filters ---
     document.querySelectorAll(".expense-chip").forEach((chip) =>

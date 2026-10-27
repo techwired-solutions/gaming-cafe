@@ -1,0 +1,32 @@
+/* Native hourly loyalty. Awards, pause intervals and reward spending are database-owned. */
+(function(){'use strict';
+ let env,visits=[],rewards=[],ready=false,quote=null,selected=null,opening=0,loading=false,queued=false;
+ const $=id=>document.getElementById(id),esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const money=n=>'रु '+Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:2});
+ const duration=n=>`${Math.floor(n/3600)}h ${Math.floor(n%3600/60)}m`;
+ function balance(phone){const own=visits.filter(v=>v.phone===phone),spent=rewards.filter(r=>r.phone===phone&&!r.voided_at).length,stamps=own.reduce((n,v)=>n+v.stamps,0);return {own,spent,stamps,available:Math.max(0,Math.floor(stamps/10)-spent),progress:Math.max(0,stamps-spent*10)%10,deficit:Math.max(0,spent*10-stamps)};}
+ async function all(table){let result=[];for(let offset=0;;offset+=500){const {data,error}=await env.db().from(table).select('*').order(table==='loyalty_visits'?'session_id':'id').range(offset,offset+499);if(error)throw error;result.push(...data);if(data.length<500)return result;}}
+ async function load(){if(!env?.db())return;if(loading){queued=true;return;}loading=true;try{[visits,rewards]=await Promise.all([all('loyalty_visits'),all('loyalty_rewards')]);ready=true;$('loyalty-status').textContent='';render();}catch(error){ready=false;$('loyalty-status').textContent=['42P01','PGRST205','PGRST202'].includes(error.code)?'Activate native loyalty: run supabase/migrations/20261027_loyalty.sql in Supabase SQL Editor, then refresh.':'Could not load loyalty: '+error.message;}finally{loading=false;if(queued){queued=false;load();}}}
+ function render(){const phones=[...new Set(visits.map(v=>v.phone).concat(rewards.map(r=>r.phone)))],query=$('loyalty-search').value.trim().toLowerCase();let totalStamps=0,totalReady=0;
+  const rows=phones.map(phone=>{const b=balance(phone),ordered=[...b.own].sort((a,b)=>String(b.visited_at).localeCompare(String(a.visited_at))),name=ordered[0]?.customer_name||phone;totalStamps+=b.stamps;totalReady+=b.available;if(!`${name} ${phone}`.toLowerCase().includes(query))return '';
+   const history=ordered.map(v=>`<tr><td>${esc(new Date(v.visited_at).toLocaleString('en-GB',{timeZone:'Asia/Kathmandu'}))}</td><td>${duration(v.played_seconds)}${v.historical?' <small class="inv-muted">Historical</small>':''}</td><td>${v.stamps}</td></tr>`).join('');
+   const used=rewards.filter(r=>r.phone===phone).map(r=>`<li>${esc(new Date(r.created_at).toLocaleDateString('en-GB',{timeZone:'Asia/Kathmandu'}))} · ${esc(r.station_name)} · ${money(r.discount)} · ${r.voided_at?'Reversed':'Redeemed'} · ${esc(r.staff_name)}</li>`).join('');
+   return `<details class="inv-surface rounded-xl p-4 mb-3"><summary class="cursor-pointer"><strong>${esc(name)}</strong> · ${esc(phone)}<span class="block inv-muted text-sm">${duration(b.own.reduce((n,v)=>n+v.played_seconds,0))} played · ${b.stamps} lifetime stamps · ${b.progress}/10 toward next reward · ${b.available} free hour(s) available</span></summary><div class="mt-3"><p class="text-sm mb-2">${b.spent} reward(s) redeemed${b.deficit?` · ${b.deficit} stamps to recover after corrected visits`:''}</p><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr><th>Visit (Nepal time)</th><th>Playing time</th><th>Stamps</th></tr></thead><tbody>${history||'<tr><td colspan="3">No eligible visits</td></tr>'}</tbody></table></div>${used?`<p class="font-semibold mt-3">Reward history</p><ul class="text-sm inv-muted">${used}</ul>`:''}</div></details>`;
+  }).join('');$('loyalty-customers').textContent=phones.length;$('loyalty-stamps').textContent=totalStamps;$('loyalty-ready').textContent=totalReady;$('loyalty-list').innerHTML=rows||'<p class="inv-muted">No matching loyalty customers yet. Completed gaming sessions with a valid phone will appear here.</p>';
+ }
+ function reset(){opening++;quote=null;selected=null;$('checkout-loyalty-choice').disabled=false;$('checkout-loyalty-apply').textContent='Use 1 free-hour reward';$('checkout-loyalty-choice').hidden=true;$('checkout-loyalty-apply').hidden=true;lockDiscount(false);}
+ function lockDiscount(on){document.querySelectorAll('.discount-mode-btn').forEach(b=>b.disabled=on);$('checkout-discount-value').disabled=on;}
+ async function open(record){reset();const token=opening;$('checkout-loyalty').hidden=false;$('checkout-loyalty-text').textContent='Checking hourly stamps and free-hour rewards…';
+  try{const {data,error}=await env.db().rpc('loyalty_quote',{p_session_id:record.id});if(token!==opening)return;if(error)throw error;quote=data;
+   if(!data.phone){$('checkout-loyalty-text').textContent='Add a valid customer phone in Edit Session to earn stamps.';return;}
+   $('checkout-loyalty-text').textContent=`${data.progress}/10 stamps · ${data.available} free hour(s) available. This visit so far: ${duration(data.session_seconds)} (${Math.floor(data.session_seconds/3600)} stamps at completion).`;
+   if(data.available>0&&data.choices.length&&record.status==='Active'){$('checkout-loyalty-choice').innerHTML=data.choices.map(c=>`<option value="${esc(c.name)}">${esc(c.name)} · up to ${Math.floor(c.minutes)} min · ${money(c.credit)} credit</option>`).join('');$('checkout-loyalty-choice').hidden=false;$('checkout-loyalty-apply').hidden=false;}
+  }catch(error){if(token===opening)$('checkout-loyalty-text').textContent='Native loyalty unavailable. Apply the loyalty migration and refresh; ordinary checkout is still available.';}
+ }
+ function credit(record){return record.status==='Active'&&selected?selected.credit:0;}
+ async function checkout(record,payload){if(!selected)return null;const {data,error}=await env.db().rpc('loyalty_checkout',{p_staff_id:env.staff().id,p_session_id:record.id,p_update:payload,p_station:selected.name});if(error)throw error;return data;}
+ function init(context){env=context;$('loyalty-search').addEventListener('input',render);$('loyalty-refresh').addEventListener('click',load);
+  $('checkout-loyalty-apply').addEventListener('click',()=>{if(selected){selected=null;lockDiscount(false);$('checkout-loyalty-apply').textContent='Use 1 free-hour reward';}else{selected=quote?.choices.find(c=>c.name===$('checkout-loyalty-choice').value);if(!selected)return;env.clearDiscount();lockDiscount(true);$('checkout-loyalty-apply').textContent='Remove reward';} $('checkout-loyalty-choice').disabled=!!selected;env.rerender();});
+ }
+ window.CafeLoyalty={init,load,open,reset,credit,checkout,selected:()=>selected,balance};
+})();

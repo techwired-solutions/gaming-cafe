@@ -1040,6 +1040,7 @@
         <a href="#" data-page="page-billing" class="sidebar-link"><i data-lucide="credit-card" width="16" height="16"></i>Billing</a>
         <a href="#" data-page="page-stations" class="sidebar-link"><i data-lucide="tv" width="16" height="16"></i>Stations</a>
         <a href="#" data-page="page-records" class="sidebar-link"><i data-lucide="archive" width="16" height="16"></i>Records</a>
+        <a href="#" data-page="page-loyalty" class="sidebar-link"><i data-lucide="gift" width="16" height="16"></i>ChillPill Loyalty</a>
         <a href="#" data-page="page-inventory" class="sidebar-link"><i data-lucide="package" width="16" height="16"></i>Inventory</a>
         <p class="sidebar-group-label admin-only">Admin</p>
         <a href="#" data-page="page-revenue" class="sidebar-link admin-only"><i data-lucide="banknote" width="16" height="16"></i>Revenue</a>
@@ -1117,6 +1118,7 @@
               <i data-lucide="plus-circle" width="17" height="17"></i> New Session
             </button>
             <button id="overview-food-sources-btn" type="button" class="admin-only flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800/60 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:border-[#d8ff45] transition cursor-pointer"><i data-lucide="store" width="16" height="16"></i> Food Sources &amp; Partners</button>
+            <button id="overview-loyalty-btn" type="button" class="inv-button">ChillPill Loyalty</button>
             <button id="overview-expense-btn" type="button" class="inv-button">+ Record Daily Expense</button>
             <button id="overview-lounge-log-btn" type="button"
               class="flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800/60 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:border-[#d8ff45] hover:text-[#d8ff45] transition cursor-pointer">
@@ -2993,6 +2995,15 @@
         </section>
 
         <!-- ===================== LINKYPOT / DIGITAL CARD (admin) ===================== -->
+        <section id="page-loyalty" class="page-view inventory-page">
+          <div class="flex items-center justify-between gap-3 mb-4"><div><h2 class="text-2xl font-bold">ChillPill Loyalty</h2><p class="inv-muted text-sm">Play an hour, earn a stamp. Collect 10 stamps for one free hour.</p></div><button id="loyalty-refresh" class="inv-button" type="button">Refresh</button></div>
+          <p class="inv-surface rounded-xl p-4 text-sm mb-4">Stamps are rounded down separately for each completed visit: 59 minutes = 0, 60 minutes = 1, 120 minutes = 2. Short visits never combine across days. Overlapping stations count once and pauses do not earn stamps. Use a customer's phone consistently. Redeem an available reward during checkout.</p>
+          <div class="grid sm:grid-cols-3 gap-3 mb-4"><div class="inv-surface rounded-xl p-4">Customers<strong id="loyalty-customers" class="block text-2xl">0</strong></div><div class="inv-surface rounded-xl p-4">Lifetime stamps<strong id="loyalty-stamps" class="block text-2xl">0</strong></div><div class="inv-surface rounded-xl p-4">Free hours available<strong id="loyalty-ready" class="block text-2xl">0</strong></div></div>
+          <p id="loyalty-status" class="inv-muted text-sm mb-3" role="status"></p>
+          <p class="inv-muted text-xs mb-3">Historical visits use recorded station times; old missing pause history is estimated conservatively. Correcting, cancelling or deleting a visit updates its stamps. A corrected stamp deficit must be recovered before further rewards.</p>
+          <input id="loyalty-search" class="form-control mb-4" type="search" placeholder="Search customer name or phone" aria-label="Search loyalty customers">
+          <div id="loyalty-list"></div>
+        </section>
         <section id="page-linkypot" class="page-view">
           <div class="space-y-3">
             <!-- Compact Header Bar -->
@@ -3009,7 +3020,7 @@
                       Live
                     </span>
                   </div>
-                  <p class="text-xs text-slate-400 hidden sm:block">Digital card, loyalty stamps &amp; smart menu hub</p>
+                  <p class="text-xs text-slate-400 hidden sm:block">External digital card &amp; smart menu hub — loyalty is now in ChillPill Loyalty</p>
                 </div>
               </div>
 
@@ -3064,24 +3075,12 @@
                 </label>
                 <textarea id="linkypot-embed-input" rows="2" class="form-control font-mono text-xs w-full" placeholder='Paste your &lt;iframe src="https://www.linkypot.com/embed/chillpill?key=..."&gt;&lt;/iframe&gt; code or direct URL'></textarea>
                 <p class="text-[11px] text-slate-500">
-                  💡 Extracts URL automatically, normalizes to canonical domain, and updates both live preview and POS loyalty sync.
+                  💡 Extracts the URL automatically and updates the external dashboard preview.
                 </p>
               </div>
 
               <!-- Optional POS Historical Sync Row (Tucked inside tools dropdown) -->
-              <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div class="flex items-center gap-2.5">
-                  <i data-lucide="refresh-cw" width="16" height="16" class="text-purple-400 shrink-0"></i>
-                  <div>
-                    <p class="text-xs font-semibold text-slate-200">Manual POS Records Backfill</p>
-                    <p class="text-[11px] text-slate-400">Sync all past completed gaming sessions from ChillPill records into LinkyPot loyalty CRM.</p>
-                  </div>
-                </div>
-                <button id="btn-sync-linkypot" type="button" class="shrink-0 rounded-xl px-3.5 py-1.5 text-xs font-bold flex items-center gap-1.5 border border-purple-500/40 bg-purple-600/25 text-purple-200 hover:bg-purple-600/40 hover:text-white transition">
-                  <i data-lucide="sparkles" width="13" height="13"></i>
-                  <span id="btn-sync-linkypot-text">Sync Past Records</span>
-                </button>
-              </div>
+              <p class="text-xs inv-muted">Hourly stamps and free-hour rewards are managed in ChillPill Loyalty. The external dashboard is retained for digital-card features.</p>
             </div>
 
             <!-- Embed Frame Container (Directly visible within viewport) -->
@@ -3128,20 +3127,12 @@
       <h3 id="checkout-customer" class="font-bold text-xl mt-1">—</h3>
       <p id="checkout-station" class="text-sm text-slate-400 mt-0.5"></p>
 
-      <!-- LinkyPot Loyalty Card Status / Reward Redeem -->
-      <div id="checkout-linkypot-badge" class="hidden rounded-xl border border-purple-500/40 bg-purple-950/40 p-3 mt-3">
-        <div class="flex items-center justify-between gap-2">
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-1.5 text-purple-300">
-              <i data-lucide="gift" width="15" height="15" class="text-[#d8ff45] shrink-0"></i>
-              <span class="font-bold text-[11px] uppercase tracking-wider text-[#d8ff45]">LinkyPot Loyalty</span>
-            </div>
-            <p id="checkout-linkypot-text" class="text-xs text-slate-300 mt-0.5 truncate">Checking rewards...</p>
-          </div>
-          <button id="btn-apply-linkypot-reward" type="button" class="hidden shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-[#d8ff45] text-[#10141e] hover:brightness-110 shadow transition">
-            🎁 Redeem Reward
-          </button>
-        </div>
+      <div id="checkout-loyalty" class="inventory-page inv-surface rounded-xl p-3 mt-3" hidden>
+        <strong class="text-sm">ChillPill Hourly Loyalty</strong>
+        <p id="checkout-loyalty-text" class="inv-muted text-xs mt-1" role="status"></p>
+        <select id="checkout-loyalty-choice" class="form-control text-sm mt-2" aria-label="Station for free-hour reward" hidden></select>
+        <p class="inv-muted text-xs mt-2">10 stamps = up to 1 free hour on one station. Food stays payable. A shorter visit uses one full reward; unused minutes do not carry forward. Rewards earned by this visit are available after completion.</p>
+        <button id="checkout-loyalty-apply" type="button" class="inv-button inv-primary mt-2" hidden>Use 1 free-hour reward</button>
       </div>
 
       <!-- Paused Session Notice & Bill Actual Played Time Option -->
@@ -5388,7 +5379,8 @@
   <script src="assets/js/accounting-math.js?v=20261027_01"></script>
   <script src="assets/js/accounting.js?v=20261027_01"></script>
   <script src="assets/js/inventory.js?v=20261026_01"></script>
-  <script src="assets/js/dashboard.js?v=20261026_02"></script>
+  <script src="assets/js/loyalty.js?v=20261027_01"></script>
+  <script src="assets/js/dashboard.js?v=20261027_02"></script>
   <script src="assets/js/tournament.js?v=20260930"></script>
 </body>
 </html>
