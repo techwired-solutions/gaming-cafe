@@ -35,6 +35,9 @@
     [data-theme="light"] #page-food-partners .text-purple-300 { color: #6b21a8 !important; }
     [data-theme="light"] #overview-food-sources-btn { background: var(--panel-soft) !important; color: var(--text-primary) !important; border-color: var(--line) !important; }
     #ac-legacy-compat { display: none !important; }
+    .loyalty-visit-table { table-layout: fixed; min-width: 640px; }
+    .loyalty-visit-table th, .loyalty-visit-table td { text-align: left; vertical-align: top; font-variant-numeric: tabular-nums; }
+    .loyalty-visit-table th, .loyalty-visit-table td:nth-child(-n+2) { white-space: nowrap; }
     /* ===== DARK THEME (default) ===== */
     :root, [data-theme="dark"] {
       color-scheme: dark;
@@ -5386,7 +5389,7 @@
   <script src="assets/js/accounting-admin.js?v=20261027_01"></script>
   <script src="assets/js/accounting.js?v=20261027_02"></script>
   <script src="assets/js/inventory.js?v=20261026_01"></script>
-  <script src="assets/js/loyalty.js?v=20261027_02"></script>
+  <script src="assets/js/loyalty.js?v=20261027_03"></script>
   <script src="assets/vendor/pdf-lib-1.17.1.min.js"></script>
   <script src="assets/js/statements-data.js?v=20261027_01"></script>
   <script src="assets/js/statements-pdf.js?v=20261027_01"></script>
