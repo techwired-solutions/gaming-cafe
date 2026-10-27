@@ -1,0 +1,2 @@
+const {spawnSync}=require('node:child_process'),assert=require('node:assert/strict');
+const r=spawnSync(process.env.INVENTORY_TEST_PSQL||'psql',['-h','127.0.0.1','-p',process.env.INVENTORY_TEST_PORT||'55439','-U','inventory_test','-d','inventory_schema_test','-v','ON_ERROR_STOP=1','-q','-f','scripts/test-loyalty-times.sql'],{encoding:'utf8'});if(r.error)throw r.error;assert.equal(r.status,0,r.stderr);console.log(r.stdout.trim());

@@ -7,10 +7,12 @@
     "build": "node scripts/generate-config.js && node scripts/sync-console-pages.js",
     "sync-console-pages": "node scripts/sync-console-pages.js",
     "start": "npx serve .",
-    "test": "node scripts/test-session-pauses.js && node scripts/test-inventory.js && node scripts/test-food-only.js && node scripts/test-food-partners.js && node scripts/test-record-delete.js && node scripts/test-accounting.js && node scripts/test-loyalty.js",
+    "test": "node scripts/test-session-pauses.js && node scripts/test-inventory.js && node scripts/test-food-only.js && node scripts/test-food-partners.js && node scripts/test-record-delete.js && node scripts/test-accounting.js && node scripts/test-loyalty.js && node scripts/test-accounting-admin.js && node scripts/test-statements.js && node scripts/test-checkout-loyalty-times.js",
     "test:inventory:db": "node scripts/test-inventory-db.js",
     "test:food-partners:db": "node scripts/test-food-partners-db.js",
     "test:accounting:db": "node scripts/test-accounting-db.js",
-    "test:loyalty:db": "node scripts/test-loyalty-db.js"
+    "test:loyalty:db": "node scripts/test-loyalty-db.js",
+    "test:accounting-admin:db": "node scripts/test-accounting-admin-db.js",
+    "test:loyalty-times:db": "node scripts/test-loyalty-times-db.js"
   }
 }

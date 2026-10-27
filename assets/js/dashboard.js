@@ -5296,14 +5296,6 @@
           finalNotes = [finalNotes, `[Session: Ended from Paused (${pauseInfo.reason || "Paused"})]`].filter(Boolean).join(" ");
         }
       }
-      if (Array.isArray(record.extra_stations)) {
-        record.extra_stations.forEach((es) => {
-          es.is_paused = false;
-          es.paused_at = null;
-          es.paused_remaining_ms = null;
-        });
-      }
-
       // When overtime is waived, staff forgot to stop the session and ends it later/next day.
       // Set end_time to the scheduled finish time and keep paid_at on the session date
       let sessionEndTime = record.end_time;
@@ -5322,6 +5314,26 @@
         sessionPaidAt = record.end_time;
       }
 
+      // Persist actual station finish times; waived overtime keeps only the booked play window.
+      const checkoutNow = new Date();
+      const loyaltySlots = getRecordStations(record);
+      const pauseDuration = name => (record.loyalty_pauses || []).filter(p => String(p.station).trim().toLowerCase() === String(name).trim().toLowerCase()).reduce((n,p) => n + Math.max(0, new Date(p.to) - new Date(p.from)), 0);
+      const finishFor = slot => {
+        const completed = getStationCompletion(record, slot.name);
+        if (completed) return completed.completedAt.toISOString();
+        const paused = getStationPauseInfo(record, slot.name);
+        if (paused.isPaused) return paused.pausedAt.toISOString();
+        const savedEnd = new Date(slot.end_time);
+        if (overtime.waived) return new Date(Math.min(savedEnd.getTime(), new Date(slot.start_time).getTime() + Number(slot.duration_minutes) * 60000 + pauseDuration(slot.name), checkoutNow.getTime())).toISOString();
+        if (overtime.amount > 0 && savedEnd < checkoutNow) return checkoutNow.toISOString();
+        return new Date(Math.min(savedEnd.getTime(), checkoutNow.getTime())).toISOString();
+      };
+      if (loyaltySlots.length) sessionEndTime = finishFor(loyaltySlots[0]);
+      const checkoutExtras = (record.extra_stations || []).map(extra => {
+        const slot = loyaltySlots.find(s => s.name.toLowerCase() === String(extra.station || extra.station_name).toLowerCase());
+        return { ...extra, ...(slot ? { end_time: finishFor(slot) } : {}), is_paused: false, paused_at: null, paused_remaining_ms: null };
+      });
+
       const updatePayload = {
         status: "Completed",
         end_time: sessionEndTime || record.end_time,
@@ -5337,6 +5349,7 @@
         discount_amount: discount.amount,
         discount_type: discount.amount > 0 ? discount.mode : null,
         discount_value: discount.amount > 0 ? discount.value : 0,
+        extra_stations: checkoutExtras,
         notes: finalNotes
       };
 
@@ -10006,6 +10019,9 @@
       .on("postgres_changes", { event: "*", schema: "public", table: "loyalty_visits" }, () => window.CafeLoyalty.load())
       .on("postgres_changes", { event: "*", schema: "public", table: "loyalty_rewards" }, () => window.CafeLoyalty.load())
       .on("postgres_changes", { event: "*", schema: "public", table: "menu_items" }, fetchMenu)
+      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_partners" }, () => window.CafeAccounting.load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_corrections" }, () => window.CafeAccounting.load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_transactions" }, () => window.CafeAccounting.load())
       .on("postgres_changes", { event: "*", schema: "public", table: "accounting_entries" }, () => window.CafeAccounting.load())
       .on("postgres_changes", { event: "*", schema: "public", table: "accounting_expense_payments" }, () => window.CafeAccounting.load())
       .on("postgres_changes", { event: "*", schema: "public", table: "accounting_balance_checks" }, () => window.CafeAccounting.load())
@@ -10041,6 +10057,7 @@
     window.CafeAccounting.init({ db: () => window.sb, staff: () => currentStaff, records: () => records, breakdown: getRecordPaymentBreakdown,
       reloadExpenses: fetchExpenses, menu: () => menuItems, collect: openUnpaidBillsModal, toast: showToast, navigate: switchPage, tournaments: () => tournamentsFinancials,
       revenuePeriod: () => ({ period: revSelectedPeriod, start: revStartDate, end: revEndDate }) });
+    window.CafeStatements.init({ db: () => window.sb, staff: () => currentStaff, breakdown: getRecordPaymentBreakdown, cafeName: () => cafeSettings?.cafe_name || "ChillPill Gaming Cafe", toast: showToast });
     window.CafeLoyalty.init({ db: () => window.sb, staff: () => currentStaff, clearDiscount: () => setCheckoutDiscountMode("amount"), rerender: () => { const r = records.find(r => r.id === document.getElementById("checkout-modal").dataset.recordId); if (r) renderCheckoutBreakdown(r); } });
     document.getElementById("overview-loyalty-btn")?.addEventListener("click", () => switchPage("page-loyalty"));
     initCheckoutModal();
