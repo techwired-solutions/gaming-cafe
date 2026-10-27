@@ -8540,6 +8540,7 @@
 
   function renderRevenue() {
     window.FoodPartners.refresh();
+    window.CafeAccounting.refresh();
     initRevenueFiltersOnce();
 
     const allPaid = window.FoodPartners.revenueRecords();
@@ -9683,6 +9684,7 @@
     }
 
     renderPartnerNameDatalist();
+    window.CafeAccounting.refresh();
   }
 
   async function fetchCapitalContributions() {
@@ -10171,6 +10173,7 @@
       fetchMenu(),
       window.ChillPillInventory.load(),
       window.FoodPartners.load(),
+      window.CafeAccounting.load(),
       fetchSettings(),
       fetchStaff(),
       fetchWaitingList(),
@@ -10189,6 +10192,9 @@
       .channel("chillpill-dashboard")
       .on("postgres_changes", { event: "*", schema: "public", table: "sessions" }, fetchSessions)
       .on("postgres_changes", { event: "*", schema: "public", table: "menu_items" }, fetchMenu)
+      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_entries" }, () => window.CafeAccounting.load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_expense_payments" }, () => window.CafeAccounting.load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_balance_checks" }, () => window.CafeAccounting.load())
       .on("postgres_changes", { event: "*", schema: "public", table: "food_partner_bills" }, () => window.FoodPartners.load())
       .on("postgres_changes", { event: "*", schema: "public", table: "food_partner_payments" }, () => window.FoodPartners.load())
       .on("postgres_changes", { event: "*", schema: "public", table: "inventory_items" }, () => window.ChillPillInventory.load())
@@ -10198,9 +10204,9 @@
       .on("postgres_changes", { event: "*", schema: "public", table: "waiting_list" }, fetchWaitingList)
       .on("postgres_changes", { event: "*", schema: "public", table: "stations" }, fetchStations)
       .on("postgres_changes", { event: "*", schema: "public", table: "tables" }, fetchTables)
-      .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, fetchExpenses)
+      .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, async () => { await fetchExpenses(); window.CafeAccounting.load(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "notices" }, fetchNotices)
-      .on("postgres_changes", { event: "*", schema: "public", table: "capital_contributions" }, fetchCapitalContributions)
+      .on("postgres_changes", { event: "*", schema: "public", table: "capital_contributions" }, async () => { await fetchCapitalContributions(); window.CafeAccounting.load(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "tournaments" }, async () => { await fetchTournamentFinances(); renderRevenue(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "tournament_players" }, async () => { await fetchTournamentFinances(); renderRevenue(); })
       .subscribe((status) => {
@@ -10218,6 +10224,9 @@
     document.getElementById("rev-open-food-partners")?.addEventListener("click", event => { event.preventDefault(); switchPage("page-food-partners"); });
     ["rev-kpi-food-card", "rev-kpi-payables-card"].forEach(id => document.getElementById(id)?.addEventListener("click", () => switchPage("page-food-partners")));
     window.ChillPillInventory.init({ db: () => window.sb, staff: () => currentStaff, menu: () => menuItems, toast: showToast });
+    window.CafeAccounting.init({ db: () => window.sb, staff: () => currentStaff, records: () => records, breakdown: getRecordPaymentBreakdown,
+      reloadExpenses: fetchExpenses, menu: () => menuItems, collect: openUnpaidBillsModal, toast: showToast, navigate: switchPage, tournaments: () => tournamentsFinancials,
+      revenuePeriod: () => ({ period: revSelectedPeriod, start: revStartDate, end: revEndDate }) });
     initCheckoutModal();
     initPauseModal();
     initRecordDeleteModal();

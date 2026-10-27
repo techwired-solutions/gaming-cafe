@@ -85,5 +85,5 @@
   $('fp-copy-sql').addEventListener('click',async()=>{try{const r=await fetch('supabase/migrations/20261026_food_partner_bills.sql');if(!r.ok)throw Error();await navigator.clipboard.writeText(await r.text());env.toast('Partner-bill setup SQL copied.');}catch(error){status('Use the migration download link to open the setup SQL.',true);}});
   render();
  }
- window.FoodPartners={init,load,refresh,forRecord,revenueRecords,days:()=>state().days,ready:()=>ready};
+ window.FoodPartners={init,load,refresh,forRecord,revenueRecords,days:()=>state().days,payments:()=>payments,ready:()=>ready};
 })();
