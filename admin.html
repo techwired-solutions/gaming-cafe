@@ -30,6 +30,11 @@
     [data-theme="light"] .inv-badge-low { background: #fef3c7; color: #92400e; }
     [data-theme="light"] .inv-badge-out { background: #ffe4e6; color: #9f1239; }
     .inventory-page [hidden] { display: none !important; }
+    .inv-suggestions-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50; background: var(--panel); border: 1px solid var(--line); border-radius: 0.75rem; box-shadow: 0 12px 28px rgba(0,0,0,0.5); max-height: 230px; overflow-y: auto; }
+    .inv-sug-item { padding: 0.5rem 0.75rem; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; border-bottom: 1px solid var(--line); transition: background 0.15s ease; }
+    .inv-sug-item:last-child { border-bottom: none; }
+    .inv-sug-item:hover, .inv-sug-item.active { background: rgba(216,255,69,0.12); }
+    [data-theme="light"] .inv-sug-item:hover, [data-theme="light"] .inv-sug-item.active { background: rgba(100,116,139,0.15); }
     #page-food-partners #partner-settings-form > div > div { background: var(--panel-soft) !important; }
     [data-theme="light"] #page-food-partners .text-amber-300 { color: #92400e !important; }
     [data-theme="light"] #page-food-partners .text-purple-300 { color: #6b21a8 !important; }
@@ -3268,7 +3273,18 @@
   <form id="inv-item-form" class="panel inv-surface rounded-2xl p-5 w-full max-w-xl" style="max-height:90vh;overflow-y:auto">
     <h3 id="inv-item-title" class="text-xl font-bold mb-4">Add inventory item</h3><input type="hidden" id="inv-item-id">
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <label class="text-xs">Item name<input id="inv-name" class="form-control mt-1" maxlength="120" required placeholder="e.g. Coke 250 ml / PS5 controller"></label>
+      <div class="relative">
+        <label for="inv-name" class="text-xs flex items-center justify-between">
+          <span>Item name</span>
+          <span id="inv-menu-hint" class="text-[10px] text-[#d8ff45] font-normal flex items-center gap-1 cursor-pointer hover:underline" title="Click to view ChillPill menu recommendations">
+            <i data-lucide="sparkles" width="11" height="11"></i> ChillPill Menu Auto-suggest
+          </span>
+        </label>
+        <div class="relative mt-1">
+          <input id="inv-name" class="form-control w-full" maxlength="120" required placeholder="e.g. Coke, Americano, French Fries..." autocomplete="off">
+          <div id="inv-name-suggestions" class="inv-suggestions-dropdown hidden" role="listbox"></div>
+        </div>
+      </div>
       <label class="text-xs">SKU / asset reference<input id="inv-sku" class="form-control mt-1" maxlength="60" placeholder="Optional unique reference"></label>
       <label class="text-xs">Category<select id="inv-category" class="form-control mt-1"><option>Drinks</option><option>Snacks</option><option>Food &amp; drinks</option><option>Gaming equipment</option><option>Supplies</option><option>Other</option></select></label>
       <label class="text-xs">Unit<input id="inv-unit" class="form-control mt-1" value="pcs" maxlength="30" required placeholder="pcs, bottles, packs"></label>
@@ -5388,7 +5404,7 @@
   <script src="assets/js/accounting-math.js?v=20261027_02"></script>
   <script src="assets/js/accounting-admin.js?v=20261027_01"></script>
   <script src="assets/js/accounting.js?v=20261027_02"></script>
-  <script src="assets/js/inventory.js?v=20261026_01"></script>
+  <script src="assets/js/inventory.js?v=20261031_01"></script>
   <script src="assets/js/loyalty.js?v=20261027_03"></script>
   <script src="assets/vendor/pdf-lib-1.17.1.min.js"></script>
   <script src="assets/js/statements-data.js?v=20261027_01"></script>

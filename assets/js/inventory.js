@@ -1,13 +1,110 @@
 /* Native inventory UI. Uses the same Supabase client and staff login as the console. */
 (function () {
   'use strict';
-  let env, items = [], movements = [], ready = false, loading = false, reload = false, historyLimit = 50, busy = false;
+  let env, items = [], movements = [], ready = false, loading = false, reload = false, historyLimit = 50, busy = false, isEditingItem = false, activeSugIdx = -1;
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const number = value => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 3 }).format(Number(value) || 0);
   const money = value => 'रु ' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(Number(value) || 0);
   const isAdmin = () => env?.staff()?.role === 'admin';
   const labels = { opening: 'Opening stock', restock: 'Restock', usage: 'Issue / use', waste: 'Damage / waste', adjustment: 'Stocktake', sale: 'Menu sale', return: 'Return' };
+  function hideMenuSuggestions() {
+    const wrap = $('inv-name-suggestions');
+    if (wrap) { wrap.classList.add('hidden'); wrap.innerHTML = ''; }
+    activeSugIdx = -1;
+  }
+  function getMenuMatches(query, menuList) {
+    const allMenu = menuList || (typeof env?.menu === 'function' ? (env.menu() || []) : []);
+    const q = String(query || '').trim().toLowerCase();
+    const matches = allMenu.filter(m => {
+      if (!m || !m.name) return false;
+      if (!q) return !m.supplier || m.supplier === 'chillpill' || m.supplier === 'cafe';
+      return m.name.toLowerCase().includes(q) || (m.category && m.category.toLowerCase().includes(q)) || (m.supplier && m.supplier.toLowerCase().includes(q));
+    });
+    matches.sort((a, b) => {
+      const aIsCp = !a.supplier || a.supplier === 'chillpill' || a.supplier === 'cafe';
+      const bIsCp = !b.supplier || b.supplier === 'chillpill' || b.supplier === 'cafe';
+      if (aIsCp !== bIsCp) return aIsCp ? -1 : 1;
+      if (q) {
+        const aStarts = a.name.toLowerCase().startsWith(q);
+        const bStarts = b.name.toLowerCase().startsWith(q);
+        if (aStarts !== bStarts) return aStarts ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
+    return matches;
+  }
+  function renderMenuSuggestions(query = '') {
+    const wrap = $('inv-name-suggestions');
+    if (!wrap || !env?.menu) return;
+    const matches = getMenuMatches(query);
+    const q = String(query || '').trim();
+    if (!matches.length) {
+      if (q) {
+        wrap.innerHTML = `<div class="p-3 text-xs inv-muted text-center italic">No ChillPill menu items match "${esc(q)}"<p class="text-[10px] text-slate-500 mt-1">Keep typing to save as custom inventory item</p></div>`;
+        wrap.classList.remove('hidden');
+      } else {
+        hideMenuSuggestions();
+      }
+      return;
+    }
+    activeSugIdx = -1;
+    const header = `<div class="px-3 py-1.5 bg-slate-900/95 border-b border-slate-700/60 flex items-center justify-between text-[11px] font-semibold sticky top-0 backdrop-blur z-10"><span class="flex items-center gap-1.5 text-slate-300"><span class="text-[#d8ff45]">⭐</span> ChillPill Menu (${matches.length})</span><span class="text-[10px] text-slate-400">Click to fill &amp; link</span></div>`;
+    const listHtml = matches.map((m, idx) => {
+      const isCp = !m.supplier || m.supplier === 'chillpill' || m.supplier === 'cafe';
+      const existing = items.find(it => it.menu_item_id === m.id || it.name.trim().toLowerCase() === m.name.trim().toLowerCase());
+      const stockBadge = existing ? `<span class="text-[9px] text-emerald-400 font-medium">✓ In stock (${number(existing.quantity)} ${esc(existing.unit)})</span>` : '<span class="text-[9px] text-[#d8ff45] font-medium">+ Add to stock</span>';
+      const supTag = isCp ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-[#d8ff45]/15 text-[#d8ff45] font-semibold border border-[#d8ff45]/30">ChillPill</span>' : `<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-semibold border border-amber-500/30">${esc(m.supplier === 'bros_burger' ? "Bro's" : m.supplier)}</span>`;
+      return `<div class="inv-sug-item" data-idx="${idx}" role="option"><div class="min-w-0 flex-1"><div class="inv-sug-name text-xs font-bold text-white truncate">${esc(m.name)}</div><div class="text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5"><span class="text-slate-400 truncate max-w-[110px]">${esc(m.category || 'Food & drinks')}</span>${supTag}${stockBadge}</div></div><div class="text-right whitespace-nowrap"><span class="mono text-xs font-bold text-[#d8ff45]">रु ${Number(m.price) || 0}</span></div></div>`;
+    }).join('');
+    wrap.innerHTML = header + listHtml;
+    wrap.classList.remove('hidden');
+    wrap.querySelectorAll('.inv-sug-item').forEach((el, idx) => {
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        selectMenuSuggestion(matches[idx]);
+      });
+    });
+  }
+  function selectMenuSuggestion(m) {
+    if (!m) return;
+    $('inv-name').value = m.name;
+    $('inv-menu').value = m.id || '';
+    const cat = $('inv-category');
+    if (cat) {
+      const rawCat = String(m.category || '').toLowerCase();
+      const rawName = String(m.name || '').toLowerCase();
+      if (rawCat.includes('drink') || rawCat.includes('beverage') || rawCat.includes('coffee') || rawCat.includes('tea') || rawCat.includes('cold') || rawCat.includes('beer') || rawName.includes('coke') || rawName.includes('sprite') || rawName.includes('fanta') || rawName.includes('mojito') || rawName.includes('lassi')) {
+        cat.value = 'Drinks';
+      } else if (rawCat.includes('snack') || rawCat.includes('bakery') || rawCat.includes('pastr') || rawCat.includes('donut') || rawCat.includes('cookie') || rawCat.includes('muffin') || rawCat.includes('croissant') || rawCat.includes('sandwich') || rawCat.includes('burger') || rawCat.includes('momo') || rawCat.includes('fries') || rawCat.includes('sekuwa')) {
+        cat.value = 'Snacks';
+      } else if (rawCat.includes('food')) {
+        cat.value = 'Food & drinks';
+      } else if (rawCat.includes('game') || rawCat.includes('controller') || rawCat.includes('joystick')) {
+        cat.value = 'Gaming equipment';
+      }
+    }
+    if (!$('inv-supplier').value.trim()) {
+      if (m.supplier === 'bros_burger') $('inv-supplier').value = "Bro's Burger";
+      else if (m.supplier === 'bardali') $('inv-supplier').value = 'Bardali';
+      else $('inv-supplier').value = 'ChillPill';
+    }
+    const n = m.name.toLowerCase();
+    if (n.includes('can') || n.includes('red bull')) $('inv-unit').value = 'cans';
+    else if (n.includes('bottle') || n.includes('beer') || n.includes('coke') || n.includes('sprite') || n.includes('fanta')) $('inv-unit').value = 'bottles';
+    else if (n.includes('coffee') || n.includes('tea') || n.includes('espresso') || n.includes('latte') || n.includes('cappuccino') || n.includes('americano')) $('inv-unit').value = 'cups';
+    else if (!$('inv-unit').value) $('inv-unit').value = 'pcs';
+    if (Number($('inv-cost').value) === 0 && m.cost_price && Number(m.cost_price) > 0) {
+      $('inv-cost').value = m.cost_price;
+    }
+    hideMenuSuggestions();
+    if (!$('inv-opening-wrap').hidden) {
+      $('inv-opening').focus();
+      $('inv-opening').select();
+    } else {
+      $('inv-cost').focus();
+    }
+  }
   function summary(list) {
     const active = list.filter(item => item.active);
     return { total: active.length, low: active.filter(item => Number(item.quantity) > 0 && Number(item.quantity) <= Number(item.reorder_level)).length,
@@ -98,7 +195,13 @@
       if (reload) { reload = false; load(); }
     }
   }
-  function closeModal(id) { if (!busy) { $(id).classList.remove('show'); document.querySelector(`[data-inv-return="${id}"]`)?.focus(); } }
+  function closeModal(id) {
+    if (!busy) {
+      hideMenuSuggestions();
+      $(id).classList.remove('show');
+      document.querySelector(`[data-inv-return="${id}"]`)?.focus();
+    }
+  }
   function showModal(id, trigger) {
     document.querySelectorAll('[data-inv-return]').forEach(button => button.removeAttribute('data-inv-return'));
     trigger?.setAttribute('data-inv-return', id);
@@ -107,6 +210,8 @@
   }
   function openItem(item, trigger) {
     if (!ready || !isAdmin()) return;
+    isEditingItem = !!item;
+    hideMenuSuggestions();
     $('inv-item-form').reset(); $('inv-item-message').textContent = '';
     $('inv-item-title').textContent = item ? 'Edit inventory item' : 'Add inventory item';
     $('inv-item-id').value = item?.id || '';
@@ -116,6 +221,11 @@
     $('inv-opening-wrap').hidden = !!item; $('inv-opening').disabled = !!item;
     $('inv-active-wrap').hidden = !item; $('inv-active').checked = item?.active ?? true;
     showModal('inv-item-modal', trigger);
+    if (!item) {
+      setTimeout(() => {
+        if (document.activeElement === $('inv-name')) renderMenuSuggestions('');
+      }, 50);
+    }
   }
   function moveType() {
     const type = $('inv-move-type').value;
@@ -135,6 +245,7 @@
   }
   async function saveItem(event) {
     event.preventDefault(); if (busy || !isAdmin() || !ready) return;
+    hideMenuSuggestions();
     busy = true; $('inv-item-save').disabled = true; $('inv-item-message').textContent = '';
     try {
       const item = { id: $('inv-item-id').value || null, name: $('inv-name').value.trim(), sku: $('inv-sku').value.trim(), category: $('inv-category').value, unit: $('inv-unit').value.trim(),
@@ -185,6 +296,49 @@
       else if (button.dataset.invAction === 'stock') openMovement(item, button);
       else { $('inv-history-filter').value = item.id; historyLimit = 50; try { await loadHistory(); $('inv-history-filter').scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (error) { status(error.message, true); } }
     });
+    $('inv-name').addEventListener('input', () => renderMenuSuggestions($('inv-name').value));
+    $('inv-name').addEventListener('focus', () => {
+      if (!isEditingItem || $('inv-name-suggestions').classList.contains('hidden')) {
+        renderMenuSuggestions($('inv-name').value);
+      }
+    });
+    $('inv-name').addEventListener('click', () => renderMenuSuggestions($('inv-name').value));
+    $('inv-menu-hint')?.addEventListener('click', () => {
+      $('inv-name').focus();
+      renderMenuSuggestions($('inv-name').value);
+    });
+    $('inv-name').addEventListener('keydown', (e) => {
+      const wrap = $('inv-name-suggestions');
+      if (wrap.classList.contains('hidden')) {
+        if (e.key === 'ArrowDown') { renderMenuSuggestions($('inv-name').value); e.preventDefault(); }
+        return;
+      }
+      const sugItems = wrap.querySelectorAll('.inv-sug-item');
+      if (!sugItems.length) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeSugIdx = (activeSugIdx + 1) % sugItems.length;
+        sugItems.forEach((it, i) => it.classList.toggle('active', i === activeSugIdx));
+        sugItems[activeSugIdx]?.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeSugIdx = (activeSugIdx - 1 + sugItems.length) % sugItems.length;
+        sugItems.forEach((it, i) => it.classList.toggle('active', i === activeSugIdx));
+        sugItems[activeSugIdx]?.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter') {
+        if (activeSugIdx >= 0 && sugItems[activeSugIdx]) {
+          e.preventDefault();
+          sugItems[activeSugIdx].dispatchEvent(new MouseEvent('mousedown'));
+        }
+      } else if (e.key === 'Escape' || e.key === 'Tab') {
+        hideMenuSuggestions();
+      }
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#inv-name') && !e.target.closest('#inv-name-suggestions') && !e.target.closest('#inv-menu-hint')) {
+        hideMenuSuggestions();
+      }
+    });
     $('inv-item-form').addEventListener('submit', saveItem);
     $('inv-move-form').addEventListener('submit', saveMovement);
     $('inv-move-type').addEventListener('change', moveType);
@@ -196,5 +350,5 @@
       catch (error) { status('Could not copy setup SQL. Use the download link instead.', true); }
     });
   }
-  window.ChillPillInventory = { init, load, summary, filterItems, refreshMenu: () => { if (env && ready) render(); } };
+  window.ChillPillInventory = { init, load, summary, filterItems, getMenuMatches, refreshMenu: () => { if (env && ready) render(); } };
 })();
