@@ -71,8 +71,8 @@ begin
    if exists(select 1 from public.food_partner_payments where expense_id=e.id) then raise exception 'This expense is already linked to a payment.'; end if;
    v_expense:=e.id;
  else
-   insert into public.expenses(title,category,amount,payment_source,expense_date,date,paid_by,created_by,notes)
-   values(b.supplier_key||' food bill '||b.business_date,'Partner Payout',v_amount,'cafe_revenue',
+   insert into public.expenses(title,category,amount,payment_source,type,expense_date,date,paid_by,created_by,notes)
+   values(b.supplier_key||' food bill '||b.business_date,'Partner Payout',v_amount,'cafe_revenue','ongoing',
      (p_date::timestamp at time zone 'Asia/Kathmandu'),p_date,v_name,v_name,
      '[Settlement: '||b.supplier_key||'] [FoodBill: '||b.id||'] '||p_method||' '||coalesce(p_reference,'')) returning id into v_expense;
  end if;

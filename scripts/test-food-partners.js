@@ -33,3 +33,8 @@ for(const id of [...html.matchAll(/id="(fp-[^"]+)"/g)].map(m=>m[1]))assert.equal
 assert.ok(html.indexOf('data-page="page-food-partners"')>html.indexOf('data-page="page-revenue"'));
 assert.ok(!html.includes('id="rev-restaurant-partnerships"'));assert.ok(fs.readFileSync('supabase/schema.sql','utf8').includes(fs.readFileSync('supabase/migrations/20261026_food_partner_bills.sql','utf8').trim()));
 console.log('Passed: actual tea bill 80−50=30, Bardali zero margin, partial/mixed collections, negative margins, missing bills, payment independence, orphan bills, precise allocations, Nepal dates and page wiring.');
+
+const paymentFix=fs.readFileSync('supabase/migrations/20261103_food_partner_payment_type.sql','utf8');
+assert.ok(fs.readFileSync('supabase/schema.sql','utf8').includes(paymentFix.trim()));
+assert.match(paymentFix,/payment_source,type,expense_date/);
+assert.match(paymentFix,/'cafe_revenue','ongoing'/);

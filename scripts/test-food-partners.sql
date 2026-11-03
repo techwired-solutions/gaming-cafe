@@ -3,6 +3,8 @@ do $$ begin assert current_database()='inventory_schema_test','Use isolated inve
 \ir ../supabase/migrations/20261026_food_partner_bills.sql
 \ir ../supabase/migrations/20261026_food_partner_bills.sql
 begin;
+-- Reproduce deployed databases whose required type column has no default.
+alter table public.expenses alter column type drop default;
 insert into public.staff(id,name,username,password_hash,password_salt,role,active) values
  ('00000000-0000-0000-0000-000000008001','Food test admin','food-test-admin','test','test','admin',true),
  ('00000000-0000-0000-0000-000000008002','Food test staff','food-test-staff','test','test','staff',true);
@@ -21,7 +23,7 @@ begin
  assert (select count(*)=1 from public.food_partner_payments where id=p);
  assert (select sum(amount)=20 from public.food_partner_payments where bill_id=b and voided_at is null);
  select expense_id into expense from public.food_partner_payments where id=p;
- assert (select amount=20 and payment_source='cafe_revenue' from public.expenses where id=expense);
+ assert (select amount=20 and payment_source='cafe_revenue' and type='ongoing' from public.expenses where id=expense);
  begin perform public.food_partner_record_payment(a,b,gen_random_uuid(),40,'Cash','2026-10-26','Overpay');raise exception 'Expected overpay check';exception when others then assert SQLERRM like 'Payment exceeds%';end;
  begin perform public.food_partner_save_bill(a,'bros_burger','2026-10-26',10,'','',v);raise exception 'Expected paid minimum check';exception when others then assert SQLERRM like 'Bill cannot be less%';end;
  begin delete from public.expenses where id=expense;raise exception 'Expected expense guard';exception when others then assert SQLERRM like 'This expense belongs%';end;
@@ -31,7 +33,7 @@ begin
  perform public.food_partner_void_payment(a,p,'Incorrect amount');
  assert not exists(select 1 from public.expenses where id=expense);
  assert (select voided_at is not null and expense_id is null from public.food_partner_payments where id=p);
- insert into public.expenses(title,category,amount,payment_source,notes) values('Legacy Bro payout','Partner Payout',20,'cafe_revenue','[Settlement: bros_burger] old payment') returning id into old_expense;
+ insert into public.expenses(title,category,amount,payment_source,type,notes) values('Legacy Bro payout','Partner Payout',20,'cafe_revenue','ongoing','[Settlement: bros_burger] old payment') returning id into old_expense;
  perform public.food_partner_record_payment(a,b,gen_random_uuid(),20,'Cash','2026-10-26','Linked old payout',old_expense);
  assert (select count(*)=1 from public.expenses where id=old_expense);
  assert (select sum(amount)=50 from public.food_partner_payments where bill_id=b and voided_at is null);

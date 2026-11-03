@@ -64,3 +64,7 @@ limitations. Keep business records backed up and validate role restrictions
 before exposing a new installation.
 
 Built by Sudip Parajuli / Techwired Solutions.
+
+### Supplier payment expense type fix (2026-11-03)
+
+For existing databases, run `supabase/migrations/20261103_food_partner_payment_type.sql` in the Supabase SQL Editor before retrying a failed Food Sources & Partners payment. Supplier payouts now explicitly set the linked expense type to `ongoing`, including installations where this required column has no default. The migration only replaces the payment function; it does not modify existing bills or payments.
