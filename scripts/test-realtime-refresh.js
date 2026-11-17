@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),source=fs.readFileSync('assets/js/dashboard.js','utf8');
+(async()=>{const timers=new Map();let timerId=0,count=0;const ctx={console,Promise,setTimeout(fn){timers.set(++timerId,fn);return timerId;},clearTimeout(id){timers.delete(id);}};vm.createContext(ctx);vm.runInContext(source.slice(source.indexOf('  const realtimeRefreshTimers='),source.indexOf('  function subscribeRealtime()')),ctx);
+ for(let i=0;i<5000;i++)ctx.queueRealtimeRefresh('sessions',()=>count++);
+ ctx.queueRealtimeRefresh('loyalty',()=>count++);
+ assert.equal(timers.size,2,'Bulk cleanup events queue one refresh per affected view');
+ for(const fn of timers.values())fn();await Promise.resolve();await Promise.resolve();assert.equal(count,2);
+ let resolveOld,calls=0;Object.assign(ctx,{window:{sb:{from(){return{select(){return this},order(){return this},range(){return ++calls===1?new Promise(r=>resolveOld=r):Promise.resolve({data:[{id:'new'}],error:null});}};}}},records:[],deletedRecordIds:new Set(),renderAllLists(){},showMessage(){throw Error('Unexpected error');}});
+ vm.runInContext(source.slice(source.indexOf('  async function fetchSessions()'),source.indexOf('  async function fetchMenu()')),ctx);
+ const older=ctx.fetchSessions();await ctx.fetchSessions();resolveOld({data:[{id:'erased'}],error:null});await older;assert.equal(ctx.records.length,1);assert.equal(ctx.records[0].id,'new','A late pre-cleanup response cannot restore erased records');
+ console.log('Passed: 5,000 cleanup events coalesce by view; stale session responses cannot overwrite refreshed records.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

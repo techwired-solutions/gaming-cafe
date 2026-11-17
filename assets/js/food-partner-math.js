@@ -16,7 +16,7 @@
     for (let i=0, remaining=total-shares.reduce((a,b)=>a+b,0); i<remaining; i++) shares[ranked[i % ranked.length].i]++;
     return shares;
   }
-  function calculate(records, bills, payments, menu, breakdown) {
+  function calculate(records, bills, payments, menu, breakdown, archived=[]) {
     const groups = new Map(), byRecord = new Map();
     const group = (date, source) => {
       const key = date+'|'+source;
@@ -59,6 +59,12 @@
         const lineCollections=allocate(collected,sourceLines.map(line=>line.amount));
         sourceLines.forEach((line,index)=>g.lines.push({...line, collected:lineCollections[index], recordId:record.id, customer:record.customer_name || 'Walk-in'}));
       });
+    }
+    for (const a of archived) {
+      const record={id:'archive:'+a.business_date,start_time:a.business_date+'T12:00:00+05:45',created_at:a.business_date+'T12:00:00+05:45',status:'Completed',paid:true,amount:a.gross,food_total:a.food_total,duration_minutes:a.gaming_minutes,discount_amount:a.discounts,cash_amount:a.cash,online_amount:a.bank,payment_method:'Split',customer_name:'Archived daily summary',station_name:'Archived stations',staff_name:'Archived history',archive_count:a.paid_count??a.record_count,food_items:(a.food||[]).map(f=>({name:'Archived '+f.source+' orders',supplier:f.source,qty:Number(f.qty),price:Number(f.qty)?Number(f.ordered)/Number(f.qty):0})),notes:'[Archived Summary]'};
+      const result={record,date:a.business_date,grossAmount:Number(a.gross),foodTotal:Number(a.food_total),timeRevenue:Number(a.time_revenue),chillpillFood:0,brosGross:0,brosCommission:0,brosPayable:0,bardaliGross:0,bardaliCommission:0,bardaliPayable:0,otherFoodGross:0,otherFoodCommission:0,otherFoodPayable:0,netFoodRevenue:0,netRevenue:0,partnerCost:0,pendingBills:0};
+      byRecord.set(record.id,result);
+      for(const f of a.food||[]){const g=group(a.business_date,f.source),ordered=cents(f.ordered),collected=cents(f.collected);g.ordered+=ordered;g.collected+=collected;g.entries.push({record,result,ordered,collected,cost:0});g.lines.push({name:'Archived orders (see downloaded archive)',source:f.source,qty:Number(f.qty),menuRate:null,customerRate:null,menuValue:Number(f.menu_value),amount:ordered,collected,recordId:record.id,customer:'Daily summary',archived:true});}
     }
     for (const bill of bills) group(bill.business_date,bill.supplier_key).bill=bill;
     for (const g of groups.values()) {

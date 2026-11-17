@@ -1,0 +1,22 @@
+/* Compact visit analytics and Bikram Sambat month comparisons. */
+(function(root){'use strict';
+ const n=v=>Number(v)||0,day=v=>root.FoodPartnerMath.day(v),round=v=>Math.round((v+Number.EPSILON)*100)/100;
+ function summarize(data,ids,breakdown){const wanted=new Set(ids),records=(data.sessions||[]).filter(r=>wanted.has(r.id)),math=root.FoodPartnerMath.calculate(data.sessions||[],data.food_partner_bills||[],data.food_partner_payments||[],data.menu_items||[],breakdown),groups=new Map();
+  for(const r of records){const date=day(r.start_time||r.created_at);if(!groups.has(date))groups.set(date,{business_date:date,record_count:0,paid_count:0,gaming_minutes:0,discounts:0,cash:0,bank:0,gross:0,food_total:0,time_revenue:0,food:[]});const g=groups.get(date),v=math.byRecord.get(r.id),b=breakdown(r);g.record_count++;if(v&&(v.grossAmount>0||v.partnerCost>0)){g.paid_count++;g.gaming_minutes+=n(r.duration_minutes);g.discounts+=n(r.discount_amount);}if(v){g.gross+=v.grossAmount;g.food_total+=v.foodTotal;g.time_revenue+=v.timeRevenue;g.cash+=n(b.cash);g.bank+=n(b.online);}}
+  for(const source of math.days){const g=groups.get(source.date);if(!g)continue;const entries=source.entries.filter(e=>wanted.has(e.record.id));if(!entries.length)continue;const lines=source.lines.filter(l=>wanted.has(l.recordId));g.food.push({source:source.source,ordered:round(entries.reduce((s,e)=>s+e.ordered/100,0)),collected:round(entries.reduce((s,e)=>s+e.collected/100,0)),qty:lines.reduce((s,l)=>s+n(l.qty),0),menu_value:round(lines.reduce((s,l)=>s+n(l.menuValue),0))});}
+  return [...groups.values()].map(g=>{for(const k of ['discounts','cash','bank','gross','food_total','time_revenue'])g[k]=round(g[k]);return g;});
+ }
+ const months=['Baisakh','Jestha','Asar','Shrawan','Bhadra','Ashwin','Kartik','Mangsir','Poush','Magh','Falgun','Chaitra'];
+ const jsDate=date=>{const [y,m,d]=date.split('-').map(Number);return new Date(y,m-1,d,12);},isoLocal=d=>[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
+ function month(date){const N=root.NepaliDate.default||root.NepaliDate,b=new N(jsDate(date)),year=b.getYear(),index=b.getMonth(),start=isoLocal(new N(year,index,1).toJsDate()),next=isoLocal(new N(index===11?year+1:year,(index+1)%12,1).toJsDate()),end=day(new Date(next+'T00:00:00+05:45').getTime()-86400000);return {key:`${year}-${String(index+1).padStart(2,'0')}`,label:`${months[index]} ${year}`,start,end};}
+ function monthly(data,today,breakdown){const days=new Map(),add=(date,key,value)=>{if(!date||date>today)return;if(!days.has(date))days.set(date,{income:0,expenses:0});days.get(date)[key]+=n(value);},math=root.FoodPartnerMath.calculate(data.sessions||[],data.food_partner_bills||[],data.food_partner_payments||[],data.menu_items||[],breakdown,data.archive_daily||[]);
+  for(const r of math.byRecord.values())add(r.date,'income',r.grossAmount);
+  for(const b of data.food_partner_bills||[])add(b.business_date,'expenses',b.amount);
+  for(const e of root.CafeAccountingMath.expenseRows(data.expenses||[],data.accounting_expense_payments||[]))if(!e.isCapital)add(day(e.expense_date||e.date),'expenses',e.amount);
+  const entry=new Map((data.accounting_entries||[]).map(e=>[e.id,e]));for(const l of data.accounting_lines||[])if(l.account==='other_income')add(entry.get(l.entry_id)?.business_date,'income',n(l.credit)-n(l.debit));
+  const grouped=new Map();for(const [d,v] of days){const m=month(d);if(!grouped.has(m.key))grouped.set(m.key,{...m,income:0,expenses:0});const g=grouped.get(m.key);g.income+=v.income;g.expenses+=v.expenses;}
+  const oldest=[...days.keys()].sort()[0];if(oldest){let d=month(oldest).start;for(let guard=0;d<=today&&guard++<1200;){const m=month(d);if(!grouped.has(m.key))grouped.set(m.key,{...m,income:0,expenses:0});d=day(new Date(m.end+'T12:00:00+05:45').getTime()+86400000);}}
+  return [...grouped.values()].sort((a,b)=>a.key.localeCompare(b.key)).map(m=>{const through=m.end<today?m.end:today,count=Math.round((new Date(through+'T00:00:00+05:45')-new Date(m.start+'T00:00:00+05:45'))/86400000)+1;return {...m,income:round(m.income),expenses:round(m.expenses),net:round(m.income-m.expenses),days:count,averageIncome:round(m.income/count),averageExpense:round(m.expenses/count),partial:through<m.end};});
+ }
+ const api={summarize,month,monthly};root.CafeArchiveMath=api;if(typeof module==='object'&&module.exports)module.exports=api;
+})(typeof window==='object'?window:globalThis);

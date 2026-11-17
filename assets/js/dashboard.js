@@ -8121,7 +8121,7 @@
     tbody.innerHTML = sorted.map(([ds, v]) => `
       <tr class="hover:bg-white/5 cursor-pointer rev-daily-row" data-date="${ds}" title="Click to filter by ${getFriendlyDate(ds)}">
         <td class="py-2.5 pr-4 font-medium text-slate-200">${getFriendlyDate(ds)}</td>
-        <td class="py-2.5 pr-4 text-slate-400">${v.sessions.length}</td>
+        <td class="py-2.5 pr-4 text-slate-400">${v.sessions.reduce((n,r)=>n+(Number(r.archive_count)||1),0)}</td>
         <td class="py-2.5 pr-4 mono text-amber-300">${inr(v.cash)}</td>
         <td class="py-2.5 pr-4 mono text-sky-300">${inr(v.online)}</td>
         <td class="py-2.5 text-right mono font-bold text-[#d8ff45]">${inr(v.total)}</td>
@@ -8573,10 +8573,11 @@
       displayedSessions = [];
     }
 
+    const displayedCount=displayedSessions.reduce((n,r)=>n+(Number(r.archive_count)||1),0);
     const countEl = document.getElementById("rev-active-filter-count");
-    if (countEl) countEl.textContent = `${displayedSessions.length} paid session${displayedSessions.length === 1 ? "" : "s"}`;
+    if (countEl) countEl.textContent = `${displayedCount} paid session${displayedCount === 1 ? "" : "s"}`;
     const tableCountEl = document.getElementById("rev-table-session-count");
-    if (tableCountEl) tableCountEl.textContent = `${displayedSessions.length} session${displayedSessions.length === 1 ? "" : "s"}`;
+    if (tableCountEl) tableCountEl.textContent = `${displayedCount} session${displayedCount === 1 ? "" : "s"}`;
 
     // Render Filtered Sessions Table
     const sessionsBody = document.getElementById("rev-day-sessions");
@@ -8620,7 +8621,7 @@
             payCellHtml = `<span class="${isCash ? "text-amber-300" : "text-sky-300"}">${r.payment_method || "—"}</span>`;
           }
 
-          const actionCell = `
+          const actionCell = r.archive_count ? '<td class="py-2.5 text-right text-xs text-slate-400">Archived summary</td>' : `
             <td class="py-2.5 text-right whitespace-nowrap">
               <button type="button" class="rev-edit-food-btn px-2.5 py-1 rounded-lg text-xs font-bold border border-amber-500/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 transition cursor-pointer inline-flex items-center gap-1" data-id="${r.id}" title="Edit food items, customer price & vendor cost">
                 <i data-lucide="utensils" width="12" height="12"></i> <span>Edit Food</span>
@@ -8750,7 +8751,7 @@
           if (!byStation[key]) byStation[key] = { timeRevenue: 0, minutes: 0, sessions: 0 };
           byStation[key].timeRevenue += rev.timeRevenue;
           byStation[key].minutes += Number(r.duration_minutes) || 0;
-          byStation[key].sessions += 1;
+          byStation[key].sessions += Number(r.archive_count)||1;
         });
         const stationRows = Object.entries(byStation).sort((a, b) => b[1].timeRevenue - a[1].timeRevenue);
         const maxStVal = stationRows.reduce((m, e) => Math.max(m, e[1].timeRevenue), 0);
@@ -9917,9 +9918,11 @@
 
   // ---------- supabase data loading ----------
   async function fetchSessions() {
+    const generation=(fetchSessions.generation||0)+1;fetchSessions.generation=generation;
     const all = [];
     for (let offset=0;;offset+=500) {
       const {data,error} = await window.sb.from("sessions").select("*").order("created_at",{ascending:false}).order("id").range(offset,offset+499);
+      if(generation!==fetchSessions.generation)return;
       if (error) { showMessage("Could not load records: "+error.message,true); return; }
       all.push(...(data||[])); if (!data || data.length<500) break;
     }
@@ -9992,6 +9995,7 @@
   }
 
   async function loadAll() {
+    await window.CafeArchive.load();
     await Promise.allSettled([
       fetchSessions(),
       fetchMenu(),
@@ -10012,26 +10016,36 @@
     ]);
   }
 
+  const realtimeRefreshTimers=new Map();
+  function queueRealtimeRefresh(key,work){
+    clearTimeout(realtimeRefreshTimers.get(key));
+    realtimeRefreshTimers.set(key,setTimeout(()=>{
+      realtimeRefreshTimers.delete(key);
+      Promise.resolve().then(work).catch(error=>console.warn('Realtime refresh failed',key,error));
+    },200));
+  }
   function subscribeRealtime() {
     realtimeChannel = window.sb
       .channel("chillpill-dashboard")
-      .on("postgres_changes", { event: "*", schema: "public", table: "sessions" }, fetchSessions)
-      .on("postgres_changes", { event: "*", schema: "public", table: "loyalty_visits" }, () => window.CafeLoyalty.load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "loyalty_rewards" }, () => window.CafeLoyalty.load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "sessions" }, () => queueRealtimeRefresh("sessions",fetchSessions))
+      .on("postgres_changes", { event: "*", schema: "public", table: "archive_daily" }, () => queueRealtimeRefresh("archives",()=>window.CafeArchive.load()))
+      .on("postgres_changes", { event: "*", schema: "public", table: "loyalty_carryforward" }, () => queueRealtimeRefresh("archives",()=>window.CafeArchive.load()))
+      .on("postgres_changes", { event: "*", schema: "public", table: "loyalty_visits" }, () => queueRealtimeRefresh("loyalty",()=>window.CafeLoyalty.load()))
+      .on("postgres_changes", { event: "*", schema: "public", table: "loyalty_rewards" }, () => queueRealtimeRefresh("loyalty",()=>window.CafeLoyalty.load()))
       .on("postgres_changes", { event: "*", schema: "public", table: "menu_items" }, fetchMenu)
-      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_partners" }, () => window.CafeAccounting.load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_corrections" }, () => window.CafeAccounting.load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_transactions" }, () => window.CafeAccounting.load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_entries" }, () => window.CafeAccounting.load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_expense_payments" }, () => window.CafeAccounting.load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_balance_checks" }, () => window.CafeAccounting.load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_partners" }, () => queueRealtimeRefresh("accounting",()=>window.CafeAccounting.load()))
+      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_corrections" }, () => queueRealtimeRefresh("accounting",()=>window.CafeAccounting.load()))
+      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_transactions" }, () => queueRealtimeRefresh("accounting",()=>window.CafeAccounting.load()))
+      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_entries" }, () => queueRealtimeRefresh("accounting",()=>window.CafeAccounting.load()))
+      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_expense_payments" }, () => queueRealtimeRefresh("accounting",()=>window.CafeAccounting.load()))
+      .on("postgres_changes", { event: "*", schema: "public", table: "accounting_balance_checks" }, () => queueRealtimeRefresh("accounting",()=>window.CafeAccounting.load()))
       .on("postgres_changes", { event: "*", schema: "public", table: "food_partner_bills" }, () => window.FoodPartners.load())
       .on("postgres_changes", { event: "*", schema: "public", table: "food_partner_payments" }, () => window.FoodPartners.load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_items" }, () => window.ChillPillInventory.load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_movements" }, () => window.ChillPillInventory.load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_items" }, () => queueRealtimeRefresh("inventory",()=>window.ChillPillInventory.load()))
+      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_movements" }, () => queueRealtimeRefresh("inventory",()=>window.ChillPillInventory.load()))
       .on("postgres_changes", { event: "*", schema: "public", table: "settings" }, fetchSettings)
       .on("postgres_changes", { event: "*", schema: "public", table: "staff" }, fetchStaff)
-      .on("postgres_changes", { event: "*", schema: "public", table: "waiting_list" }, fetchWaitingList)
+      .on("postgres_changes", { event: "*", schema: "public", table: "waiting_list" }, () => queueRealtimeRefresh("waiting",fetchWaitingList))
       .on("postgres_changes", { event: "*", schema: "public", table: "stations" }, fetchStations)
       .on("postgres_changes", { event: "*", schema: "public", table: "tables" }, fetchTables)
       .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, async () => { await fetchExpenses(); window.CafeAccounting.load(); })
@@ -10057,6 +10071,7 @@
     window.CafeAccounting.init({ db: () => window.sb, staff: () => currentStaff, records: () => records, breakdown: getRecordPaymentBreakdown,
       reloadExpenses: fetchExpenses, menu: () => menuItems, collect: openUnpaidBillsModal, toast: showToast, navigate: switchPage, tournaments: () => tournamentsFinancials,
       revenuePeriod: () => ({ period: revSelectedPeriod, start: revStartDate, end: revEndDate }) });
+    window.CafeArchive.init({db:()=>window.sb,staff:()=>currentStaff,breakdown:getRecordPaymentBreakdown,cafeName:()=>cafeSettings?.cafe_name||"ChillPill Gaming Cafe",reload:loadAll,changed:()=>{if(currentStaff?.role==="admin")renderRevenue();},toast:showToast});
     window.CafeStatements.init({ db: () => window.sb, staff: () => currentStaff, breakdown: getRecordPaymentBreakdown, cafeName: () => cafeSettings?.cafe_name || "ChillPill Gaming Cafe", toast: showToast });
     window.CafeLoyalty.init({ db: () => window.sb, staff: () => currentStaff, clearDiscount: () => setCheckoutDiscountMode("amount"), rerender: () => { const r = records.find(r => r.id === document.getElementById("checkout-modal").dataset.recordId); if (r) renderCheckoutBreakdown(r); } });
     document.getElementById("overview-loyalty-btn")?.addEventListener("click", () => switchPage("page-loyalty"));

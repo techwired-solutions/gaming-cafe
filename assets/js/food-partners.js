@@ -7,14 +7,15 @@
  const names={chillpill:'ChillPill Own Food',bros_burger:"Bro's Burger",bardali:'Bardali'},name=key=>names[key]||key;
  const today=()=>window.FoodPartnerMath.day(new Date());
  function sourceKeys(){return [...new Set(['chillpill','bros_burger','bardali',...env.menu().map(m=>m.supplier||'chillpill'),...state().days.map(g=>g.source)])];}
- function state(){if(!cache)cache=window.FoodPartnerMath.calculate(env.records(),bills,payments,env.menu(),env.breakdown);return cache;}
+ function state(){if(!cache)cache=window.FoodPartnerMath.calculate(env.records(),bills,payments,env.menu(),env.breakdown,window.CafeArchive?.daily()||[]);return cache;}
  function forRecord(record){
+  if(record.archive_count)return state().byRecord.get(record.id);
   const actual=env.records().find(r=>r.id===record.id);
   const result=actual===record ? state().byRecord.get(record.id) : window.FoodPartnerMath.calculate([...env.records().filter(r=>r.id!==record.id),record],bills,payments,env.menu(),env.breakdown).byRecord.get(record.id);
   return result || {grossAmount:0,timeRevenue:0,foodTotal:0,chillpillFood:0,brosGross:0,brosCommission:0,brosPayable:0,bardaliGross:0,bardaliCommission:0,bardaliPayable:0,otherFoodGross:0,otherFoodCommission:0,otherFoodPayable:0,netFoodRevenue:0,netRevenue:0};
  }
  function refresh(){if(!env)return;cache=null;render();}
- function revenueRecords(){return env.records().filter(r=>{const v=state().byRecord.get(r.id);return v && (v.grossAmount>0 || v.partnerCost>0);});}
+ function revenueRecords(){return [...state().byRecord.values()].filter(v=>v.grossAmount>0||v.partnerCost>0).map(v=>v.record);}
  function status(text,error=false){$('fp-status').hidden=!text;$('fp-status').textContent=text;$('fp-status').classList.toggle('inv-error',error);}
  function selectedDays(){const from=$('fp-start').value,to=$('fp-end').value,source=$('fp-source-filter').value;return state().days.filter(g=>(!from||g.date>=from)&&(!to||g.date<=to)&&(!source||g.source===source));}
  function legacy(source){return env.expenses().filter(e=>(!source||(e.notes||'').includes('[Settlement: '+source+']')) && /\[Settlement:\s*[^\]]+\]/.test(e.notes||'') && !payments.some(p=>p.expense_id===e.id));}
