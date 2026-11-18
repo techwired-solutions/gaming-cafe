@@ -162,22 +162,38 @@
     document.getElementById("live-clock").textContent = new Intl.DateTimeFormat("en-IN", {
       day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit"
     }).format(new Date());
+    window.CafeFloorPlan?.tick();
+    checkCabinExpirations();
   }
 
+  let alertAudioContext=null,cabinSoundEnabled=true;
+  function updateCabinSoundButton(){
+    const ready=alertAudioContext?.state==="running",button=document.getElementById("floor-sound-toggle"),label=document.getElementById("floor-sound-label");
+    if(button)button.setAttribute("aria-pressed",String(cabinSoundEnabled&&ready));
+    if(label)label.textContent=!cabinSoundEnabled?"Sound alerts off":ready?"Sound alerts on":"Enable sound alerts";
+  }
+  async function unlockCabinAudio(){
+    try{const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)return;
+      if(!alertAudioContext){alertAudioContext=new Audio();alertAudioContext.onstatechange=updateCabinSoundButton;}
+      if(alertAudioContext.state!=="running")await alertAudioContext.resume();
+    }catch(error){/* Visual alerts remain available when audio is blocked. */}
+    updateCabinSoundButton();
+  }
+  function initCabinSound(){
+    try{cabinSoundEnabled=localStorage.getItem("chillpill_cabin_sound")!=="off";}catch(error){}
+    const button=document.getElementById("floor-sound-toggle");
+    button.addEventListener("click",async()=>{
+      if(cabinSoundEnabled&&alertAudioContext?.state==="running")cabinSoundEnabled=false;
+      else {cabinSoundEnabled=true;await unlockCabinAudio();beep();}
+      try{localStorage.setItem("chillpill_cabin_sound",cabinSoundEnabled?"on":"off");}catch(error){}
+      updateCabinSoundButton();
+    });
+    const arm=event=>{if(cabinSoundEnabled&&alertAudioContext?.state!=="running"&&!event.target.closest?.("#floor-sound-toggle"))unlockCabinAudio();};
+    document.addEventListener("pointerdown",arm,{capture:true});document.addEventListener("keydown",arm,{capture:true});updateCabinSoundButton();
+  }
   function beep() {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.type = "sine"; osc.frequency.value = 880;
-      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.55);
-      setTimeout(() => ctx.close(), 700);
-    } catch (e) { /* ignore audio errors (autoplay policy etc.) */ }
+    if(!cabinSoundEnabled||!alertAudioContext||alertAudioContext.state!=="running"){updateCabinSoundButton();return;}
+    try{const ctx=alertAudioContext,osc=ctx.createOscillator(),gain=ctx.createGain();osc.connect(gain);gain.connect(ctx.destination);osc.type="sine";osc.frequency.value=880;gain.gain.setValueAtTime(.0001,ctx.currentTime);gain.gain.exponentialRampToValueAtTime(.22,ctx.currentTime+.02);gain.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.45);osc.start();osc.stop(ctx.currentTime+.5);osc.onended=()=>{osc.disconnect();gain.disconnect();};}catch(error){}
   }
 
   function notifyOwner(title, body) {
@@ -2194,6 +2210,8 @@
     document.getElementById("customer-phone").required = !foodOnly;
     document.getElementById("customer-name").required = !foodOnly;
     document.getElementById("save-button").textContent = foodOnly ? "Save Food Order" : "Save session";
+    const floorSection=document.getElementById("ns-floor-section");if(floorSection)floorSection.hidden=foodOnly;
+    window.CafeFloorPlan?.render();
     if (foodOnly) document.getElementById("station-conflict-warning").classList.add("hidden");
     else {
       if (status.dataset.previousStatus) status.value = status.dataset.previousStatus;
@@ -2207,12 +2225,13 @@
 
   function calculateAmount() {
     const foodOnly = !!document.getElementById("ns-is-food-only")?.checked;
-    const duration = foodOnly ? 0 : Math.max(0, Number(document.getElementById("duration-minutes").value) || 0);
+    const noStation=!document.getElementById("station-name").value.trim();
+    const duration = foodOnly||noStation ? 0 : Math.max(0, Number(document.getElementById("duration-minutes").value) || 0);
     const rate = foodOnly ? 0 : Math.max(0, Number(document.getElementById("rate").value) || 0);
     const foodTotal = frTotal("food-order-list");
     const timeCost = Math.round((duration / 60) * rate);
-    const extraCost = foodOnly ? 0 : calcExtraStationsCost("ns");
-    const ctrlCount = foodOnly ? 0 : Math.max(0, Number(document.getElementById("ns-extra-controllers")?.value) || 0);
+    const extraCost = foodOnly||noStation ? 0 : calcExtraStationsCost("ns");
+    const ctrlCount = foodOnly||noStation ? 0 : Math.max(0, Number(document.getElementById("ns-extra-controllers")?.value) || 0);
     const ctrlCost = ctrlCount * CTRL_RATE;
     const total = Math.round(timeCost + ctrlCost + foodTotal + extraCost);
     document.getElementById("estimate-total").textContent = inr(total);
@@ -2221,6 +2240,7 @@
     if (primarySub) primarySub.textContent = inr(timeCost + ctrlCost);
     const ctrlCostEl = document.getElementById("ns-ctrl-cost");
     if (ctrlCostEl) ctrlCostEl.textContent = ctrlCost > 0 ? `+${inr(ctrlCost)}` : inr(0);
+    window.CafeFloorPlan?.render();
     return { total, foodTotal, timeCost, duration, rate, extraCost, ctrlCount, ctrlCost };
   }
 
@@ -2233,7 +2253,7 @@
     row.className = "extra-station-row border border-slate-700/60 rounded-xl p-3 space-y-2 bg-[#111722]";
     const stOpts = stationsList.map((s) => `<option value="${s.name}">`).join("");
     const listId = `${prefix}-es-dl-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
-    const safeRate = rate || 300;
+    const safeRate = rate != null ? rate : 300;
     const safeDur  = durationMin || 0;
     const safeStart = startTimeStr || "";
     const safeEnd   = endTimeStr   || "";
@@ -2330,6 +2350,7 @@
       refreshExtraStations(prefix);
     });
 
+    if(prefix==="ns"){if(!endInp.value&&startInp.value)endInp.value=minutesToTimeStr((parseTimeToMinutes(startInp.value)||0)+(Number(durInp.value)||0));stInput.type="hidden";const title=document.createElement("strong");title.className="block text-sm";title.textContent=stationName;stInput.parentElement.appendChild(title);stInput.parentElement.querySelector("label").textContent="Additional cabin";}
     updateSubtotal();
     return row;
   }
@@ -2357,7 +2378,7 @@
     const cost = calcExtraStationsCost(prefix);
     if (subtotalDiv) subtotalDiv.classList.toggle("hidden", rows.length === 0);
     if (subtotalVal) subtotalVal.textContent = inr(cost);
-    if (prefix === "ns") calculateAmount();
+    if (prefix === "ns") {calculateAmount();updateStationConflictUI();}
     else if (prefix === "edit") recalcEditModal();
     else if (prefix === "mr") recalcMissingRecord();
   }
@@ -2421,56 +2442,19 @@
   // station already has a live session, and flags it as blocked if the
   // chosen start time still falls inside that session's remaining time.
   function updateStationConflictUI() {
-    if (document.getElementById("ns-is-food-only")?.checked) return { conflict: null, blocked: false };
-    const stationName = document.getElementById("station-name").value.trim();
-    const statusSelect = document.getElementById("session-status");
-    const activeOption = sessionStatusActiveOption;
-    const warningEl = document.getElementById("station-conflict-warning");
-
-    // "Active" is only offered as a status when the station is actually
-    // free right now — a future time-window clash (checked below) is a
-    // different, non-fatal-to-this-option situation.
-    const liveConflict = findActiveStationConflict(stationName);
-    if (!liveConflict) {
-      if (activeOption && !statusSelect.contains(activeOption)) statusSelect.insertBefore(activeOption, statusSelect.firstChild);
-    } else {
-      if (statusSelect.contains(activeOption)) activeOption.remove();
-      if (statusSelect.value === "Active" || !statusSelect.value) statusSelect.value = "Booked";
-    }
-
-    if (!stationName) {
-      warningEl.classList.add("hidden");
-      warningEl.textContent = "";
-      return { conflict: null, blocked: false };
-    }
-
-    // Does the chosen time window (start + duration) land on top of *any*
-    // other Active or Booked session on this station — catches two
-    // bookings clashing, not just "someone's on it right now."
-    const startTimeStr = document.getElementById("start-time").value;
-    const duration = Number(document.getElementById("duration-minutes").value) || 0;
-    const baseDate = window._getSessionBaseDate ? window._getSessionBaseDate() : new Date();
-    const candidateStart = startTimeStr ? combineDateAndTime(baseDate, startTimeStr) : new Date();
-    const candidateEnd = new Date(candidateStart.getTime() + duration * 60000);
-    const overlap = findStationTimeOverlap(stationName, candidateStart, candidateEnd);
-
-    warningEl.classList.remove("hidden");
-    if (overlap) {
-      const overlapWord = overlap.status === "Active" ? "an active" : "a booked";
-      warningEl.textContent = `⚠ ${stationName} already has ${overlapWord} session for ${overlap.customer_name} from ${timeInputValue(new Date(overlap.start_time))} to ${timeInputValue(new Date(overlap.end_time))} — pick a different time or station.`;
-      warningEl.className = "text-xs text-[#ff6875] mt-3";
-      return { conflict: overlap, blocked: true };
-    }
-
-    if (liveConflict) {
-      warningEl.textContent = `${stationName} is currently occupied by ${liveConflict.customer_name} until ${timeInputValue(new Date(liveConflict.end_time))}.`;
-      warningEl.className = "text-xs text-amber-300 mt-3";
-      return { conflict: liveConflict, blocked: false };
-    }
-
-    warningEl.classList.add("hidden");
-    warningEl.textContent = "";
-    return { conflict: null, blocked: false };
+    try {
+      if(document.getElementById("ns-is-food-only")?.checked)return {conflict:null,blocked:false};
+      const primary=document.getElementById("station-name").value.trim(),status=document.getElementById("session-status"),warning=document.getElementById("station-conflict-warning");
+      const names=[primary,...collectExtraStations("ns").map(s=>s.station)].filter(Boolean);
+      const live=names.map(name=>({name,record:findActiveStationConflict(name)})).find(x=>x.record);
+      if(!live){if(sessionStatusActiveOption&&!status.contains(sessionStatusActiveOption))status.insertBefore(sessionStatusActiveOption,status.firstChild);}
+      else {if(sessionStatusActiveOption&&status.contains(sessionStatusActiveOption))sessionStatusActiveOption.remove();if(status.value==="Active"||!status.value)status.value="Booked";}
+      for(const name of names){const range=cabinWindow("session",name),overlap=range&&(findStationTimeOverlap(name,range.start,range.end)||(range.start<=new Date()?findActiveStationConflict(name):null));
+        if(overlap){warning.className="text-xs text-[#ff6875] mt-3";warning.textContent=name+" is already "+(overlap.status==="Booked"?"booked":"occupied")+" by "+overlap.customer_name+" for this time. Choose another cabin or time.";return {conflict:overlap,blocked:true,stationName:name};}
+      }
+      if(live){warning.className="text-xs text-amber-300 mt-3";warning.textContent=live.name+" is occupied now. You can book a later time; complete its current session before starting a new one.";return {conflict:live.record,blocked:false,stationName:live.name};}
+      warning.classList.add("hidden");warning.textContent="";return {conflict:null,blocked:false};
+    } finally {window.CafeFloorPlan?.render();}
   }
 
   let menuActiveSource = "all";  // "all" | "chillpill" | "bros_burger" | "bardali"
@@ -2762,17 +2746,17 @@
       card.querySelector(".activate-booking").addEventListener("click", async (event) => {
         const start = new Date();
         const end = new Date(start.getTime() + (Number(record.duration_minutes) || 60) * 60000);
-        const conflict = findStationTimeOverlap(record.station_name, start, end, record.id);
-        if (conflict) {
-          const conflictWord = conflict.status === "Active" ? "an active" : "a booked";
-          showToast(`${record.station_name} already has ${conflictWord} session (${conflict.customer_name}) that overlaps this time — it can't be double-booked.`);
-          return;
+        const slots=getRecordStations(record),offset=record.start_time?start-new Date(record.start_time):0;
+        for(const slot of slots){const candidateStart=slot.start_time?new Date(new Date(slot.start_time).getTime()+offset):start,candidateEnd=slot.end_time?new Date(new Date(slot.end_time).getTime()+offset):end;
+          const conflict=findActiveStationConflict(slot.name,record.id)||findStationTimeOverlap(slot.name,candidateStart,candidateEnd,record.id);
+          if(conflict){showToast(slot.name+" is already occupied or booked by "+conflict.customer_name+". Resolve the conflict before marking this booking active.");return;}
         }
+        const extras=(record.extra_stations||[]).map(extra=>{const slot=slots.find(s=>s.name.toLowerCase()===String(extra.station||extra.station_name).toLowerCase());return slot?{...extra,start_time:new Date(new Date(slot.start_time).getTime()+offset).toISOString(),end_time:new Date(new Date(slot.end_time).getTime()+offset).toISOString()}:extra;});
         const button = event.currentTarget;
         button.disabled = true;
         const { error } = await window.sb
           .from("sessions")
-          .update({ status: "Active", start_time: start.toISOString(), end_time: end.toISOString(), notified_5min: false })
+          .update({ status: "Active", start_time: start.toISOString(), end_time: end.toISOString(), extra_stations:extras, notified_5min: false })
           .eq("id", record.id);
         if (error) { button.disabled = false; showToast("Could not activate this booking."); }
         else showToast("Booking marked active — clock is running.");
@@ -3051,6 +3035,7 @@
   }
 
   function renderStationChips(containerId, inputId) {
+    if(containerId==="station-chips-container"){window.CafeFloorPlan?.render();return;}
     const container = document.getElementById(containerId);
     const input = document.getElementById(inputId);
     if (!container || !input) return;
@@ -6287,7 +6272,7 @@
         const conflict = findStationTimeOverlap(station, new Date(startIso), new Date(endIso), editTarget.id);
         if (conflict) {
           const conflictWord = conflict.status === "Active" ? "an active" : "a booked";
-          msgEl.textContent = `${station} already has ${conflictWord} session (${conflict.customer_name}) that overlaps this time — pick a different time or station.`;
+          msgEl.textContent = `${conflict.station_name||station} already has ${conflictWord} session (${conflict.customer_name}) that overlaps this time — pick a different time or station.`;
           msgEl.className = "text-sm min-h-5 mt-2 text-red-300";
           return;
         }
@@ -7543,7 +7528,7 @@
     calculateAmount();
     switchPage("page-new-session");
     showToast(`Loaded ${entry.customer_name} from the waiting list — pick a station, then Save.`);
-    document.getElementById("station-name").focus();
+    document.querySelector("#new-session-floor-map button")?.focus();
   }
 
   // ---------- edit an existing waiting-list entry ----------
@@ -7638,8 +7623,86 @@
     return { state: "available", nextBooking };
   }
 
+
+  function selectedCabins() {
+    return [document.getElementById("station-name").value.trim(),...collectExtraStations("ns").map(s=>s.station)].filter(Boolean);
+  }
+  function cabinWindow(mode,name) {
+    if(mode==="booking") {
+      const date=document.getElementById("booking-map-date").value,time=document.getElementById("booking-map-time").value;
+      const duration=Number(document.getElementById("booking-map-duration").value);
+      if(!date||date<getDateStr(new Date())||!time||!Number.isInteger(duration)||duration<=0)return null;
+      const start=combineDateAndTime(new Date(date+"T12:00:00"),time);
+      return {start,end:new Date(start.getTime()+duration*60000)};
+    }
+    const extra=collectExtraStations("ns").find(s=>s.station.toLowerCase()===name.toLowerCase());
+    const base=window._getSessionBaseDate?.()||new Date(),time=extra?.start_time||document.getElementById("start-time").value;
+    const start=time?combineDateAndTime(base,time):new Date();
+    const minutes=extra?Number(extra.duration_minutes):Number(document.getElementById("duration-minutes").value);
+    return {start,end:new Date(start.getTime()+Math.max(0,minutes||0)*60000)};
+  }
+  function cabinLiveState(record,name) {
+    const slot=getRecordStations(record).find(s=>s.name.toLowerCase()===name.toLowerCase());
+    const paused=isStationPaused(record,name),pause=paused?getStationPauseInfo(record,name):null;
+    return {state:paused?"paused":"occupied",paused,rate:slot?.rate??record.rate,remainingMs:pause?.remainingMs,end:slot?.end_time||record.end_time,detail:record.customer_name||"Walk-in",record};
+  }
+  function cabinMapAvailability(station,mode) {
+    const live=findActiveStationConflict(station.name);
+    if(mode==="overview") {
+      if(live)return cabinLiveState(live,station.name);
+      const next=records.filter(r=>r.status==="Booked"&&sessionUsesStation(r,station.name)&&r.start_time&&new Date(r.end_time)>new Date()).sort((a,b)=>new Date(a.start_time)-new Date(b.start_time))[0];
+      return {state:"available",detail:next?"Next: "+fmtDateTime(next.start_time):"Ready to play"};
+    }
+    const range=cabinWindow(mode,station.name);
+    if(!range)return {state:"available",detail:"Choose a date and time"};
+    const overlap=findStationTimeOverlap(station.name,range.start,range.end);
+    if(live&&(range.start<=new Date()||(mode==="session"&&document.getElementById("session-status").value==="Active")))return cabinLiveState(live,station.name);
+    if(overlap)return overlap.status==="Active"?cabinLiveState(overlap,station.name):{state:"booked",record:overlap,detail:(overlap.customer_name||"Booked")+" · "+fmtTime(overlap.start_time)};
+    return {state:"available",detail:mode==="booking"?"Free for selected time":"Available for this time"};
+  }
+  function cabinMapState(station,mode){const state=cabinMapAvailability(station,mode);if(mode==="session"){const primary=document.getElementById("station-name").value,extra=collectExtraStations("ns").find(s=>s.station===station.name);if(primary===station.name)state.rate=Number(document.getElementById("rate").value);else if(extra)state.rate=extra.rate;}return state;}
+  function toggleCabinSelection(name,ensureSelected=false) {
+    const station=stations.find(s=>s.active&&s.name.toLowerCase()===name.toLowerCase());if(!station)return;
+    const primary=document.getElementById("station-name"),container=document.getElementById("ns-extra-stations-rows");
+    const extra=[...container.querySelectorAll(".extra-station-row")].find(row=>row.querySelector('[data-role="es-station"]').value.toLowerCase()===name.toLowerCase());
+    if(primary.value.toLowerCase()===name.toLowerCase()) {
+      if(ensureSelected)return;
+      const promote=container.querySelector(".extra-station-row");
+      if(promote){const read=role=>promote.querySelector('[data-role="es-'+role+'"]').value;primary.value=read('station');document.getElementById("start-time").value=read('start');document.getElementById("end-time").value=read('end');document.getElementById("duration-minutes").value=read('duration');document.getElementById("rate").value=read('rate');promote.remove();}
+      else primary.value="";
+      document.getElementById("ns-extra-controllers").value=0;
+    } else if(extra) {if(ensureSelected)return;extra.remove();}
+    else if(!primary.value.trim()) {primary.value=station.name;autofillRateForStation(station.name);}
+    else {container.appendChild(buildExtraStationRow("ns",station.name,Number(document.getElementById("duration-minutes").value)||60,station.rate,stations,document.getElementById("start-time").value,""));}
+    refreshExtraStations("ns");updateStationConflictUI();calculateAmount();window.CafeFloorPlan?.render();
+  }
+  function chooseCabin(name,mode) {
+    const station=stations.find(s=>s.name===name&&s.active);if(!station)return;
+    if(mode!=="session") {
+      const state=cabinMapState(station,mode);if(state.record){openEditModal(state.record);return;}
+      if(mode==="booking"&&!cabinWindow("booking",name)){showToast("Choose the booking date, start time and duration first.");return;}
+      const hasDraft=selectedCabins().length||document.getElementById("customer-name").value.trim()||document.getElementById("customer-phone").value.trim()||collectFrItems("food-order-list").length;
+      const foodOnly=document.getElementById("ns-is-food-only");if(foodOnly.checked){foodOnly.checked=false;updateNsFoodOnlyState();}
+      if(mode==="booking") {
+        if(window._setSessionBaseDate?.(document.getElementById("booking-map-date").value)===false)return;
+        document.getElementById("session-status").value="Booked";
+        document.getElementById("start-time").value=document.getElementById("booking-map-time").value;
+        document.getElementById("duration-minutes").value=document.getElementById("booking-map-duration").value;
+      } else if(!hasDraft) {window._setSessionBaseDate?.(0);document.getElementById("session-status").value="Active";document.getElementById("start-time").value=timeInputValue(new Date());}
+      syncEndFromDuration("start-time","duration-minutes","end-time");toggleCabinSelection(name,true);switchPage("page-new-session");document.getElementById("customer-name").focus();return;
+    }
+    toggleCabinSelection(name);
+  }
+  function initCabinMaps() {
+    window.CafeFloorPlan.init({stations:()=>stations,selected:selectedCabins,state:cabinMapState,choose:chooseCabin,money:inr,foodOnly:()=>!!document.getElementById("ns-is-food-only")?.checked});
+    const date=document.getElementById("booking-map-date");date.value=getDateStr(new Date());date.min=date.value;
+    document.getElementById("booking-map-time").value=timeInputValue(new Date());
+    ["booking-map-date","booking-map-time","booking-map-duration"].forEach(id=>document.getElementById(id).addEventListener("input",()=>window.CafeFloorPlan.render()));
+    document.getElementById("floor-open-bookings").addEventListener("click",()=>{switchPage("page-bookings");window.CafeFloorPlan.render();});
+  }
   function renderStationsBoard() {
     const board = document.getElementById("stations-board");
+    window.CafeFloorPlan?.render();
     if (!board) return; // page not in DOM yet during early bootstrap
     const activeStations = stations.filter((s) => s.active);
     document.getElementById("empty-stations").classList.toggle("hidden", activeStations.length > 0);
@@ -9909,11 +9972,19 @@
           if (card) { card.classList.add("flash-alert"); setTimeout(() => card.classList.remove("flash-alert"), 3800); }
           await window.sb.from("sessions").update({ notified_5min: true }).eq("id", record.id);
         }
-        if (diffMs <= 0 && !overdueToasted.has(record.id)) {
-          overdueToasted.add(record.id);
-          notifyOwner("Time's up!", `${record.customer_name}'s session at ${record.station_name} has ended.`);
-        }
+
       });
+  }
+
+  function checkCabinExpirations() {
+    if(!currentStaff)return;
+    const present=new Set();
+    records.filter(r=>r.status==="Active").forEach(record=>getRecordStations(record).forEach(slot=>{
+      if(isStationCompleted(record,slot.name)||isStationPaused(record,slot.name)||!slot.end_time)return;
+      const key=record.id+":"+slot.name+":"+slot.end_time;present.add(key);
+      if(new Date(slot.end_time)<=new Date()&&!overdueToasted.has(key)){overdueToasted.add(key);notifyOwner("Cabin time is up",slot.name+" · "+(record.customer_name||"Customer")+" has reached the end of their playing time.");}
+    }));
+    for(const key of overdueToasted)if(!present.has(key))overdueToasted.delete(key);
   }
 
   // ---------- supabase data loading ----------
@@ -10072,6 +10143,8 @@
       reloadExpenses: fetchExpenses, menu: () => menuItems, collect: openUnpaidBillsModal, toast: showToast, navigate: switchPage, tournaments: () => tournamentsFinancials,
       revenuePeriod: () => ({ period: revSelectedPeriod, start: revStartDate, end: revEndDate }) });
     window.CafeArchive.init({db:()=>window.sb,staff:()=>currentStaff,breakdown:getRecordPaymentBreakdown,cafeName:()=>cafeSettings?.cafe_name||"ChillPill Gaming Cafe",reload:loadAll,changed:()=>{if(currentStaff?.role==="admin")renderRevenue();},toast:showToast});
+    initCabinMaps();
+    initCabinSound();
     window.CafeStatements.init({ db: () => window.sb, staff: () => currentStaff, breakdown: getRecordPaymentBreakdown, cafeName: () => cafeSettings?.cafe_name || "ChillPill Gaming Cafe", toast: showToast });
     window.CafeLoyalty.init({ db: () => window.sb, staff: () => currentStaff, clearDiscount: () => setCheckoutDiscountMode("amount"), rerender: () => { const r = records.find(r => r.id === document.getElementById("checkout-modal").dataset.recordId); if (r) renderCheckoutBreakdown(r); } });
     document.getElementById("overview-loyalty-btn")?.addEventListener("click", () => switchPage("page-loyalty"));
@@ -11011,17 +11084,22 @@ Here is the menu image:`;
       const customer = document.getElementById("customer-name").value.trim() || (foodOnly ? "Walk-in Customer" : "");
       const phone = document.getElementById("customer-phone").value.trim() || (foodOnly ? "—" : "");
       if (foodOnly && !collectFrItems("food-order-list").length) return showMessage("Add at least one food or drink item.", true);
-      if (!station || !customer || !phone) return showMessage("Please enter the station, customer name, and phone number.", true);
+      if (!station || !customer || !phone) return showMessage("Select a cabin on the map and enter the customer name and phone number.", true);
 
       // Re-check fresh at submit time, not just relying on the live UI
       // state — a station can't run two overlapping sessions at once.
       const { conflict, blocked } = updateStationConflictUI();
       const status = foodOnly ? "Active" : document.getElementById("session-status").value;
+      const selectedDate=document.getElementById("session-date")?.value;
+      if(!foodOnly&&selectedDate&&selectedDate<getDateStr(new Date()))return showMessage("Choose today or a future date.",true);
+      if(!foodOnly&&status==="Active"&&selectedDate&&selectedDate>getDateStr(new Date()))return showMessage("Use Booked for a future session date.",true);
+      if(!foodOnly&&status==="Booked"&&!document.getElementById("start-time").value)return showMessage("Choose the booking start time.",true);
       if (blocked) {
         const conflictWord = conflict.status === "Active" ? "an active" : "a booked";
         return showMessage(`${station} already has ${conflictWord} session (${conflict.customer_name}) that overlaps this time — pick a different time or station.`, true);
       }
 
+      if(!foodOnly&&selectedCabins().some(name=>{const range=cabinWindow("session",name);return !range||range.end<=range.start||!Number.isInteger((range.end-range.start)/60000);}))return showMessage("Set a positive, whole-minute playing duration for every selected cabin.",true);
       const button = document.getElementById("save-button");
       button.disabled = true;
       button.classList.add("opacity-60");
@@ -11079,11 +11157,14 @@ Here is the menu image:`;
           if (!foodOnly) await window.sb.from("waiting_list").update({ status: "Seated" }).eq("id", waitingId);
         }
         event.target.reset();
+        document.getElementById("station-name").value="";
         const nsInternalToggle = document.getElementById("ns-is-internal-sale");
         if (nsInternalToggle) nsInternalToggle.checked = false;
         updateNsInternalSaleState();
         delete document.getElementById("session-status").dataset.previousStatus;
         updateNsFoodOnlyState();
+        window._setSessionBaseDate?.(0);
+        document.getElementById("session-status").value="Active";
         document.getElementById("duration-minutes").value = 60;
         document.getElementById("rate").value = document.getElementById("admin-rate").value;
         document.getElementById("start-time").value = timeInputValue(new Date());
@@ -11332,24 +11413,24 @@ Here is the menu image:`;
     // initial state
     sessionStatusActiveOption = document.getElementById("session-status-active-option");
 
-    // ---- Session date: Today / Tomorrow toggle ----
-    let sessionBaseDate = new Date();
-    function setSessionBaseDate(offset) {
-      sessionBaseDate = new Date();
-      sessionBaseDate.setDate(sessionBaseDate.getDate() + offset);
-      document.getElementById("session-today-label").textContent = fmtDateLabel(sessionBaseDate);
-      document.querySelectorAll(".session-date-pill").forEach((btn) => {
-        const active = Number(btn.dataset.offset) === offset;
-        btn.className = active
-          ? "session-date-pill rounded-lg px-3 py-1.5 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45] transition"
-          : "session-date-pill rounded-lg px-3 py-1.5 text-xs font-bold border border-slate-600 bg-transparent text-slate-400 hover:border-slate-400 hover:text-slate-200 transition";
-      });
-      updateStationConflictUI();
+    // Explicit dates support reservations beyond tomorrow; quick pills remain available.
+    let sessionBaseDate=new Date();
+    function setSessionBaseDate(value) {
+      const dateInput=document.getElementById("session-date"),today=getDateStr(new Date());
+      let next;
+      if(typeof value==="number"){next=new Date();next.setDate(next.getDate()+value);}
+      else {if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value)||value<today){showToast("Choose today or a future date.");dateInput.value=getDateStr(sessionBaseDate);return false;}next=new Date(value+"T12:00:00");if(!Number.isFinite(next.getTime())||getDateStr(next)!==value)return false;}
+      sessionBaseDate=next;const chosen=getDateStr(next);dateInput.value=chosen;dateInput.min=today;
+      document.getElementById("session-today-label").textContent=fmtDateLabel(next);
+      if(chosen>today)document.getElementById("session-status").value="Booked";
+      document.querySelectorAll(".session-date-pill").forEach(button=>{const d=new Date();d.setDate(d.getDate()+Number(button.dataset.offset));const active=getDateStr(d)===chosen;button.className=active?"session-date-pill rounded-lg px-3 py-1.5 text-xs font-bold border border-[#d8ff45] bg-[#d8ff45]/15 text-[#d8ff45] transition":"session-date-pill rounded-lg px-3 py-1.5 text-xs font-bold border border-slate-600 text-slate-400 transition";});
+      updateStationConflictUI();return true;
     }
-    document.querySelectorAll(".session-date-pill").forEach((btn) =>
-      btn.addEventListener("click", () => setSessionBaseDate(Number(btn.dataset.offset)))
-    );
-    window._getSessionBaseDate = () => sessionBaseDate;
+    document.querySelectorAll(".session-date-pill").forEach(button=>button.addEventListener("click",()=>setSessionBaseDate(Number(button.dataset.offset))));
+    document.getElementById("session-date").addEventListener("change",event=>setSessionBaseDate(event.target.value));
+    document.getElementById("session-status").addEventListener("change",updateStationConflictUI);
+    window._getSessionBaseDate=()=>sessionBaseDate;
+    window._setSessionBaseDate=setSessionBaseDate;
 
     document.getElementById("start-time").value = timeInputValue(new Date());
     setSessionBaseDate(0); // initialise label & pill styles
@@ -11363,15 +11444,7 @@ Here is the menu image:`;
     addFrRow("waiting-food-rows");
 
     // ---- Extra Stations: Add-button listeners ----
-    document.getElementById("ns-add-extra-station")?.addEventListener("click", () => {
-      const container = document.getElementById("ns-extra-stations-rows");
-      if (container) {
-        const defaultRate = Number(document.getElementById("rate")?.value) || 300;
-        container.appendChild(buildExtraStationRow("ns", "", 60, defaultRate, stations));
-        refreshExtraStations("ns");
-        if (window.lucide) lucide.createIcons();
-      }
-    });
+    document.getElementById("ns-add-extra-station")?.addEventListener("click",()=>{document.getElementById("ns-floor-section").scrollIntoView({behavior:"smooth",block:"center"});document.querySelector("#new-session-floor-map button")?.focus();showToast("Click another cabin on the map to add it.");});
     document.getElementById("edit-add-extra-station")?.addEventListener("click", () => {
       const container = document.getElementById("edit-extra-stations-rows");
       if (container) {
