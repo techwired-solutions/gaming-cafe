@@ -1,8 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const items = require('../assets/data/revised_menu_items.json');
-const schemaPath = path.join(__dirname, '..', 'supabase', 'schema.sql');
+const root = path.join(__dirname, '..');
+const items = require(path.join(root, 'assets', 'data', 'revised_menu_items.json'));
+const schemaPath = path.join(root, 'supabase', 'schema.sql');
 let schema = fs.readFileSync(schemaPath, 'utf8');
 
 const sqlValues = items.map(it => {
@@ -22,7 +23,7 @@ ${sqlValues}
 ) as m(name, price, category, supplier)
 where not exists (select 1 from public.menu_items limit 1);`;
 
-const targetRegex = /-- ---------------------------------------------------------------------\r?\n-- Seed standard menu items if empty[\s\S]*?where not exists \(select 1 from public\.menu_items limit 1\);/;
+const targetRegex = /-- ---------------------------------------------------------------------\r?\n-- Seed revised menu items if empty[\s\S]*?where not exists \(select 1 from public\.menu_items limit 1\);/;
 
 if (!targetRegex.test(schema)) {
   console.error("Could not find seed block in schema.sql!");

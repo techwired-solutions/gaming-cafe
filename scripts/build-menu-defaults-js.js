@@ -23,3 +23,4 @@ const content = `(function (root) {
 const targetPath = path.join(__dirname, '..', 'assets', 'js', 'menu-defaults.js');
 fs.writeFileSync(targetPath, content, 'utf8');
 console.log('Saved assets/js/menu-defaults.js with ' + items.length + ' items.');
+

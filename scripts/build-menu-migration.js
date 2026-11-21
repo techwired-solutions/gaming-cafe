@@ -1,19 +1,12 @@
 const fs = require('fs');
 const path = require('path');
 
-const inputPath = path.join(__dirname, '..', 'scratch', 'processed_menu.json');
-const items = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
-
-// Clean items
-const cleanItems = items.map(it => ({
-  name: it.name.trim(),
-  price: Number(it.price),
-  category: it.category.trim(),
-  supplier: it.supplier.trim()
-}));
+const root = path.join(__dirname, '..');
+const jsonPath = path.join(root, 'assets', 'data', 'revised_menu_items.json');
+const items = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
 
 // Build SQL values
-const sqlValues = cleanItems.map(it => {
+const sqlValues = items.map(it => {
   const safeName = it.name.replace(/'/g, "''");
   const safeCat = it.category.replace(/'/g, "''");
   const safeSupplier = it.supplier.replace(/'/g, "''");
@@ -27,8 +20,16 @@ const migrationSql = `-- =======================================================
 --   - Bro's Burger Hub (BB: 'bros_burger')
 --   - Bardali Sekuwa & Thali (BD: 'bardali')
 --
--- Bardali food prices include the 20% markup cleanly rounded to nearest 5.
--- Total items: ${cleanItems.length}
+-- Features clean, proper categorization without repetitions or category overlap:
+--   - 'Burgers & Wraps' and 'Pizza' separated into distinct categories.
+--   - 'Thali & Platters' and 'Sekuwa' properly separated; all Sekuwa & Sekuwa Jhaneko together.
+--   - 'Sadheko & Choila' groups cold spiced Choila & Sadheko items together.
+--   - 'Nepali Specialties' groups Poleko, Sukuti, Chiura sets, and local delicacies.
+--   - 'Beer & Cider' and 'Wine' separated; Tequila unified into 'Spirits'.
+--   - 'Coffee & Tea' and 'Cold Drinks & Refreshers' separated.
+--   - 'Pangra Fry' clearly distinguished from 'Pangra Sekuwa (Set)'.
+--   - Bardali food prices include the 20% markup cleanly rounded to nearest 5.
+-- Total items: ${items.length}
 -- =====================================================================
 
 begin;
@@ -59,15 +60,6 @@ where lower(trim(existing.name)) = lower(trim(m.name))
 commit;
 `;
 
-const migrationPath = path.join(__dirname, '..', 'supabase', 'migrations', '20261121_revised_menu_items.sql');
+const migrationPath = path.join(root, 'supabase', 'migrations', '20261121_revised_menu_items.sql');
 fs.writeFileSync(migrationPath, migrationSql, 'utf8');
-console.log(`Generated migration with ${cleanItems.length} items at: ${migrationPath}`);
-
-// Also write assets/data/revised_menu_items.json
-const dataDir = path.join(__dirname, '..', 'assets', 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-const jsonOutPath = path.join(dataDir, 'revised_menu_items.json');
-fs.writeFileSync(jsonOutPath, JSON.stringify(cleanItems, null, 2), 'utf8');
-console.log(`Saved JSON menu dataset at: ${jsonOutPath}`);
+console.log(`Updated migration at ${migrationPath}`);

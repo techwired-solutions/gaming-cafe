@@ -10445,7 +10445,7 @@ notify pgrst, 'reload schema';`;
     document.getElementById("menu-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const name = document.getElementById("menu-name").value.trim();
-      const category = document.getElementById("menu-category").value || "Specialty Coffee (Hot & Cold)";
+      const category = document.getElementById("menu-category").value || "Coffee & Tea";
       const price = Math.max(0, Number(document.getElementById("menu-price").value) || 0);
       const supplier = document.getElementById("menu-supplier") ? document.getElementById("menu-supplier").value : "chillpill";
       if (!name) return;
@@ -10578,11 +10578,23 @@ notify pgrst, 'reload schema';`;
       };
 
       const CATEGORIES = [
-        "Specialty Coffee (Hot & Cold)",
-        "Chilled Drinks & Refreshers",
-        "Bakery & Desserts",
-        "Hot Snacks & Bites",
-        "Burgers & Fast Food",
+        "Coffee & Tea",
+        "Cold Drinks & Refreshers",
+        "Burgers & Wraps",
+        "Pizza",
+        "Fries & Snacks",
+        "Sadheko & Choila",
+        "Momo",
+        "Noodles, Thukpa & Rice",
+        "Combos",
+        "Thali & Platters",
+        "Sekuwa",
+        "Nepali Specialties",
+        "Salads & Soups",
+        "Beer & Cider",
+        "Wine",
+        "Spirits",
+        "Hookah",
         "Add-ons"
       ];
 
