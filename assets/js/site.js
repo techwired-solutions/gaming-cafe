@@ -21,7 +21,9 @@
     "रु " + new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(value || 0);
 
   // Default menu items if Supabase table is empty or offline
-  const DEFAULT_MENU = [
+  const DEFAULT_MENU = (typeof window !== "undefined" && Array.isArray(window.REVISED_MENU_ITEMS) && window.REVISED_MENU_ITEMS.length > 0)
+    ? window.REVISED_MENU_ITEMS
+    : [
     // Coffee
     { name: "Ice Americano", price: 170, category: "Specialty Coffee (Hot & Cold)" },
     { name: "Americano (Hot/Cold)", price: 150, category: "Specialty Coffee (Hot & Cold)" },

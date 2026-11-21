@@ -10471,41 +10471,76 @@ notify pgrst, 'reload schema';`;
     if (seedMenuBtn) {
       seedMenuBtn.addEventListener("click", async () => {
         if (!sdkReady) return showToast("Supabase isn't connected yet.");
-        if (!confirm("Add all standard cafe drinks, coffees, snacks & pastries to your menu?")) return;
-        
-        const standardItems = [
-          { name: "Ice Americano", price: 170, category: "Specialty Coffee (Hot & Cold)" },
-          { name: "Americano (Hot/Cold)", price: 150, category: "Specialty Coffee (Hot & Cold)" },
-          { name: "Cappuccino (Hot/Cold)", price: 180, category: "Specialty Coffee (Hot & Cold)" },
-          { name: "Espresso (Single/Double)", price: 120, category: "Specialty Coffee (Hot & Cold)" },
-          { name: "Fresh Mint Mojito", price: 150, category: "Chilled Drinks & Refreshers" },
-          { name: "Sweet Lassi", price: 120, category: "Chilled Drinks & Refreshers" },
-          { name: "Banana Lassi", price: 140, category: "Chilled Drinks & Refreshers" },
-          { name: "Coke", price: 60, category: "Chilled Drinks & Refreshers" },
-          { name: "Sprite", price: 60, category: "Chilled Drinks & Refreshers" },
-          { name: "Fanta", price: 60, category: "Chilled Drinks & Refreshers" },
-          { name: "Chilled Beer", price: 350, category: "Chilled Drinks & Refreshers" },
-          { name: "Butter Croissant", price: 120, category: "Bakery & Desserts" },
-          { name: "Fresh Muffins", price: 80, category: "Bakery & Desserts" },
-          { name: "Glazed Donuts", price: 90, category: "Bakery & Desserts" },
-          { name: "Chocochip Cookies", price: 60, category: "Bakery & Desserts" },
-          { name: "Chocolate Brownies", price: 120, category: "Bakery & Desserts" },
-          { name: "Assorted Pastries", price: 130, category: "Bakery & Desserts" },
-          { name: "Sekuwa (Chicken/Buff)", price: 250, category: "Hot Snacks & Bites" },
-          { name: "Grilled Club Sandwich", price: 180, category: "Hot Snacks & Bites" },
-          { name: "Fresh Patties (Veg/Chicken)", price: 70, category: "Hot Snacks & Bites" },
-          { name: "Extra Joystick (2nd Player)", price: 50, category: "Add-ons" }
-        ];
+        const standardItems = Array.isArray(window.REVISED_MENU_ITEMS) && window.REVISED_MENU_ITEMS.length > 0
+          ? window.REVISED_MENU_ITEMS
+          : [
+            { name: "Espresso", price: 120, category: "Coffee, Tea & Cold Drinks", supplier: "chillpill" },
+            { name: "Americano (Hot)", price: 120, category: "Coffee, Tea & Cold Drinks", supplier: "chillpill" },
+            { name: "Americano (Cold)", price: 140, category: "Coffee, Tea & Cold Drinks", supplier: "chillpill" },
+            { name: "Coke", price: 60, category: "Coffee, Tea & Cold Drinks", supplier: "chillpill" },
+            { name: "Black Tea", price: 25, category: "Coffee, Tea & Cold Drinks", supplier: "bros_burger" },
+            { name: "Classic Chicken Burger", price: 355, category: "Burgers, Wraps & Pizza", supplier: "bros_burger" },
+            { name: "French Fries", price: 165, category: "Fries & Snacks", supplier: "bros_burger" },
+            { name: "Veg Thali Set", price: 420, category: "Thali, Sekuwa & Platters", supplier: "bardali" }
+          ];
 
-        let count = 0;
+        if (!confirm(`Add/sync the comprehensive revised menu items (${standardItems.length} items from ChillPill, Bro's Burger & Bardali) to your menu?`)) return;
+
+        let addedCount = 0;
+        let updatedCount = 0;
+        const toInsert = [];
+
         for (const item of standardItems) {
-          const exists = menuItems.some(m => m.name.toLowerCase() === item.name.toLowerCase());
-          if (!exists) {
-            await window.sb.from("menu_items").insert(item);
-            count++;
+          const itemSupplier = item.supplier || "chillpill";
+          const existing = menuItems.find(m => 
+            (m.name || "").trim().toLowerCase() === item.name.trim().toLowerCase() &&
+            (m.supplier || "chillpill") === itemSupplier
+          );
+
+          if (!existing) {
+            toInsert.push({
+              name: item.name,
+              price: item.price,
+              category: item.category,
+              supplier: itemSupplier
+            });
+          } else if (Number(existing.price) !== Number(item.price) || existing.category !== item.category) {
+            const { error: updErr } = await window.sb.from("menu_items").update({
+              price: item.price,
+              category: item.category
+            }).eq("id", existing.id);
+            if (!updErr) updatedCount++;
           }
         }
-        showToast(count > 0 ? `Added ${count} items to the menu!` : "All standard menu items are already present.");
+
+        if (toInsert.length > 0) {
+          for (let i = 0; i < toInsert.length; i += 50) {
+            const chunk = toInsert.slice(i, i + 50);
+            let { error } = await window.sb.from("menu_items").insert(chunk);
+            if (error) {
+              for (const row of chunk) {
+                const { error: rErr } = await window.sb.from("menu_items").insert(row);
+                if (rErr) {
+                  const { error: fErr } = await window.sb.from("menu_items").insert({
+                    name: row.name,
+                    price: row.price,
+                    category: row.category
+                  });
+                  if (!fErr) addedCount++;
+                } else {
+                  addedCount++;
+                }
+              }
+            } else {
+              addedCount += chunk.length;
+            }
+          }
+        }
+
+        const msgParts = [];
+        if (addedCount > 0) msgParts.push(`Added ${addedCount} new items`);
+        if (updatedCount > 0) msgParts.push(`updated ${updatedCount} items`);
+        showToast(msgParts.length > 0 ? `✅ ${msgParts.join(" and ")} in menu!` : "All menu items and prices are already up to date.");
         fetchMenu();
       });
     }
